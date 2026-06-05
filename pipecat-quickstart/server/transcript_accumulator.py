@@ -45,7 +45,7 @@ class TranscriptAccumulator(FrameProcessor):
                     text=text,
                     question_id=question_id,
                 )
-                logger.debug(f"[transcript] candidate: {text[:80]}")
+                logger.info(f"Candidate: {text}")
                 
                 # Broadcast to dashboard
                 await self._broadcaster.broadcast("transcript", {

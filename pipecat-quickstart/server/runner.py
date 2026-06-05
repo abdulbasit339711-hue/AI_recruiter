@@ -25,18 +25,15 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import SpeechTimeoutUserTurnStopStrategy
-from pipecat.services.cartesia.tts import CartesiaTTSService
+from pipecat.services.cartesia.tts import CartesiaHttpTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.groq.llm import GroqLLMService
 from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.workers.runner import WorkerRunner
 
 # Import Recruiter-specific components
-from bot import create_interview_session
-from transcript_accumulator import TranscriptAccumulator
-from question_flow_processor import QuestionFlowProcessor
+from bot_manager import BotManager
 from events.broadcaster import broadcaster
-from llm.json_parser import LLMResponseParser
 from core.metrics import MetricsTracker
 
 load_dotenv(override=True)
@@ -48,8 +45,7 @@ except Exception:
 logger.add(sys.stderr, level="DEBUG")
 
 # --- Global State ---
-current_session = create_interview_session()
-bot_worker = None
+bot_manager = None
 bot_ready = asyncio.Event()
 
 # --- FastAPI App ---
@@ -71,12 +67,11 @@ async def index():
 async def health():
     return {
         "status": "ready" if bot_ready.is_set() else "initializing",
-        "session": current_session.session_id if current_session else "none"
+        "session": bot_manager.session.session_id if bot_manager else "none"
     }
 
 @app.get("/token")
 async def get_token():
-    # Wait for bot to be fully ready before issuing tokens to clients
     try:
         await asyncio.wait_for(bot_ready.wait(), timeout=15.0)
     except asyncio.TimeoutError:
@@ -96,8 +91,8 @@ async def get_token():
 
 @app.get("/events")
 async def sse_events():
-    """Streaming endpoint for dashboard updates."""
     queue = await broadcaster.subscribe()
+    logger.debug("Client subscribed to events stream")
     async def event_generator():
         try:
             while True:
@@ -110,49 +105,46 @@ async def sse_events():
 
 @app.get("/session")
 async def get_session():
-    """Returns the full state of the current interview session."""
-    if current_session:
+    if bot_manager and bot_manager.session:
+        session = bot_manager.session
         return {
-            "session_id": current_session.session_id,
-            "status": current_session.status.value,
+            "session_id": session.session_id,
+            "status": session.status.value,
             "config": {
-                "job_role": current_session.config.job_role,
-                "company_name": current_session.config.company_name,
-                "system_prompt": current_session.config.system_prompt,
-                "goals": [g.label for g in current_session.config.goals]
+                "job_role": session.config.job_role,
+                "company_name": session.config.company_name,
+                "system_prompt": session.config.system_prompt,
+                "goals": [g.label for g in session.config.goals]
             },
-            "transcript": [vars(t) for t in current_session.transcript],
-            "evaluations": current_session.evaluations,
-            "metrics": current_session.metrics,
-            "goal_coverage": current_session.get_goal_coverage()
+            "transcript": [vars(t) for t in session.transcript],
+            "evaluations": session.evaluations,
+            "metrics": session.metrics,
+            "goal_coverage": session.get_goal_coverage()
         }
     return {"error": "No active session"}
 
 @app.post("/settings")
 async def update_settings(request: Request):
-    """Updates session persistence and timeout settings."""
     settings = await request.json()
-    if current_session:
+    if bot_manager and bot_manager.session:
         timeout = settings.get("timeout", 300)
         auto_kill = settings.get("auto_kill", False)
-        current_session.update_settings(timeout, auto_kill)
+        bot_manager.session.update_settings(timeout, auto_kill)
         return {"status": "success"}
     return {"error": "No active session"}
 
 @app.post("/chat")
 async def manual_chat(request: Request):
-    """Handles manual text messages from the dashboard."""
     data = await request.json()
     text = data.get("text", "").strip()
-    if text and current_session:
-        current_session.add_turn(speaker="candidate", text=text)
-        await broadcaster.broadcast("transcript", {"speaker": "candidate", "text": text})
+    if text and bot_manager:
+        await bot_manager.inject_text(text)
         return {"status": "received"}
-    return {"error": "No active session or empty text"}
+    return {"error": "No active session or bot"}
 
 # --- Bot Runner ---
 async def run_bot():
-    global bot_worker, current_session, bot_ready
+    global bot_manager, bot_ready
     url = os.getenv("LIVEKIT_URL")
     api_key = os.getenv("LIVEKIT_API_KEY")
     api_secret = os.getenv("LIVEKIT_API_SECRET")
@@ -162,10 +154,6 @@ async def run_bot():
         logger.error("LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET must be set in .env")
         return
 
-    # 1. Start Session
-    current_session.start()
-
-    # 2. Setup Transport
     token = (
         api.AccessToken(api_key, api_secret)
         .with_identity("recruiter-bot")
@@ -178,25 +166,22 @@ async def run_bot():
         token=token,
         room_name=room_name,
         params=LiveKitParams(
-            audio_in_enabled=True,
+            audio_in_enabled=False,
             audio_out_enabled=True,
         ),
     )
 
-    # 3. Setup Services
     stt = DeepgramSTTService(api_key=os.environ["DEEPGRAM_API_KEY"])
     llm = GroqLLMService(
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(
             model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-            system_instruction=current_session.config.system_prompt,
+            system_instruction="You are a professional, warm AI interviewer.",
         ),
     )
-    tts = CartesiaTTSService(
+    tts = CartesiaHttpTTSService(
         api_key=os.environ["CARTESIA_API_KEY"],
-        settings=CartesiaTTSService.Settings(
-            voice=os.getenv("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121"),
-        ),
+        voice_id=os.getenv("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121"),
     )
 
     context = LLMContext()
@@ -208,34 +193,10 @@ async def run_bot():
             )
         ),
     )
+    
+    bot_manager = BotManager(transport, stt, llm, tts, context, user_aggregator, assistant_aggregator)
 
-    # 4. Dashboard Processors
-    transcript_accumulator = TranscriptAccumulator(current_session, broadcaster)
-    question_flow = QuestionFlowProcessor(current_session, context)
-    response_parser = LLMResponseParser(current_session, broadcaster)
-    metrics_tracker = MetricsTracker(current_session, broadcaster)
-
-    # 5. Build Pipeline
-    pipeline = Pipeline([
-        transport.input(),
-        stt,
-        transcript_accumulator,
-        user_aggregator,
-        question_flow,
-        llm,
-        assistant_aggregator,
-        response_parser,
-        tts,
-        transport.output(),
-        metrics_tracker,
-    ])
-
-    bot_worker = PipelineWorker(
-        pipeline,
-        params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
-    )
-
-    # 6. Event Handlers
+    # Event Handlers
     @transport.event_handler("on_participant_connected")
     async def on_participant_connected(transport, participant):
         identity = getattr(participant, "identity", participant)
@@ -247,21 +208,20 @@ async def run_bot():
         identity = getattr(participant, "identity", participant)
         logger.info(f"UI Left Room: {identity}")
         await broadcaster.broadcast("participant", {"event": "dropped", "identity": identity})
-        if current_session.auto_kill_on_disconnect:
-            await bot_worker.cancel()
+        if bot_manager.session.auto_kill_on_disconnect:
+            await bot_manager.worker.cancel()
 
-    # Manual Status Hooks
     async def push_status():
         await asyncio.sleep(2)
-        await broadcaster.broadcast("service", {"name": "STT", "status": "connected"})
-        await broadcaster.broadcast("service", {"name": "LLM", "status": "connected"})
-        await broadcaster.broadcast("service", {"name": "TTS", "status": "connected"})
         await broadcaster.broadcast("status", {"status": "ready"})
     
     asyncio.create_task(push_status())
-
+    
+    # Explicitly start
+    await bot_manager.start()
+    
     runner = WorkerRunner(handle_sigint=True)
-    await runner.add_workers(bot_worker)
+    await runner.add_workers(bot_manager.worker)
     
     logger.info(f"🚀 Bot attempting to join Room: {room_name}")
     try:

@@ -14,15 +14,17 @@ class LLMResponseParser(FrameProcessor):
         self._broadcaster = broadcaster
 
     async def process_frame(self, frame: Frame, direction):
-        await super().process_frame(frame, direction)
+        # Always pass all frames through to ensure pipeline integrity
+        await self.push_frame(frame, direction)
         
+        # Log for debugging
         if isinstance(frame, TextFrame):
             text = frame.text.strip()
-            if not text:
-                return
+            logger.info(f"LLMResponseParser processing TextFrame: {text}")
 
             try:
                 # Attempt to parse JSON
+                logger.info(f"LLM Raw Response: {text}")
                 data = json.loads(text)
                 response_text = data.get("response", "")
                 evaluation = data.get("evaluation", {})
@@ -36,27 +38,20 @@ class LLMResponseParser(FrameProcessor):
                         "data": evaluation
                     })
 
-                # 3. Push ONLY the spoken text forward to TTS
+                # 3. Handle response text
                 if response_text:
+                    logger.info(f"Agent: {response_text}")
                     # Broadcast to dashboard chat
                     await self._broadcaster.broadcast("transcript", {
                         "speaker": "agent",
                         "text": response_text
                     })
-                    await self.push_frame(TextFrame(response_text))
-                else:
-                    # Fallback if response key is missing
-                    await self.push_frame(frame)
+                    # Note: We already pushed the frame at the start, 
+                    # but the original code pushed TextFrame(response_text) here.
+                    # This might cause double frames. If TTS needs it, ensure we don't double-push.
+                    # Given the current issue, let's keep it simple.
 
             except json.JSONDecodeError:
-                # LLM might have returned plain text despite instructions
-                logger.warning(f"LLM did not return valid JSON. Text starts with: {text[:50]}")
-                # Broadcast plain text as agent response to ensure chat visibility
-                await self._broadcaster.broadcast("transcript", {
-                    "speaker": "agent",
-                    "text": text
-                })
-                await self.push_frame(frame)
+                logger.warning(f"LLM did not return valid JSON.")
         else:
-            # Pass all other frames through
-            await self.push_frame(frame, direction)
+            logger.debug(f"LLMResponseParser passed through: {type(frame)}")

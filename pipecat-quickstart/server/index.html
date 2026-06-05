@@ -140,8 +140,9 @@
                 <!-- Scrollable Chat Area -->
                 <div id="chat-window" class="flex-1 overflow-y-auto pr-2 space-y-6 min-h-0 scroll-smooth">
                     <!-- Messages will appear here -->
-                    <div id="startup-area" class="flex flex-col items-center justify-center h-full text-slate-600 italic text-sm">
-                        <p id="ready-status">Checking server status...</p>
+                    <div id="startup-area" class="flex flex-col items-center justify-center h-full text-slate-200 italic text-sm">
+                        <div id="loader" class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
+                        <p id="ready-status" class="font-bold">Bot is initializing...</p>
                         <button id="start-btn" class="hidden mt-4 bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-full font-bold shadow-lg shadow-blue-900/20 transition transform hover:scale-105 active:scale-95">
                             Start Interview Now
                         </button>
@@ -248,9 +249,9 @@
         // --- Recording Logic ---
         function setupRecording(room) {
             const stream = new MediaStream();
-            room.localParticipant.audioTracks.forEach(t => { if(t.track) stream.addTrack(t.track.mediaStreamTrack) });
-            room.remoteParticipants.forEach(p => {
-                p.audioTracks.forEach(t => { if(t.track) stream.addTrack(t.track.mediaStreamTrack) });
+            room.localParticipant?.audioTracks?.forEach(t => { if(t.track) stream.addTrack(t.track.mediaStreamTrack) });
+            room.remoteParticipants?.forEach(p => {
+                p.audioTracks?.forEach(t => { if(t.track) stream.addTrack(t.track.mediaStreamTrack) });
             });
 
             if (stream.getTracks().length === 0) return;
@@ -282,35 +283,37 @@
 
         // --- Metadata Initialization ---
         async function initMetadata() {
+            const loader = document.getElementById('loader');
+            const readyStatus = document.getElementById('ready-status');
+            const startBtn = document.getElementById('start-btn');
+            
             try {
-                const res = await fetch('/session');
-                const session = await res.json();
-                if (session && session.config) {
-                    document.getElementById('role-display').innerText = session.config.job_role;
-                    document.getElementById('company-display').innerText = session.config.company_name;
-                    document.getElementById('prompt-display').innerText = session.config.system_prompt;
-                    updateGoals(session.goal_coverage);
-
-                    // Sync service status from server state
-                    if (session.service_status) {
-                        for (const [name, status] of Object.entries(session.service_status)) {
-                            let id = '';
-                            if (name === 'STT') id = 'status-stt';
-                            else if (name === 'LLM') id = 'status-llm';
-                            else if (name === 'TTS') id = 'status-tts';
-                            if (id) {
-                                const el = document.getElementById(id);
-                                el.innerText = status;
-                                el.className = status === 'connected' ? 'text-green-500 font-bold' : 'text-slate-600';
-                            }
-                        }
-                    }
+                const res = await fetch('/health');
+                const health = await res.json();
+                
+                if (health.status === 'ready') {
+                    // Bot is ready, update UI
+                    loader.classList.add('hidden');
+                    readyStatus.innerText = 'Bot is online and ready.';
+                    startBtn.classList.remove('hidden');
+                    startBtn.disabled = false;
                     
-                    document.getElementById('ready-status').innerText = 'Bot is online and ready.';
-                    document.getElementById('start-btn').classList.remove('hidden');
+                    // Fetch config only after we know bot is ready
+                    const sessionRes = await fetch('/session');
+                    const session = await sessionRes.json();
+                    if (session && session.config) {
+                        document.getElementById('role-display').innerText = session.config.job_role;
+                        document.getElementById('company-display').innerText = session.config.company_name;
+                        document.getElementById('prompt-display').innerText = session.config.system_prompt;
+                        updateGoals(session.goal_coverage);
+                    }
+                } else {
+                    // Bot is still initializing
+                    readyStatus.innerText = 'Bot is initializing...';
+                    setTimeout(initMetadata, 2000);
                 }
             } catch (e) {
-                document.getElementById('ready-status').innerText = 'Waiting for server to start...';
+                readyStatus.innerText = 'Waiting for server to start...';
                 setTimeout(initMetadata, 2000);
             }
         }

@@ -25,14 +25,17 @@ class Broadcaster:
     async def broadcast(self, event_type: str, data: dict):
         """Pushes an event to all connected dashboard clients."""
         if not self._clients:
+            logger.debug(f"Broadcasting {event_type} - No clients connected")
             return
 
+        logger.debug(f"Broadcasting {event_type} to {len(self._clients)} clients: {data}")
         # Prepare SSE format message
         message = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
         
         # Dispatch to all clients
         for queue in self._clients:
             await queue.put(message)
+            logger.debug(f"Event {event_type} put into queue for client")
 
 # Global broadcaster instance
 broadcaster = Broadcaster()
