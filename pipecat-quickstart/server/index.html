@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Recruiter - Interview Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .wave-canvas { width: 100%; height: 80px; border-radius: 8px; background: #0f172a; }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .hidden { display: none; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
+
+    <div class="flex h-screen overflow-hidden">
+        
+        <!-- Sidebar: Session Info & Settings -->
+        <aside class="w-80 bg-slate-900 border-r border-slate-800 p-6 flex flex-col gap-6 overflow-y-auto min-h-0 custom-scrollbar">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2 rounded-lg">
+                    <i data-lucide="briefcase" class="text-white"></i>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight">AI Recruiter</h1>
+            </div>
+
+            <div class="space-y-4">
+                <div class="glass p-4 rounded-xl">
+                    <label class="text-xs uppercase text-slate-500 font-bold mb-2 block">Interview Context</label>
+                    <div id="role-display" class="text-lg font-medium tracking-tight">Initializing...</div>
+                    <div id="company-display" class="text-sm text-slate-400 italic">...</div>
+                </div>
+
+                <div class="glass p-4 rounded-xl">
+                    <label class="text-xs uppercase text-slate-500 font-bold mb-2 block">System Prompt</label>
+                    <div id="prompt-display" class="text-[10px] text-slate-400 leading-relaxed max-h-24 overflow-y-auto pr-1 italic">
+                        Bot is warming up...
+                    </div>
+                </div>
+
+                <div class="glass p-4 rounded-xl space-y-4">
+                    <label class="text-xs uppercase text-slate-500 font-bold block">Persistence</label>
+                    <div class="flex items-center justify-between text-sm">
+                        <span>Wait on disconnect</span>
+                        <input type="checkbox" id="wait-toggle" checked class="w-4 h-4 rounded bg-slate-800 border-slate-700">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] text-slate-500 block">Timeout (seconds)</label>
+                        <input type="number" id="timeout-input" value="300" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div class="glass p-4 rounded-xl">
+                    <label class="text-xs uppercase text-slate-500 font-bold mb-2 block">Service Status</label>
+                    <div id="service-list" class="space-y-2">
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="text-slate-400">STT (Deepgram)</span>
+                            <span id="status-stt" class="text-slate-600">offline</span>
+                        </div>
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="text-slate-400">LLM (Groq)</span>
+                            <span id="status-llm" class="text-slate-600">offline</span>
+                        </div>
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="text-slate-400">TTS (Cartesia)</span>
+                            <span id="status-tts" class="text-slate-600">offline</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass p-4 rounded-xl">
+                    <label class="text-xs uppercase text-slate-500 font-bold mb-2 block">Live Console</label>
+                    <div id="log-console" class="h-32 bg-black/50 rounded p-2 font-mono text-[10px] overflow-y-auto text-green-500/80">
+                        > Dashboard ready...
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-auto space-y-2">
+                <button id="record-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg transition flex items-center justify-center gap-2 text-sm">
+                    <i data-lucide="save" class="w-4 h-4"></i> Save Recording
+                </button>
+                <button id="end-btn" class="w-full bg-red-900/20 hover:bg-red-900/40 text-red-400 py-2 rounded-lg transition border border-red-900/50 text-sm">
+                    Terminate Session
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Dashboard -->
+        <main class="flex-1 flex flex-col p-6 gap-6">
+            
+            <!-- Audio Waves Section -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="glass p-4 rounded-2xl relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold uppercase text-slate-500 flex items-center gap-2">
+                            <i data-lucide="bot" class="w-3 h-3"></i> AI Recruiter
+                        </span>
+                        <span id="bot-state" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Idle</span>
+                    </div>
+                    <canvas id="bot-wave" class="wave-canvas"></canvas>
+                </div>
+                <div class="glass p-4 rounded-2xl relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold uppercase text-slate-500 flex items-center gap-2">
+                            <i data-lucide="user" class="w-3 h-3"></i> Candidate (You)
+                        </span>
+                        <div class="flex items-center gap-2">
+                            <button id="mic-toggle" class="p-1 hover:bg-slate-700 rounded transition">
+                                <i data-lucide="mic" class="w-3 h-3"></i>
+                            </button>
+                            <span id="user-state" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">Idle</span>
+                        </div>
+                    </div>
+                    <canvas id="user-wave" class="wave-canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Chat & Transcripts -->
+            <div class="flex-1 glass rounded-3xl p-6 flex flex-col min-h-0 relative">
+                <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-800 flex-shrink-0">
+                    <h2 class="text-lg font-bold flex items-center gap-2">
+                        <i data-lucide="message-square" class="w-5 h-5 text-blue-500"></i>
+                        Live Transcript
+                    </h2>
+                    <div id="connection-status" class="text-xs text-yellow-500 flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-yellow-500 pulse"></div>
+                        Waiting for Bot...
+                    </div>
+                </div>
+
+                <!-- Scrollable Chat Area -->
+                <div id="chat-window" class="flex-1 overflow-y-auto pr-2 space-y-6 min-h-0 scroll-smooth">
+                    <!-- Messages will appear here -->
+                    <div id="startup-area" class="flex flex-col items-center justify-center h-full text-slate-600 italic text-sm">
+                        <p id="ready-status">Checking server status...</p>
+                        <button id="start-btn" class="hidden mt-4 bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-full font-bold shadow-lg shadow-blue-900/20 transition transform hover:scale-105 active:scale-95">
+                            Start Interview Now
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat Input (Manual Message) -->
+                <div class="mt-4 pt-4 border-t border-slate-800 flex-shrink-0">
+                    <div class="relative group">
+                        <input type="text" id="chat-input" placeholder="Type a message to the bot..." class="w-full bg-slate-900/50 border border-slate-800 rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-blue-500/50 transition pr-12">
+                        <button id="send-btn" class="absolute right-2 top-2 p-1.5 bg-blue-600 hover:bg-blue-500 rounded-xl transition text-white group-focus-within:scale-105">
+                            <i data-lucide="send" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right: Goal Tracking & Stats -->
+        <aside class="w-80 bg-slate-900 border-l border-slate-800 p-6 flex flex-col gap-6">
+            <div>
+                <h3 class="text-sm font-bold uppercase text-slate-500 mb-4 flex items-center gap-2">
+                    <i data-lucide="target" class="w-4 h-4"></i> Goal Tracking
+                </h3>
+                <div id="goal-list" class="space-y-3">
+                    <!-- Goals will appear here -->
+                </div>
+            </div>
+
+            <div class="mt-auto">
+                <h3 class="text-sm font-bold uppercase text-slate-500 mb-4">Session Stats</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="glass p-3 rounded-xl">
+                        <div id="stat-tokens" class="text-lg font-bold text-blue-400">0</div>
+                        <div class="text-[10px] uppercase text-slate-500 font-bold">Total Tokens</div>
+                    </div>
+                    <div class="glass p-3 rounded-xl">
+                        <div id="stat-duration" class="text-lg font-bold text-blue-400">0:00</div>
+                        <div class="text-[10px] uppercase text-slate-500 font-bold">Duration</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // --- Configuration & State ---
+        let room;
+        let sse;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let totalTokens = 0;
+        let startTime = null;
+        let currentGoals = {};
+        let isInterviewStarted = false;
+
+        const chatWindow = document.getElementById('chat-window');
+        const botState = document.getElementById('bot-state');
+        const userState = document.getElementById('user-state');
+        const logConsole = document.getElementById('log-console');
+
+        // --- Visualizers ---
+        const botCanvas = document.getElementById('bot-wave');
+        const userCanvas = document.getElementById('user-wave');
+        const botCtx = botCanvas.getContext('2d');
+        const userCtx = userCanvas.getContext('2d');
+
+        function setupVisualizer(track, ctx) {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioCtx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function draw() {
+                if (!isInterviewStarted) return;
+                requestAnimationFrame(draw);
+                analyser.getByteFrequencyData(dataArray);
+                
+                const width = ctx.canvas.width;
+                const height = ctx.canvas.height;
+                ctx.clearRect(0, 0, width, height);
+                
+                const barWidth = (width / bufferLength) * 2.5;
+                let barHeight;
+                let x = 0;
+
+                for(let i = 0; i < bufferLength; i++) {
+                    barHeight = dataArray[i] / 2;
+                    ctx.fillStyle = `rgb(59, 130, 246)`;
+                    ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+                    x += barWidth + 1;
+                }
+            }
+            draw();
+        }
+
+        // --- Recording Logic ---
+        function setupRecording(room) {
+            const stream = new MediaStream();
+            room.localParticipant.audioTracks.forEach(t => { if(t.track) stream.addTrack(t.track.mediaStreamTrack) });
+            room.remoteParticipants.forEach(p => {
+                p.audioTracks.forEach(t => { if(t.track) stream.addTrack(t.track.mediaStreamTrack) });
+            });
+
+            if (stream.getTracks().length === 0) return;
+
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `interview-transcript.webm`;
+                a.click();
+                addLog('Recording saved.');
+            };
+        }
+
+        document.getElementById('record-btn').onclick = () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                document.getElementById('record-btn').innerHTML = '<i data-lucide="save" class="w-4 h-4"></i> Save Recording';
+            } else if (mediaRecorder) {
+                mediaRecorder.start();
+                document.getElementById('record-btn').innerHTML = '<i data-lucide="square" class="w-4 h-4"></i> Stop Recording';
+                addLog('Recording started...');
+            }
+            lucide.createIcons();
+        };
+
+        // --- Metadata Initialization ---
+        async function initMetadata() {
+            try {
+                const res = await fetch('/session');
+                const session = await res.json();
+                if (session && session.config) {
+                    document.getElementById('role-display').innerText = session.config.job_role;
+                    document.getElementById('company-display').innerText = session.config.company_name;
+                    document.getElementById('prompt-display').innerText = session.config.system_prompt;
+                    updateGoals(session.goal_coverage);
+
+                    // Sync service status from server state
+                    if (session.service_status) {
+                        for (const [name, status] of Object.entries(session.service_status)) {
+                            let id = '';
+                            if (name === 'STT') id = 'status-stt';
+                            else if (name === 'LLM') id = 'status-llm';
+                            else if (name === 'TTS') id = 'status-tts';
+                            if (id) {
+                                const el = document.getElementById(id);
+                                el.innerText = status;
+                                el.className = status === 'connected' ? 'text-green-500 font-bold' : 'text-slate-600';
+                            }
+                        }
+                    }
+                    
+                    document.getElementById('ready-status').innerText = 'Bot is online and ready.';
+                    document.getElementById('start-btn').classList.remove('hidden');
+                }
+            } catch (e) {
+                document.getElementById('ready-status').innerText = 'Waiting for server to start...';
+                setTimeout(initMetadata, 2000);
+            }
+        }
+
+        // --- SSE Handler ---
+        function startSSE() {
+            if (sse) sse.close();
+            sse = new EventSource('/events');
+            
+            sse.addEventListener('state', (e) => {
+                const data = JSON.parse(e.data);
+                if (data.speaker === 'agent') {
+                    botState.innerText = data.status;
+                    botState.className = `text-[10px] px-2 py-0.5 rounded-full ${data.status === 'thinking' ? 'bg-blue-900/40 text-blue-400' : 'bg-green-900/40 text-green-400'}`;
+                } else {
+                    userState.innerText = data.status;
+                    userState.className = `text-[10px] px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-400`;
+                }
+            });
+
+            sse.addEventListener('evaluation', (e) => {
+                const { data } = JSON.parse(e.data);
+                const lastMsg = chatWindow.lastElementChild;
+                if (lastMsg && lastMsg.dataset.speaker === 'agent') {
+                    const evalDiv = document.createElement('div');
+                    evalDiv.className = 'mt-2 p-2 rounded bg-slate-800/50 text-[10px] border-l-2 border-blue-500';
+                    evalDiv.innerHTML = `<strong>Evaluation Score: ${data.score}/10</strong><br>${data.critique}`;
+                    lastMsg.appendChild(evalDiv);
+                }
+            });
+
+            sse.addEventListener('metrics', (e) => {
+                const { metrics } = JSON.parse(e.data);
+                totalTokens += metrics.total_tokens;
+                document.getElementById('stat-tokens').innerText = totalTokens.toLocaleString();
+            });
+
+            sse.addEventListener('transcript', (e) => {
+                const data = JSON.parse(e.data);
+                appendMessage(data.speaker, data.text);
+            });
+
+            sse.addEventListener('service', (e) => {
+                const data = JSON.parse(e.data);
+                const name = data.name.toLowerCase();
+                let id = '';
+                if (name.includes('stt')) id = 'status-stt';
+                else if (name.includes('llm')) id = 'status-llm';
+                else if (name.includes('tts')) id = 'status-tts';
+                
+                if (id) {
+                    const el = document.getElementById(id);
+                    el.innerText = data.status;
+                    el.className = data.status === 'connected' ? 'text-green-500 font-bold' : 'text-slate-600';
+                }
+                addLog(`${data.name} is ${data.status}`);
+            });
+
+            sse.addEventListener('participant', (e) => {
+                const data = JSON.parse(e.data);
+                addLog(`Participant ${data.identity} ${data.event}`);
+            });
+
+            sse.addEventListener('status', (e) => {
+                const data = JSON.parse(e.data);
+                addLog(`Bot status: ${data.status}`);
+            });
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            try {
+                input.value = '';
+                // Note: We no longer append locally here to avoid duplication.
+                // We wait for the SSE 'transcript' event.
+                await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+            } catch (err) {
+                console.error('Failed to send message', err);
+            }
+        }
+
+        document.getElementById('send-btn').onclick = sendMessage;
+        document.getElementById('chat-input').onkeypress = (e) => {
+            if (e.key === 'Enter') sendMessage();
+        };
+
+        function appendMessage(speaker, text) {
+            const startup = document.getElementById('startup-area');
+            if (startup) startup.remove();
+            
+            const div = document.createElement('div');
+            div.dataset.speaker = speaker;
+            div.className = `flex flex-col ${speaker === 'agent' ? 'items-start' : 'items-end'} transition-all duration-300 animate-in fade-in slide-in-from-bottom-2`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = `max-w-[80%] p-4 rounded-2xl text-sm shadow-sm ${speaker === 'agent' ? 'bg-slate-800 text-slate-200 rounded-bl-none' : 'bg-blue-600 text-white rounded-br-none'}`;
+            bubble.innerText = text;
+            
+            div.appendChild(bubble);
+            chatWindow.appendChild(div);
+            chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+        }
+
+        function addLog(msg) {
+            const div = document.createElement('div');
+            div.innerText = `> ${msg}`;
+            logConsole.appendChild(div);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // --- LiveKit Setup ---
+        async function startInterview() {
+            const startBtn = document.getElementById('start-btn');
+            try {
+                startBtn.disabled = true;
+                startBtn.innerText = 'Connecting...';
+                
+                addLog('Fetching token...');
+                const response = await fetch('/token');
+                const data = await response.json();
+                
+                startSSE();
+                
+                room = new LivekitClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                });
+                
+                room.on(LivekitClient.RoomEvent.Connected, () => {
+                    document.getElementById('connection-status').innerHTML = '<div class="w-2 h-2 rounded-full bg-green-500"></div> Connected';
+                    document.getElementById('connection-status').className = 'text-xs text-green-500 flex items-center gap-2';
+                    startTime = Date.now();
+                    isInterviewStarted = true;
+                    addLog('Joined LiveKit room.');
+                    startBtn.innerText = 'Interview Live';
+                });
+
+                room.on(LivekitClient.RoomEvent.LocalTrackPublished, (pub) => {
+                    if (pub.track.kind === 'audio') {
+                        setupVisualizer(pub.track, userCtx);
+                        addLog('User wave initialized.');
+                    }
+                });
+
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+                    if (track.kind === 'audio') {
+                        const element = track.attach();
+                        document.body.appendChild(element);
+                        setupVisualizer(track, botCtx);
+                        addLog('Bot wave initialized.');
+                    }
+                });
+
+                room.on(LivekitClient.RoomEvent.Disconnected, () => {
+                    isInterviewStarted = false;
+                    addLog('Disconnected from room.');
+                    startBtn.disabled = false;
+                    startBtn.innerText = 'Start Interview Now';
+                });
+
+                await room.connect(data.url, data.token);
+                await room.localParticipant.setMicrophoneEnabled(true);
+                
+                setTimeout(() => setupRecording(room), 3000);
+                addLog('Microphone active.');
+
+            } catch (err) {
+                addLog(`Error: ${err.message}`);
+                startBtn.disabled = false;
+                startBtn.innerText = 'Start Interview Now';
+            }
+        }
+
+        function updateGoals(coverage) {
+            const list = document.getElementById('goal-list');
+            list.innerHTML = '';
+            for (const [goal, status] of Object.entries(coverage)) {
+                const div = document.createElement('div');
+                div.className = `p-3 rounded-xl border text-xs flex justify-between items-center ${status === 'covered' ? 'bg-green-900/20 border-green-900/50 text-green-400' : 'bg-slate-800/50 border-slate-700 text-slate-500'}`;
+                div.innerHTML = `<span>${goal}</span> <span class="uppercase font-bold text-[8px]">${status}</span>`;
+                list.appendChild(div);
+            }
+        }
+
+        document.getElementById('start-btn').onclick = startInterview;
+        
+        document.getElementById('mic-toggle').onclick = () => {
+            if (!room) return;
+            const enabled = room.localParticipant.isMicrophoneEnabled;
+            room.localParticipant.setMicrophoneEnabled(!enabled);
+            document.getElementById('mic-toggle').innerHTML = `<i data-lucide="${enabled ? 'mic-off' : 'mic'}" class="w-3 h-3"></i>`;
+            lucide.createIcons();
+        };
+
+        // --- Settings Sync ---
+        async function syncSettings() {
+            const timeout = document.getElementById('timeout-input').value;
+            const autoKill = !document.getElementById('wait-toggle').checked;
+            try {
+                await fetch('/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ timeout: parseInt(timeout), auto_kill: autoKill })
+                });
+                addLog('Settings synced to server.');
+            } catch (err) {
+                console.error('Failed to sync settings', err);
+            }
+        }
+
+        document.getElementById('wait-toggle').onchange = syncSettings;
+        document.getElementById('timeout-input').onchange = syncSettings;
+
+        document.getElementById('end-btn').onclick = async () => {
+            if (confirm('Are you sure you want to terminate the interview?')) {
+                await fetch('/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ auto_kill: true })
+                });
+                if (room) await room.disconnect();
+                window.location.reload();
+            }
+        };
+
+        // Duration timer
+        setInterval(() => {
+            if (startTime && isInterviewStarted) {
+                const diff = Math.floor((Date.now() - startTime) / 1000);
+                const mins = Math.floor(diff / 60);
+                const secs = diff % 60;
+                document.getElementById('stat-duration').innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+        }, 1000);
+
+        // Initialize immediately
+        initMetadata();
+
+    </script>
+</body>
+</html>

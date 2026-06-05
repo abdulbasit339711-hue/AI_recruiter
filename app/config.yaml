@@ -1,0 +1,45 @@
+database:
+  # Override with DATABASE_URL env for PostgreSQL, e.g. postgresql://user:pass@host/db
+  url: "sqlite:///ai_recruiter.db"
+
+spacy:
+  model: "en_core_web_sm"
+
+scoring:
+  email_weight: 5
+  phone_weight: 5
+  education_weight: 7
+  experience_weight: 7
+  skills_weight: 6
+  semantic_weight: 40
+  llm_weight: 30
+  similarity_threshold: 0.20
+
+pipeline:
+  # Run Tier 3 LLM only when tier1 + tier2 >= this value
+  tier3_combined_threshold: 25.0
+  shortlisted_min_score: 75.0
+  reviewed_min_score: 60.0
+
+llm:
+  provider: groq
+  model: "llama-3.3-70b-versatile"
+  top_n: 20
+  circuit_breaker:
+    failure_threshold: 5
+    recovery_timeout_seconds: 60
+
+logging:
+  level: INFO
+
+pdf_reports:
+  enabled: true
+  output_folder: reports
+
+dashboard:
+  export_csv: true
+  show_raw_resume: true
+
+system:
+  max_file_size_mb: 5
+  worker_count: 1

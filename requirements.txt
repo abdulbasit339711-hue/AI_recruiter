@@ -1,0 +1,16 @@
+fastapi==0.111.0
+uvicorn==0.30.1
+pydantic==2.7.4
+pdfplumber==0.11.1
+sqlalchemy==2.0.30
+spacy==3.7.5
+sentence-transformers==3.0.1
+groq==0.9.0
+streamlit==1.35.0
+python-dotenv==1.0.1
+pyyaml==6.0.1
+pytest==8.2.2
+thinc==8.2.5
+jinja2==3.1.6
+typer==0.16.1
+weasel==0.4.3
