@@ -56,9 +56,9 @@ We have transitioned from a single-job configuration to a **Multi-Job Management
 - [ ] Launch the dashboard with `streamlit run app/dashboard/app.py` for visual check.
 
 ### Phase 6: Next.js Frontend Dashboard (SKill.md integration)
-- [x] Create [SKill.md](file:///c:/Users/basit/.gemini/antigravity-ide/scratch/ai-recruiter/SKill.md) and establish frontend development standards.
-- [ ] Upgrade dependencies in `frontend/package.json` to support React 19, Tailwind CSS v4, and Lucide React.
-- [ ] Fix hydration/context providers error in `frontend/src/app/layout.tsx`.
+- [x] Create SKill.md and establish frontend development standards.
+- [x] Upgrade dependencies in `frontend/package.json` to support React 19, Tailwind CSS v4, and Lucide React.
+- [x] Fix hydration/context providers error in `frontend/src/app/layout.tsx` by using a dedicated client-side `Providers` wrapper.
 - [ ] Build global navigation and layout wrappers.
 - [ ] Establish Axios client integrations with the FastAPI backend on port 8000.
 - [ ] Create Zustand store for active job and candidate selectors.

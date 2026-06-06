@@ -1,5 +1,6 @@
 from pipecat.frames.frames import Frame, LLMFullResponseEndFrame
 from pipecat.processors.frame_processor import FrameProcessor
+from loguru import logger
 
 class MetricsTracker(FrameProcessor):
     """
@@ -12,8 +13,12 @@ class MetricsTracker(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction):
         await super().process_frame(frame, direction)
-        
+
+        # Log every frame type for debugging
+        logger.debug(f"[MetricsTracker] Processing frame: {type(frame).__name__}")
+
         if isinstance(frame, LLMFullResponseEndFrame):
+            logger.info("[MetricsTracker] LLMFullResponseEndFrame detected!")
             # Pipecat usage metrics are stored in the frame's usage attribute
             usage = getattr(frame, "usage", None)
             if usage:
@@ -23,13 +28,18 @@ class MetricsTracker(FrameProcessor):
                     "total_tokens": getattr(usage, "total_tokens", 0)
                 }
                 
-                # 1. Update session state
-                self._session.add_metrics(metrics)
-                
-                # 2. Broadcast to dashboard
+                logger.info(f"[MetricsTracker] Broadcasting metrics: {metrics}")
+
+                # Broadcast detailed metrics
                 await self._broadcaster.broadcast("metrics", {
                     "session_id": self._session.session_id,
-                    "metrics": metrics
+                    "metrics": metrics,
+                    "details": {
+                        "llm": metrics,
+                        "stt": {"tokens": 0}, # STT usually doesn't have tokens
+                    }
                 })
+            else:
+                logger.warning("[MetricsTracker] No usage data in LLMFullResponseEndFrame!")
         
         await self.push_frame(frame, direction)

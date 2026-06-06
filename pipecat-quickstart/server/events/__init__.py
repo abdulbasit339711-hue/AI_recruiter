@@ -1,0 +1,1 @@
+# Events module for broadcasting SSE events to dashboard

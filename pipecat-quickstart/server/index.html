@@ -291,7 +291,7 @@
                 const res = await fetch('/health');
                 const health = await res.json();
                 
-                if (health.status === 'ready') {
+                if (health.status === 'ready' || health.status === 'active') {
                     // Bot is ready, update UI
                     loader.classList.add('hidden');
                     readyStatus.innerText = 'Bot is online and ready.';
@@ -306,6 +306,18 @@
                         document.getElementById('company-display').innerText = session.config.company_name;
                         document.getElementById('prompt-display').innerText = session.config.system_prompt;
                         updateGoals(session.goal_coverage);
+                        
+                        // Populate initial transcript
+                        if (session.transcript && session.transcript.length > 0) {
+                            session.transcript.forEach(t => appendMessage(t.speaker, t.text));
+                        }
+                    }
+
+                    // Populate initial service status
+                    if (health.services) {
+                        for (const [name, status] of Object.entries(health.services)) {
+                            updateServiceUI(name, status);
+                        }
                     }
                 } else {
                     // Bot is still initializing
@@ -321,8 +333,15 @@
         // --- SSE Handler ---
         function startSSE() {
             if (sse) sse.close();
+            addLog('Connecting to event stream...');
             sse = new EventSource('/events');
             
+            sse.onopen = () => addLog('Connected to event stream.');
+            sse.onerror = (e) => {
+                addLog('Event stream disconnected. Retrying...');
+                setTimeout(startSSE, 3000);
+            };
+
             sse.addEventListener('state', (e) => {
                 const data = JSON.parse(e.data);
                 if (data.speaker === 'agent') {
@@ -358,18 +377,7 @@
 
             sse.addEventListener('service', (e) => {
                 const data = JSON.parse(e.data);
-                const name = data.name.toLowerCase();
-                let id = '';
-                if (name.includes('stt')) id = 'status-stt';
-                else if (name.includes('llm')) id = 'status-llm';
-                else if (name.includes('tts')) id = 'status-tts';
-                
-                if (id) {
-                    const el = document.getElementById(id);
-                    el.innerText = data.status;
-                    el.className = data.status === 'connected' ? 'text-green-500 font-bold' : 'text-slate-600';
-                }
-                addLog(`${data.name} is ${data.status}`);
+                updateServiceUI(data.name, data.status);
             });
 
             sse.addEventListener('participant', (e) => {
@@ -383,6 +391,21 @@
             });
         }
 
+        function updateServiceUI(name, status) {
+            const lowerName = name.toLowerCase();
+            let id = '';
+            if (lowerName.includes('stt')) id = 'status-stt';
+            else if (lowerName.includes('llm')) id = 'status-llm';
+            else if (lowerName.includes('tts')) id = 'status-tts';
+            
+            if (id) {
+                const el = document.getElementById(id);
+                el.innerText = status;
+                el.className = status === 'connected' ? 'text-green-500 font-bold' : 'text-slate-600';
+            }
+            addLog(`${name} is ${status}`);
+        }
+
         async function sendMessage() {
             const input = document.getElementById('chat-input');
             const text = input.value.trim();
@@ -390,8 +413,7 @@
             
             try {
                 input.value = '';
-                // Note: We no longer append locally here to avoid duplication.
-                // We wait for the SSE 'transcript' event.
+                addLog(`Sending message: ${text}`);
                 await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -441,8 +463,6 @@
                 addLog('Fetching token...');
                 const response = await fetch('/token');
                 const data = await response.json();
-                
-                startSSE();
                 
                 room = new LivekitClient.Room({
                     adaptiveStream: true,
@@ -558,6 +578,7 @@
 
         // Initialize immediately
         initMetadata();
+        startSSE();
 
     </script>
 </body>

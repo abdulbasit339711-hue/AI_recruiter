@@ -1,18 +1,18 @@
 # 💼 AI-Recruiter: Multi-Job Recruitment MVP
 
-Welcome to the **AI-Recruiter** system. This repository contains a complete, automated pipeline designed to ingest candidate PDF resumes, validate them, parse their text content, and score them against specific job openings using a **3-Tier Scoring Engine**.
+Welcome to the **AI-Recruiter** system. This repository contains a complete, automated pipeline designed to ingest candidate PDF resumes, validate them, parse their text content, score them against specific job openings using a **3-Tier Scoring Engine**, and conduct voice screening interviews.
 
 ---
 
 ## 🌟 Overview & System Architecture
 
-AI-Recruiter is built with **FastAPI** (backend REST APIs), **SQLite** (relational database), and **Streamlit** (interactive dashboard).
+AI-Recruiter is a full-stack application featuring a **FastAPI** backend, a modern **Next.js 15** admin dashboard, and a **Pipecat** real-time voice agent.
 
 ```
                  +-----------------------+
                  |    HR Administrator   |
                  +-----------+-----------+
-                             |  (Streamlit UI / APIs)
+                             |  (Next.js Dashboard / APIs)
                              v
               +--------------+--------------+
               |     Job Management (CRUD)    |
@@ -36,6 +36,12 @@ AI-Recruiter is built with **FastAPI** (backend REST APIs), **SQLite** (relation
          |  Tier 2: Semantic Similarity (Sentence-Trans) |
          |  Tier 3: Qualitative LLM Evaluation (Groq)    |
          +-----------------------------------------------+
+                         |
+                         v
+         +-----------------------------------------------+
+         |          Pipecat Voice Interview Bot          |
+         | (Real-time screening based on JD & scores)    |
+         +-----------------------------------------------+
 ```
 
 ---
@@ -44,24 +50,20 @@ AI-Recruiter is built with **FastAPI** (backend REST APIs), **SQLite** (relation
 
 ```
 ai-recruiter/
-├── .env                       # Local environment configurations (GROQ_API_KEY)
-├── requirements.txt           # Python application dependencies
-├── test_scoring.py            # Local evaluation and test framework
+├── app/                       # FastAPI backend
+│   ├── main.py                # API routes
+│   ├── scoring/               # 3-Tier engine logic
+│   └── llm/                   # Groq & LLM integrations
+├── frontend/                  # Next.js 15 Admin Dashboard
+│   ├── src/app/               # App Router pages
+│   ├── src/components/        # UI components (shadcn/ui)
+│   └── src/hooks/             # API & state hooks (React Query, Zustand)
+├── pipecat-quickstart/        # Voice Interview Bot (Sub-project)
+│   └── server/                # Pipecat bot implementation
+├── .env                       # Local environment configurations
+├── requirements.txt           # Python backend dependencies
 ├── GEMINI.md                  # This onboarding documentation
-├── ANTIGRAVITY.md             # Developer logs & active task status
-└── app/
-    ├── config.yaml            # Scoring weights, database URLs, and system limits
-    ├── database.py            # SQLAlchemy setup, session helper, and config parser
-    ├── models.py              # SQLite schema models (Job, Candidate)
-    ├── main.py                # FastAPI routes (Jobs CRUD, PDF upload & parsing)
-    ├── intake/
-    │   └── upload.py          # PDF size validation, pdfplumber text extraction
-    ├── scoring/
-    │   ├── engine.py          # Main orchestrator running Tiers 1, 2, and 3
-    │   ├── tier1.py           # Email, phone, and section keyword matching (spaCy)
-    │   └── tier2.py           # Sentence-Transformers cosine similarity scoring
-    └── llm/
-        └── groq_client.py     # Groq API client with fallback simulation
+└── ANTIGRAVITY.md             # Developer logs & active task status
 ```
 
 ---

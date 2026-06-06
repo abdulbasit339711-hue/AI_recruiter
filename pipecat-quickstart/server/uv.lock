@@ -1788,8 +1788,13 @@ name = "pipecat-quickstart"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "fastapi" },
+    { name = "livekit" },
+    { name = "loguru" },
     { name = "pipecat-ai", extra = ["cartesia", "deepgram", "livekit", "openai", "runner", "webrtc"] },
     { name = "pipecatcloud" },
+    { name = "python-dotenv" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -1800,8 +1805,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fastapi" },
+    { name = "livekit" },
+    { name = "loguru" },
     { name = "pipecat-ai", extras = ["cartesia", "deepgram", "openai", "runner", "silero", "webrtc", "livekit"] },
     { name = "pipecatcloud" },
+    { name = "python-dotenv" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata.requires-dev]

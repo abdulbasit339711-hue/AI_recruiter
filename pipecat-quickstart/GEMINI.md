@@ -9,57 +9,46 @@ This subdirectory contains the **Pipecat** implementation for the AI-Recruiter s
 The Pipecat bot is designed as a modular pipeline built on top of the Pipecat framework. It uses a **Single Source of Truth (SSOT)** pattern for session state.
 
 ### 1. Core Components (The "Engine")
+- **`BotManager` (`bot_manager.py`)**: The central orchestrator. Encapsulates the pipeline and worker.
 - **`InterviewSession` (`interview_session.py`)**: The central state container.
   - **RecruiterConfig**: Immutable setup (job, company, questions, goals).
-  - **Live State**: Mutable tracking of current question, status (Active/Paused/Comp), and connection events.
+  - **Live State**: Mutable tracking of current question and connection events.
   - **Transcript**: Append-only log of every turn.
-- **`QuestionFlowProcessor` (`question_flow_processor.py`)**: The "Brain" of the interview.
-  - Handles the sequence of questions.
-  - Evaluates answer quality (word count, filler ratio, theme signals).
-  - Triggers follow-up questions if budget allows.
-- **`TranscriptAccumulator` (`transcript_accumulator.py`)**: A silent observer.
-  - Records candidate and agent turns without interfering with the pipeline flow.
+- **`LLMResponseParser` (`llm/json_parser.py`)**: The extractor.
+  - Buffers streaming tokens to ensure full sentences.
+  - Uses Regex to find JSON blocks and route conversational text to TTS vs evaluation data to the dashboard.
 
 ### 2. The Pipeline Flow
 ```
-[Transport Input] -> [STT] -> [TranscriptAccumulator] -> [UserAggregator] -> [QuestionFlowProcessor] -> [LLM] -> [TTS] -> [Transport Output]
+[Transport Input] -> [STT] -> [UserAggregator] -> [QuestionFlowProcessor] -> [LLM] -> [Parser] -> [TTS] -> [Transport Output] -> [AssistantAggregator]
 ```
 
 ---
 
 ## 🛠️ Implementation Details
 
-### Answer Quality Gates
-The `QuestionFlowProcessor` uses three primary heuristics to determine if an answer is "sufficient":
-1. **Depth**: Minimum word counts based on `AnswerDepth` (Short/Medium/Long).
-2. **Filler Ratio**: Rejects answers with >35% filler words (um, uh, like).
-3. **Theme Signal**: Checks if keywords from the `expected_theme` are present in the response.
+### Aggregation & JSON Parsing
+The AI produces JSON containing both evaluation data and conversational text. To prevent the bot from reading code, the **Parser** buffers all incoming `TextFrame` fragments and only emits the natural `response` field once the full thought is finished.
 
-### Instruction Injection
-Instead of letting the LLM decide what to ask next, the `QuestionFlowProcessor` injects specific **Developer Instructions** into the context. This ensures the bot follows the interview script exactly while maintaining a natural conversational tone.
+### State Recovery
+The dashboard (`index.html`) is resilient to network drops. Upon loading, it fetches the current `InterviewSession` from the server, allowing the transcript and progress to be reconstructed even if the browser is refreshed mid-interview.
 
 ---
 
 ## 🚦 Operational Workflows
 
-### Running Locally
+### Running the Full Stack
 1. **Navigate to server**: `cd pipecat-quickstart/server`
 2. **Install**: `uv sync`
-3. **Run**: 
-   - SmallWebRTC: `uv run bot.py`
-   - LiveKit: `uv run bot.py --transport livekit` (requires `.env` setup)
-
-### Testing
-- **Unit Tests**: Run `pytest` in the `server/` directory.
-  - `test_interview_session.py`: Validates state transitions.
-  - `test_question_flow.py`: Validates interview logic and follow-up triggers.
+3. **Run**: `uv run runner.py`
+4. **Access Dashboard**: `http://127.0.0.1:7860`
 
 ---
 
 ## 📝 Coding Conventions
-- **Explicit State**: Never modify `InterviewSession` outside of `QuestionFlowProcessor` write-helpers.
-- **Frame Safety**: Custom processors must always `push_frame` to ensure the pipeline doesn't stall.
-- **Logging**: Use `loguru` with clear prefixes like `[flow]` or `[transcript]`.
+- **Lifecycle Safety**: Always call `await super().process_frame()` in custom processors.
+- **Event-Driven**: Trigger interactions on `BotConnectedFrame` or transcription events.
+- **Natural Voice**: Never push raw LLM tokens directly to TTS; always pass through the Parser buffer.
 
 ---
 

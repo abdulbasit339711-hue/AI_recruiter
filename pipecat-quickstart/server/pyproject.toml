@@ -6,6 +6,11 @@ requires-python = ">=3.11"
 dependencies = [
     "pipecat-ai[cartesia,deepgram,openai,runner,silero,webrtc,livekit]",
     "pipecatcloud",
+    "fastapi",
+    "uvicorn",
+    "loguru",
+    "python-dotenv",
+    "livekit",
 ]
 
 [dependency-groups]

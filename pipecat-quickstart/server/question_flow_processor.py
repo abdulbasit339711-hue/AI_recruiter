@@ -1,10 +1,9 @@
-# question_flow_processor.py
-
 from loguru import logger
 from pipecat.frames.frames import (
     Frame,
     TranscriptionFrame,
     LLMRunFrame,
+    BotConnectedFrame,
 )
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -90,6 +89,11 @@ class QuestionFlowProcessor(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction):
         await super().process_frame(frame, direction)
+
+        if isinstance(frame, BotConnectedFrame):
+            logger.info("[flow] Bot connected to room — triggering opening")
+            await self.trigger_opening()
+
         if isinstance(frame, TranscriptionFrame):
             text = frame.text.strip()
             if text:
@@ -101,6 +105,13 @@ class QuestionFlowProcessor(FrameProcessor):
                 await self._handle_candidate_turn(text)
 
         await self.push_frame(frame, direction)
+
+    async def trigger_opening(self):
+        """Manually trigger the opening question."""
+        if not self._opening_done:
+            logger.info("[flow] triggering opening via manual call")
+            self._opening_done = True
+            await self._ask_question(self._session.current_question, is_opening=True)
 
     async def _handle_candidate_turn(self, text: str):
         session = self._session
@@ -183,6 +194,7 @@ class QuestionFlowProcessor(FrameProcessor):
         is_opening: bool = False
     ):
         """Inject an instruction into LLM context to ask this question."""
+        await broadcaster.broadcast("state", {"status": "speaking", "speaker": "agent"})
         session = self._session
         session.mark_question_asked(question.id)
 
@@ -222,19 +234,19 @@ class QuestionFlowProcessor(FrameProcessor):
 
     async def _inject_instruction(self, instruction: str):
         """
-        Add a developer-role instruction to LLM context and trigger a response.
+        Add a system-role instruction to LLM context and trigger a response.
         """
         await broadcaster.broadcast("state", {"status": "thinking", "speaker": "agent"})
         
         json_instruction = (
-            f"{instruction} "
-            f"CRITICAL: Return your response ONLY as a JSON object with two keys: "
-            f"'response' (the text you will speak) and 'evaluation' (an object containing "
-            f"'score' 1-10, 'critique' of the candidate's performance, and 'goal_progress')."
+            f"{instruction} \n\n"
+            f"CRITICAL: You must return a valid JSON object. Do not include any text before or after the JSON. "
+            f"Template: {{\"response\": \"Natural text to speak\", \"evaluation\": {{\"score\": 5, \"critique\": \"your feedback\", \"goal_progress\": 0}}}}"
         )
 
+        # Using 'system' role for strict JSON guidance
         self._context.add_message({
-            "role": "developer",
+            "role": "system",
             "content": json_instruction,
         })
         await self.push_frame(LLMRunFrame())

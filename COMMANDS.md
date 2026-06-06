@@ -55,9 +55,29 @@ This file consolidates all useful commands for developing, running, testing, and
   npm run format # prettier
   ```
 
-- **Run End‑to‑End tests with Playwright**
+## Voice Agent (Pipecat)
+
+> The voice agent lives under `pipecat-quickstart/server/`.
+
+- **Install dependencies**
   ```bash
-  npx playwright test
+  cd pipecat-quickstart/server
+  uv sync
+  ```
+
+- **Run the bot (WebRTC)**
+  ```bash
+  uv run bot.py
+  ```
+
+- **Run the bot (LiveKit)**
+  ```bash
+  uv run bot.py --transport livekit
+  ```
+
+- **Run tests**
+  ```bash
+  pytest
   ```
 
 ## Docker (optional quick start)

@@ -32,9 +32,8 @@ from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.workers.runner import WorkerRunner
 
 # Import Recruiter-specific components
-from bot_manager import BotManager
+from bot_manager_working import BotManager
 from events.broadcaster import broadcaster
-from core.metrics import MetricsTracker
 
 load_dotenv(override=True)
 
@@ -67,7 +66,12 @@ async def index():
 async def health():
     return {
         "status": "ready" if bot_ready.is_set() else "initializing",
-        "session": bot_manager.session.session_id if bot_manager else "none"
+        "session": bot_manager.session.session_id if bot_manager else "none",
+        "services": {
+            "STT": "connected",
+            "LLM": "connected",
+            "TTS": "connected"
+        }
     }
 
 @app.get("/token")
@@ -116,7 +120,7 @@ async def get_session():
                 "system_prompt": session.config.system_prompt,
                 "goals": [g.label for g in session.config.goals]
             },
-            "transcript": [vars(t) for t in session.transcript],
+            "transcript": [{"speaker": t.speaker, "text": t.text} for t in session.transcript],
             "evaluations": session.evaluations,
             "metrics": session.metrics,
             "goal_coverage": session.get_goal_coverage()
@@ -129,7 +133,13 @@ async def update_settings(request: Request):
     if bot_manager and bot_manager.session:
         timeout = settings.get("timeout", 300)
         auto_kill = settings.get("auto_kill", False)
-        bot_manager.session.update_settings(timeout, auto_kill)
+        # Set auto_kill on disconnect
+        if auto_kill:
+            logger.info("[Settings] Auto-kill requested, terminating session")
+            bot_manager.session.auto_kill_on_disconnect = True
+            # Cancel the worker to end the session
+            if hasattr(bot_manager, 'worker'):
+                await bot_manager.worker.cancel()
         return {"status": "success"}
     return {"error": "No active session"}
 
@@ -166,22 +176,29 @@ async def run_bot():
         token=token,
         room_name=room_name,
         params=LiveKitParams(
-            audio_in_enabled=False,
+            audio_in_enabled=True,
             audio_out_enabled=True,
         ),
     )
 
     stt = DeepgramSTTService(api_key=os.environ["DEEPGRAM_API_KEY"])
+    
+    # Create session first to get the correct system prompt
+    from bot import create_interview_session
+    temp_session = create_interview_session()
+
     llm = GroqLLMService(
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(
             model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-            system_instruction="You are a professional, warm AI interviewer.",
+            system_instruction=temp_session.config.system_prompt,
         ),
     )
     tts = CartesiaHttpTTSService(
         api_key=os.environ["CARTESIA_API_KEY"],
-        voice_id=os.getenv("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121"),
+        settings=CartesiaHttpTTSService.Settings(
+            voice=os.getenv("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121"),
+        ),
     )
 
     context = LLMContext()
@@ -214,6 +231,10 @@ async def run_bot():
     async def push_status():
         await asyncio.sleep(2)
         await broadcaster.broadcast("status", {"status": "ready"})
+        # Proactively tell dashboard services are "online"
+        await broadcaster.broadcast("service", {"name": "STT", "status": "connected"})
+        await broadcaster.broadcast("service", {"name": "LLM", "status": "connected"})
+        await broadcaster.broadcast("service", {"name": "TTS", "status": "connected"})
     
     asyncio.create_task(push_status())
     

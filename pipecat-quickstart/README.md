@@ -1,68 +1,50 @@
-# pipecat-quickstart
+# 🎙️ AI-Recruiter: Voice Agent Sub-Project
 
-A Pipecat AI voice agent built with a cascade pipeline (STT → LLM → TTS).
+A Pipecat-powered AI voice interviewer with a high-fidelity dashboard.
 
-## Configuration
+## 🚀 Key Features
 
-- **Bot Type**: Web
-- **Transport(s)**: SmallWebRTC, Daily (WebRTC)
-- **Pipeline**: Cascade
-  - **STT**: Deepgram
-  - **LLM**: OpenAI Responses
-  - **TTS**: Cartesia
+- **Real-time Pipeline**: STT (Deepgram) → LLM (Groq) → TTS (Cartesia).
+- **Interactive Dashboard**: Modern dark-mode UI with live transcripts, waveforms, and goal tracking.
+- **Robust JSON Handling**: Aggregated token buffering ensures the bot never "speaks code."
+- **State Persistence**: Memory-safe session management with support for re-joins.
 
-## Setup
+## 🛠️ Setup & Execution
 
-### Server
+### 1. Install Dependencies
+Navigate to the server directory and sync using `uv`:
+```bash
+cd pipecat-quickstart/server
+uv sync
+```
 
-1. **Navigate to server directory**:
+### 2. Configure Environment
+Create a `.env` file in `pipecat-quickstart/server/` with:
+- `GROQ_API_KEY`
+- `DEEPGRAM_API_KEY`
+- `CARTESIA_API_KEY`
+- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
 
-   ```bash
-   cd server
-   ```
+### 3. Run the Dashboard
+The main entry point is `runner.py`, which starts both the FastAPI dashboard and the Bot:
+```bash
+uv run runner.py
+```
+Access the dashboard at **`http://127.0.0.1:7860`**.
 
-2. **Install dependencies**:
-
-   ```bash
-   uv sync
-   ```
-
-3. **Configure environment variables**:
-
-   ```bash
-   cp .env.example .env
-   # Edit .env and add your API keys
-   ```
-
-4. **Run the bot**:
-
-   - SmallWebRTC: `uv run bot.py`
-   - Daily: `uv run bot.py --transport daily`
-
-## Project Structure
+## 🏗️ Project Structure
 
 ```
 pipecat-quickstart/
-├── server/              # Python bot server
-│   ├── bot.py           # Main bot implementation
-│   ├── pyproject.toml   # Python dependencies
-│   ├── .env.example     # Environment variables template
-│   ├── .env             # Your API keys (git-ignored)
-│   ├── Dockerfile       # Container image for Pipecat Cloud
-│   └── pcc-deploy.toml  # Pipecat Cloud deployment config
-├── .gitignore           # Git ignore patterns
-└── README.md            # This file
+├── server/
+│   ├── runner.py        # Main entry point (FastAPI + Bot)
+│   ├── bot_manager.py   # Pipeline orchestration
+│   ├── index.html       # Single-file dashboard UI
+│   ├── llm/
+│   │   └── json_parser.py # Robust response extractor
+│   └── core/
+│       └── metrics.py    # Usage tracking
 ```
 
-## Deploying to Pipecat Cloud
-
-This project is configured for deployment to Pipecat Cloud. You can learn how to deploy to Pipecat Cloud in the [Pipecat Quickstart Guide](https://docs.pipecat.ai/getting-started/quickstart#step-2-deploy-to-production).
-
-Refer to the [Pipecat Cloud Documentation](https://docs.pipecat.ai/deployment/pipecat-cloud/introduction) to learn more about configuring, deploying, and managing your agents in Pipecat Cloud.
-
-## Learn More
-
-- [Pipecat Documentation](https://docs.pipecat.ai/)
-- [Pipecat GitHub](https://github.com/pipecat-ai/pipecat)
-- [Pipecat Examples](https://github.com/pipecat-ai/pipecat-examples)
-- [Discord Community](https://discord.gg/pipecat)
+---
+Part of the **AI-Recruiter** system. For root documentation, see [../GEMINI.md](../GEMINI.md).

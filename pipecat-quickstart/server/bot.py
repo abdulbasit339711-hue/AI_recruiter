@@ -15,6 +15,8 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.processors.aggregators.llm_response import LLMFullResponseAggregator
+from core.metrics import MetricsTracker
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import SpeechTimeoutUserTurnStopStrategy
 from pipecat.runner.types import (
@@ -34,6 +36,8 @@ from interview_session import (
 )
 from transcript_accumulator import TranscriptAccumulator
 from question_flow_processor import QuestionFlowProcessor
+from fixed_json_parser import FixedLLMResponseParser
+from events.broadcaster import broadcaster
 
 load_dotenv(override=True)
 
@@ -51,11 +55,10 @@ def create_interview_session() -> InterviewSession:
         interview_type="technical",
         system_prompt=(
             "You are a professional, warm AI interviewer conducting a technical interview. "
-            "Speak naturally and conversationally. Never use bullet points or lists. "
-            "IMPORTANT: Your primary output must be JSON. "
-            "Use the 'response' key for the natural voice response you will say aloud. "
-            "Use the 'evaluation' key for a private object containing 'score' (1-10), "
-            "'critique' (your assessment of the candidate's last answer), and 'goal_progress'."
+            "Speak naturally and conversationally like you're having a friendly professional conversation. "
+            "Ask thoughtful follow-up questions based on what the candidate tells you. "
+            "Keep your responses concise and engaging. Never use bullet points or lists. "
+            "Focus on understanding the candidate's experience and technical background."
         ),
         time_limit_seconds=1800,
         max_follow_ups_per_question=2,
@@ -148,8 +151,10 @@ async def run_bot(transport: BaseTransport):
     )
 
     # Phase 1 processors
-    transcript_accumulator = TranscriptAccumulator(session)
+    transcript_accumulator = TranscriptAccumulator(session, broadcaster)
     question_flow = QuestionFlowProcessor(session, context)
+    response_parser = FixedLLMResponseParser(session, broadcaster)
+    metrics_tracker = MetricsTracker(session, broadcaster)
 
     # Pipeline - assembled from reusable components
     pipeline = Pipeline(
@@ -160,6 +165,9 @@ async def run_bot(transport: BaseTransport):
             user_aggregator,
             question_flow,
             llm,
+            response_parser,
+            LLMFullResponseAggregator(),
+            metrics_tracker,
             tts,
             transport.output(),
             assistant_aggregator,
