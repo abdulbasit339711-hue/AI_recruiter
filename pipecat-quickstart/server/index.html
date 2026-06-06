@@ -47,6 +47,21 @@
                 </div>
 
                 <div class="glass p-4 rounded-xl space-y-4">
+                    <label class="text-xs uppercase text-slate-500 font-bold block">Pipeline Mode</label>
+                    <div class="flex gap-2">
+                        <button id="mode-single" class="flex-1 py-2 px-3 bg-blue-600 text-white rounded-lg text-xs transition">
+                            Single LLM
+                        </button>
+                        <button id="mode-dual" class="flex-1 py-2 px-3 bg-slate-800 text-slate-400 rounded-lg text-xs transition">
+                            Dual LLM
+                        </button>
+                    </div>
+                    <div id="pipeline-info" class="text-[10px] text-slate-400 italic">
+                        Current: Single LLM Mode
+                    </div>
+                </div>
+
+                <div class="glass p-4 rounded-xl space-y-4">
                     <label class="text-xs uppercase text-slate-500 font-bold block">Persistence</label>
                     <div class="flex items-center justify-between text-sm">
                         <span>Wait on disconnect</span>
@@ -173,15 +188,56 @@
             </div>
 
             <div class="mt-auto">
-                <h3 class="text-sm font-bold uppercase text-slate-500 mb-4">Session Stats</h3>
-                <div class="grid grid-cols-2 gap-3">
+                <h3 class="text-sm font-bold uppercase text-slate-500 mb-4">Token Usage Details</h3>
+
+                <!-- LLM Token Breakdown -->
+                <div class="glass p-3 rounded-xl mb-3">
+                    <div class="text-xs font-bold text-blue-300 mb-2">LLM (Groq)</div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                            <div id="llm-input-tokens" class="font-bold text-green-400">0</div>
+                            <div class="text-[9px] text-slate-500">Input</div>
+                        </div>
+                        <div>
+                            <div id="llm-output-tokens" class="font-bold text-orange-400">0</div>
+                            <div class="text-[9px] text-slate-500">Output</div>
+                        </div>
+                    </div>
+                    <div class="mt-1 pt-1 border-t border-slate-700">
+                        <div id="llm-total-tokens" class="text-sm font-bold text-blue-400">0</div>
+                        <div class="text-[9px] text-slate-500">Total</div>
+                    </div>
+                </div>
+
+                <!-- STT & TTS Breakdown -->
+                <div class="grid grid-cols-2 gap-2 mb-3">
                     <div class="glass p-3 rounded-xl">
-                        <div id="stat-tokens" class="text-lg font-bold text-blue-400">0</div>
-                        <div class="text-[10px] uppercase text-slate-500 font-bold">Total Tokens</div>
+                        <div class="text-xs font-bold text-purple-300 mb-1">STT</div>
+                        <div id="stt-tokens" class="text-sm font-bold text-purple-400">0</div>
+                        <div class="text-[9px] text-slate-500">~Tokens</div>
                     </div>
                     <div class="glass p-3 rounded-xl">
-                        <div id="stat-duration" class="text-lg font-bold text-blue-400">0:00</div>
-                        <div class="text-[10px] uppercase text-slate-500 font-bold">Duration</div>
+                        <div class="text-xs font-bold text-cyan-300 mb-1">TTS</div>
+                        <div id="tts-tokens" class="text-sm font-bold text-cyan-400">0</div>
+                        <div class="text-[9px] text-slate-500">~Tokens</div>
+                    </div>
+                </div>
+
+                <!-- Session Summary -->
+                <div class="glass p-3 rounded-xl">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <div id="stat-tokens" class="text-lg font-bold text-blue-400">0</div>
+                            <div class="text-[10px] uppercase text-slate-500 font-bold">Total Tokens</div>
+                        </div>
+                        <div>
+                            <div id="stat-cost" class="text-lg font-bold text-yellow-400">$0.00</div>
+                            <div class="text-[10px] uppercase text-slate-500 font-bold">Est. Cost</div>
+                        </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-t border-slate-700">
+                        <div id="stat-duration" class="text-sm font-bold text-blue-400">0:00</div>
+                        <div class="text-[9px] uppercase text-slate-500 font-bold">Duration</div>
                     </div>
                 </div>
             </div>
@@ -201,6 +257,9 @@
         let startTime = null;
         let currentGoals = {};
         let isInterviewStarted = false;
+        let currentPipelineMode = 'single';
+        let currentAgentMessage = null;
+        let isStreamingResponse = false;
 
         const chatWindow = document.getElementById('chat-window');
         const botState = document.getElementById('bot-state');
@@ -347,6 +406,12 @@
                 if (data.speaker === 'agent') {
                     botState.innerText = data.status;
                     botState.className = `text-[10px] px-2 py-0.5 rounded-full ${data.status === 'thinking' ? 'bg-blue-900/40 text-blue-400' : 'bg-green-900/40 text-green-400'}`;
+
+                    // Reset streaming when agent stops speaking
+                    if (data.status === 'idle' && isStreamingResponse) {
+                        currentAgentMessage = null;
+                        isStreamingResponse = false;
+                    }
                 } else {
                     userState.innerText = data.status;
                     userState.className = `text-[10px] px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-400`;
@@ -370,9 +435,73 @@
                 document.getElementById('stat-tokens').innerText = totalTokens.toLocaleString();
             });
 
+            // Handle detailed metrics from LLM responses
+            sse.addEventListener('metrics_detailed', (e) => {
+                const data = JSON.parse(e.data);
+                const currentRequest = data.current_request;
+                const serviceBreakdown = data.service_breakdown;
+                const sessionTotals = data.session_totals;
+
+                // Update LLM token displays
+                document.getElementById('llm-input-tokens').innerText = currentRequest.prompt_tokens.toLocaleString();
+                document.getElementById('llm-output-tokens').innerText = currentRequest.completion_tokens.toLocaleString();
+                document.getElementById('llm-total-tokens').innerText = serviceBreakdown.llm.total_tokens.toLocaleString();
+
+                // Update TTS tokens
+                document.getElementById('tts-tokens').innerText = serviceBreakdown.tts.estimated_tokens.toLocaleString();
+
+                // Update session totals
+                document.getElementById('stat-tokens').innerText = sessionTotals.total_tokens.toLocaleString();
+                document.getElementById('stat-cost').innerText = `$${sessionTotals.total_cost_estimate.toFixed(3)}`;
+
+                addLog(`LLM: +${currentRequest.prompt_tokens} in, +${currentRequest.completion_tokens} out`);
+            });
+
+            // Handle STT metrics updates
+            sse.addEventListener('stt_metrics', (e) => {
+                const data = JSON.parse(e.data);
+                const sessionTotals = data.session_totals;
+
+                // Update STT token display
+                document.getElementById('stt-tokens').innerText = sessionTotals.estimated_tokens.toLocaleString();
+
+                addLog(`STT: +${data.estimated_tokens} tokens (~${data.text_length} chars)`);
+            });
+
             sse.addEventListener('transcript', (e) => {
                 const data = JSON.parse(e.data);
-                appendMessage(data.speaker, data.text);
+
+                if (data.speaker === 'agent' && data.streaming) {
+                    // Handle streaming agent text
+                    if (!currentAgentMessage) {
+                        // Create new message bubble for agent
+                        const div = document.createElement('div');
+                        div.dataset.speaker = 'agent';
+                        div.className = 'flex flex-col items-start transition-all duration-300 animate-in fade-in slide-in-from-bottom-2';
+
+                        const bubble = document.createElement('div');
+                        bubble.className = 'max-w-[80%] p-4 rounded-2xl text-sm shadow-sm bg-slate-800 text-slate-200 rounded-bl-none';
+                        bubble.id = 'current-agent-bubble';
+                        bubble.innerText = data.text;
+
+                        div.appendChild(bubble);
+                        chatWindow.appendChild(div);
+                        currentAgentMessage = bubble;
+                        isStreamingResponse = true;
+                    } else {
+                        // Append to existing message
+                        currentAgentMessage.innerText += ' ' + data.text;
+                    }
+                    chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+                } else if (data.speaker === 'agent' && !data.streaming) {
+                    // Complete message (for backwards compatibility)
+                    currentAgentMessage = null;
+                    isStreamingResponse = false;
+                    appendMessage(data.speaker, data.text);
+                } else {
+                    // User messages
+                    appendMessage(data.speaker, data.text);
+                }
             });
 
             sse.addEventListener('service', (e) => {
@@ -388,6 +517,44 @@
             sse.addEventListener('status', (e) => {
                 const data = JSON.parse(e.data);
                 addLog(`Bot status: ${data.status}`);
+            });
+
+            // Handle pipeline mode changes
+            sse.addEventListener('pipeline_mode', (e) => {
+                const data = JSON.parse(e.data);
+                currentPipelineMode = data.mode;
+                document.getElementById('pipeline-info').innerText = `Current: ${data.description}`;
+                updatePipelineModeButtons(data.mode);
+                addLog(`Pipeline mode: ${data.description}`);
+            });
+
+            // Handle judge evaluations (only in dual mode)
+            sse.addEventListener('judge_evaluation', (e) => {
+                const data = JSON.parse(e.data);
+                const evalHtml = `
+                    <div class="mt-2 p-3 rounded-lg bg-purple-900/20 border border-purple-800/50 text-xs">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-purple-400 font-bold">Judge Evaluation</span>
+                            <span class="text-purple-300 font-bold">${data.score}/10</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-400">
+                            <div>Completeness: ${(data.completeness * 100).toFixed(0)}%</div>
+                            <div>Depth: ${data.depth}</div>
+                        </div>
+                        ${data.follow_up_needed ? `<div class="mt-2 text-yellow-400 text-[10px]">Follow-up: ${data.suggested_probe}</div>` : ''}
+                    </div>
+                `;
+
+                // Add evaluation to last user message
+                const messages = chatWindow.querySelectorAll('[data-speaker="candidate"]');
+                if (messages.length > 0) {
+                    const lastUserMsg = messages[messages.length - 1];
+                    const evalDiv = document.createElement('div');
+                    evalDiv.innerHTML = evalHtml;
+                    lastUserMsg.appendChild(evalDiv.firstElementChild);
+                }
+
+                addLog(`Judge: Score ${data.score}/10, Follow-up: ${data.follow_up_needed}`);
             });
         }
 
@@ -576,9 +743,74 @@
             }
         }, 1000);
 
+        // Pipeline mode switching
+        function updatePipelineModeButtons(mode) {
+            const singleBtn = document.getElementById('mode-single');
+            const dualBtn = document.getElementById('mode-dual');
+
+            if (mode === 'dual') {
+                singleBtn.className = 'flex-1 py-2 px-3 bg-slate-800 text-slate-400 rounded-lg text-xs transition';
+                dualBtn.className = 'flex-1 py-2 px-3 bg-blue-600 text-white rounded-lg text-xs transition';
+            } else {
+                singleBtn.className = 'flex-1 py-2 px-3 bg-blue-600 text-white rounded-lg text-xs transition';
+                dualBtn.className = 'flex-1 py-2 px-3 bg-slate-800 text-slate-400 rounded-lg text-xs transition';
+            }
+        }
+
+        document.getElementById('mode-single').onclick = async () => {
+            if (currentPipelineMode === 'single') return;
+
+            const res = await fetch('/pipeline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'single' })
+            });
+            const data = await res.json();
+
+            if (data.restart_required) {
+                addLog('Pipeline mode changed. Restart required for active session.');
+                if (confirm('Changing pipeline mode requires restarting the session. Continue?')) {
+                    window.location.reload();
+                }
+            } else {
+                currentPipelineMode = 'single';
+                updatePipelineModeButtons('single');
+            }
+        };
+
+        document.getElementById('mode-dual').onclick = async () => {
+            if (currentPipelineMode === 'dual') return;
+
+            const res = await fetch('/pipeline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'dual' })
+            });
+            const data = await res.json();
+
+            if (data.restart_required) {
+                addLog('Pipeline mode changed. Restart required for active session.');
+                if (confirm('Changing pipeline mode requires restarting the session. Continue?')) {
+                    window.location.reload();
+                }
+            } else {
+                currentPipelineMode = 'dual';
+                updatePipelineModeButtons('dual');
+            }
+        };
+
         // Initialize immediately
         initMetadata();
         startSSE();
+
+        // Get initial pipeline mode
+        fetch('/pipeline')
+            .then(res => res.json())
+            .then(data => {
+                currentPipelineMode = data.mode;
+                updatePipelineModeButtons(data.mode);
+                document.getElementById('pipeline-info').innerText = `Current: ${data.mode === 'dual' ? 'Dual LLM (Judge + Responder)' : 'Single LLM Mode'}`;
+            });
 
     </script>
 </body>

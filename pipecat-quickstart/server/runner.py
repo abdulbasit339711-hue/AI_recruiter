@@ -32,7 +32,7 @@ from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.workers.runner import WorkerRunner
 
 # Import Recruiter-specific components
-from bot_manager_working import BotManager
+from bot_manager_dual import BotManager
 from events.broadcaster import broadcaster
 
 load_dotenv(override=True)
@@ -46,6 +46,7 @@ logger.add(sys.stderr, level="DEBUG")
 # --- Global State ---
 bot_manager = None
 bot_ready = asyncio.Event()
+pipeline_mode = "single"  # Default mode
 
 # --- FastAPI App ---
 app = FastAPI()
@@ -152,6 +153,34 @@ async def manual_chat(request: Request):
         return {"status": "received"}
     return {"error": "No active session or bot"}
 
+@app.get("/pipeline")
+async def get_pipeline():
+    """Get current pipeline configuration"""
+    if bot_manager:
+        return bot_manager.get_pipeline_info()
+    return {"mode": pipeline_mode, "status": "not_started"}
+
+@app.post("/pipeline")
+async def set_pipeline(request: Request):
+    """Set pipeline mode (single or dual)"""
+    global pipeline_mode
+    data = await request.json()
+    mode = data.get("mode", "single")
+
+    if mode not in ["single", "dual"]:
+        return {"error": "Invalid mode. Use 'single' or 'dual'"}
+
+    pipeline_mode = mode
+    logger.info(f"[API] Pipeline mode set to: {mode}")
+
+    # Broadcast mode change
+    await broadcaster.broadcast("pipeline_mode", {
+        "mode": mode,
+        "description": "Dual LLM (Judge + Responder)" if mode == "dual" else "Single LLM"
+    })
+
+    return {"mode": mode, "status": "updated", "restart_required": bot_manager is not None}
+
 # --- Bot Runner ---
 async def run_bot():
     global bot_manager, bot_ready
@@ -211,7 +240,7 @@ async def run_bot():
         ),
     )
     
-    bot_manager = BotManager(transport, stt, llm, tts, context, user_aggregator, assistant_aggregator)
+    bot_manager = BotManager(transport, stt, llm, tts, context, user_aggregator, assistant_aggregator, mode=pipeline_mode)
 
     # Event Handlers
     @transport.event_handler("on_participant_connected")
