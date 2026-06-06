@@ -114,14 +114,24 @@ class BotManager:
 
         logger.info(f"[BotManager] Session started - Mode: {self.mode}, ID: {self.session.session_id}")
 
-        # Queue initial LLM frame to start the conversation
-        await self.pipeline.push_frame(LLMRunFrame())
+        # Don't push frame here - let the pipeline start naturally
+        # The LLMRunFrame should be sent after the pipeline is fully initialized
 
     async def inject_text(self, text: str):
         """Inject text manually from dashboard"""
-        from pipecat.frames.frames import TextFrame
-        frame = TextFrame(text=text)
-        await self.pipeline.push_frame(frame)
+        logger.info(f"[BotManager] Injecting manual text: {text}")
+
+        # Send as transcription frame to mimic STT output
+        # This will go through the transcript processor and aggregator
+        from pipecat.frames.frames import TranscriptionFrame
+        import time
+        frame = TranscriptionFrame(
+            text=text,
+            user_id="manual-input",
+            timestamp=str(time.time())
+        )
+        # Push to transport input so it flows through the pipeline properly
+        await self.transport.input().push_frame(frame)
 
     def get_pipeline_info(self):
         """Get current pipeline configuration"""

@@ -46,7 +46,7 @@ logger.add(sys.stderr, level="DEBUG")
 # --- Global State ---
 bot_manager = None
 bot_ready = asyncio.Event()
-pipeline_mode = "single"  # Default mode
+pipeline_mode = os.getenv("PIPELINE_MODE", "single")  # Default to single, can be set to "dual"
 
 # --- FastAPI App ---
 app = FastAPI()
@@ -149,6 +149,7 @@ async def manual_chat(request: Request):
     data = await request.json()
     text = data.get("text", "").strip()
     if text and bot_manager:
+        logger.info(f"[API] Manual chat input: {text}")
         await bot_manager.inject_text(text)
         return {"status": "received"}
     return {"error": "No active session or bot"}
@@ -248,6 +249,21 @@ async def run_bot():
         identity = getattr(participant, "identity", participant)
         logger.info(f"UI Joined Room: {identity}")
         await broadcaster.broadcast("participant", {"event": "joined", "identity": identity})
+
+        # Send initial greeting when any participant joins (not the bot itself)
+        if str(identity) != "recruiter-bot":
+            await asyncio.sleep(2)  # Small delay to ensure pipeline is ready
+            logger.info(f"[Bot] Sending initial greeting to participant: {identity}")
+
+            # Add a greeting message to context to trigger LLM response
+            context.add_message({
+                "role": "user",
+                "content": "[System: Candidate has joined. Please greet them warmly and start the interview.]"
+            })
+
+            # Trigger LLM to generate response
+            from pipecat.frames.frames import LLMMessagesUpdateFrame
+            await bot_manager.pipeline.push_frame(LLMMessagesUpdateFrame(messages=[], run_llm=True))
 
     @transport.event_handler("on_participant_disconnected")
     async def on_participant_disconnected(transport, participant):

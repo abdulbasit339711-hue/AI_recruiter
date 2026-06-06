@@ -36,10 +36,10 @@ class WorkingTranscriptProcessor(FrameProcessor):
             if text:
                 logger.info(f"[Transcript] User: {text[:100]}...")
 
-                # Track STT metrics
+                # Track STT metrics (for both real STT and manual text injection)
                 self._stt_metrics["total_chars_processed"] += len(text)
                 self._stt_metrics["total_requests"] += 1
-                self._stt_metrics["estimated_tokens"] += len(text) // 4  # Estimate ~4 chars per token
+                self._stt_metrics["estimated_tokens"] += len(text.split())  # Estimate ~1 token per word
 
                 # Add to session
                 self._session.add_turn(
@@ -58,11 +58,11 @@ class WorkingTranscriptProcessor(FrameProcessor):
                 await self._broadcaster.broadcast("stt_metrics", {
                     "session_id": self._session.session_id,
                     "text_length": len(text),
-                    "estimated_tokens": len(text) // 4,
+                    "estimated_tokens": len(text.split()),
                     "session_totals": self._stt_metrics
                 })
 
-                logger.info(f"[STT Metrics] Processed {len(text)} chars, ~{len(text)//4} tokens. "
+                logger.info(f"[STT Metrics] Processed {len(text)} chars, ~{len(text.split())} tokens. "
                            f"Session: {self._stt_metrics['total_chars_processed']} chars, "
                            f"~{self._stt_metrics['estimated_tokens']} tokens")
 
@@ -125,20 +125,11 @@ class WorkingMetricsProcessor(FrameProcessor):
             logger.debug("[Agent] Started collecting response")
 
         # Collect text frames that are going to TTS (agent responses)
-        elif isinstance(frame, TextFrame):
+        elif isinstance(frame, TextFrame) and self._aggregating_response:
             text = frame.text.strip()
             if text:
-                # If we're aggregating for metrics, collect it
-                if self._aggregating_response:
-                    self._current_response.append(text)
-
-                # But also broadcast immediately for real-time display
-                # This ensures the dashboard shows text as it streams
-                asyncio.create_task(self._broadcaster.broadcast("transcript", {
-                    "speaker": "agent",
-                    "text": text,
-                    "streaming": True
-                }))
+                # Collect for aggregation
+                self._current_response.append(text)
 
         # End aggregating and send complete response
         elif isinstance(frame, LLMFullResponseEndFrame):
@@ -182,11 +173,24 @@ class WorkingMetricsProcessor(FrameProcessor):
     async def _handle_llm_metrics(self, frame):
         """Handle LLM usage metrics from response frames"""
 
+        # The LLMFullResponseEndFrame contains the usage data
         # Try to get actual usage data from frame
         usage = getattr(frame, 'usage', None)
-        text = getattr(frame, 'text', '')
 
-        if usage:
+        # If no usage on the frame, try to get the aggregated response text
+        if not usage and self._current_response:
+            # Estimate based on the full response we collected
+            full_text = " ".join(self._current_response)
+            word_count = len(full_text.split())
+
+            # Rough estimation: ~1.3 tokens per word
+            completion_tokens = int(word_count * 1.3)
+            # Estimate prompt tokens based on context size
+            prompt_tokens = int(completion_tokens * 0.5)  # Rough estimate
+            total_tokens = prompt_tokens + completion_tokens
+
+            logger.info(f"[LLM] Estimated metrics - Prompt: {prompt_tokens}, Completion: {completion_tokens}, Total: {total_tokens}")
+        elif usage:
             # Real metrics from LLM
             prompt_tokens = getattr(usage, 'prompt_tokens', 0)
             completion_tokens = getattr(usage, 'completion_tokens', 0)
@@ -194,15 +198,8 @@ class WorkingMetricsProcessor(FrameProcessor):
 
             logger.info(f"[LLM] Real metrics - Prompt: {prompt_tokens}, Completion: {completion_tokens}, Total: {total_tokens}")
         else:
-            # Estimate if no real data
-            if text:
-                estimated_total = len(text.split()) * 1.3
-                prompt_tokens = int(estimated_total * 0.6)
-                completion_tokens = int(estimated_total * 0.4)
-                total_tokens = prompt_tokens + completion_tokens
-                logger.info(f"[LLM] Estimated metrics - Prompt: {prompt_tokens}, Completion: {completion_tokens}, Total: {total_tokens}")
-            else:
-                return
+            logger.warning("[LLM] No metrics available and no response text to estimate from")
+            return
 
         # Update session metrics
         self._session_metrics["llm"]["prompt_tokens"] += prompt_tokens
