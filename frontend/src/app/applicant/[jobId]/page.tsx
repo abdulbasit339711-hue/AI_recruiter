@@ -8,7 +8,6 @@ import Link from "next/link";
 export default function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const numericId = Number(jobId);
-  console.log('DEBUG: useJob type', typeof useJob);
   const { data: job, isLoading, isError, error } = useJob(numericId);
 
   if (isLoading) {
@@ -33,10 +32,9 @@ export default function JobDetailPage() {
         <p className="text-sm text-muted-foreground">{job.department}</p>
         <h1 className="mt-2 text-3xl font-semibold">{job.title}</h1>
       </div>
-      <div
-        className="rounded-md border border-white/10 bg-card/80 p-6 text-sm leading-7 text-muted-foreground"
-        dangerouslySetInnerHTML={{ __html: job.job_description.replace(/\n/g, "<br/>") }}
-      />
+      <div className="whitespace-pre-wrap rounded-md border border-white/10 bg-card/80 p-6 text-sm leading-7 text-muted-foreground">
+        {job.job_description}
+      </div>
       <Link href={`/applicant/${job.id}/apply`}>
         <button className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:opacity-90">
           Apply Now

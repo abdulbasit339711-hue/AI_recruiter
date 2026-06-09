@@ -1,6 +1,8 @@
 import asyncio
 import json
+import logging
 import os
+import queue as _queue
 from datetime import datetime
 from math import ceil
 from typing import Optional
@@ -8,13 +10,15 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse, FileResponse
 from sqlalchemy import func
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .core.logging_config import setup_logging
 from .core import status as S
+from .core.auth import admin_token_guard, token_is_valid
+from .core.ratelimit import upload_rate_limit, jobs_rate_limit
 from .core.jd_embedding_cache import invalidate_job, cache_stats
 from .core.model_registry import models_loaded
 from .database import engine, Base, get_db, config, run_migrations, DATABASE_URL
@@ -36,15 +40,27 @@ from .events import publish_candidate_event
 
 load_dotenv()
 setup_logging(config.get("logging", {}).get("level", "INFO"))
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Recruiter API", version="2.0.0")
 
+# Require a valid admin bearer token on every non-public endpoint (logic in
+# core/auth.py so it stays unit-testable).
+app.middleware("http")(admin_token_guard)
+
+# Added AFTER the auth guard so CORS stays the OUTERMOST middleware — this ensures
+# even 401/503 responses carry CORS headers. Explicit allowlist instead of "*".
+_cors_origins = [
+    o.strip()
+    for o in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -145,25 +161,49 @@ def create_job(
         db.commit()
         db.refresh(job)
         return job
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database write failed: {str(e)}")
+        logger.exception("Database write failed")
+        raise HTTPException(status_code=500, detail="Database write failed.")
 
 
-@app.get("/jobs")
-def list_jobs(status: Optional[str] = "Active", db: Session = Depends(get_db)):
+def _serialize_job(job: Job, include_private: bool) -> dict:
+    """Job payload. `llm_prompt` (the scoring prompt) is admin-only — never expose
+    it to unauthenticated applicants, who could otherwise game Tier-3 scoring."""
+    data = {
+        "id": job.id,
+        "title": job.title,
+        "department": job.department,
+        "job_description": job.job_description,
+        "role_type": job.role_type,
+        "status": job.status,
+        "created_at": job.created_at,
+    }
+    if include_private:
+        data["llm_prompt"] = job.llm_prompt
+    return data
+
+
+@app.get("/jobs", dependencies=[Depends(jobs_rate_limit)])
+def list_jobs(request: Request, status: Optional[str] = "Active", db: Session = Depends(get_db)):
+    is_admin = token_is_valid(request.headers.get("authorization"))
+    # Unauthenticated callers (the public careers page) only ever see Active postings.
     query = db.query(Job)
-    if status:
-        query = query.filter(Job.status == status)
-    return query.all()
+    if is_admin:
+        if status:
+            query = query.filter(Job.status == status)
+    else:
+        query = query.filter(Job.status == "Active")
+    return [_serialize_job(j, is_admin) for j in query.all()]
 
 
 @app.get("/jobs/{job_id}")
-def get_job(job_id: int, db: Session = Depends(get_db)):
+def get_job(job_id: int, request: Request, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
-    return job
+    is_admin = token_is_valid(request.headers.get("authorization"))
+    return _serialize_job(job, is_admin)
 
 
 @app.put("/jobs/{job_id}")
@@ -195,9 +235,10 @@ def update_job(
         db.commit()
         db.refresh(job)
         return job
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+        logger.exception("Database update failed")
+        raise HTTPException(status_code=500, detail="Database update failed.")
 
 
 @app.patch("/jobs/{job_id}")
@@ -226,9 +267,10 @@ def patch_job(
         db.commit()
         db.refresh(job)
         return job
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+        logger.exception("Database update failed")
+        raise HTTPException(status_code=500, detail="Database update failed.")
 
 
 @app.delete("/jobs/{job_id}")
@@ -241,16 +283,17 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
         db.delete(job)
         db.commit()
         return {"message": "Job and associated candidates deleted.", "job_id": job_id}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database delete failed: {str(e)}")
+        logger.exception("Database delete failed")
+        raise HTTPException(status_code=500, detail="Database delete failed.")
 
 
 # ==========================================
 # UPLOAD (immediate response + background queue)
 # ==========================================
 
-@app.post("/upload")
+@app.post("/upload", dependencies=[Depends(upload_rate_limit)])
 async def upload_resume(
     job_id: int = Query(..., description="Target Job ID"),
     file: UploadFile = File(...),
@@ -282,7 +325,14 @@ async def upload_resume(
         db.commit()
         db.refresh(candidate)
 
-        enqueue_candidate(candidate.id)
+        try:
+            enqueue_candidate(candidate.id)
+        except _queue.Full:
+            candidate.status = S.ERROR
+            candidate.summary = "Evaluation queue is full; please retry shortly."
+            db.commit()
+            raise HTTPException(status_code=503, detail="Server is busy. Please retry in a moment.")
+
         publish_candidate_event(
             candidate.id,
             S.QUEUED,
@@ -290,21 +340,35 @@ async def upload_resume(
             event="queued",
         )
 
+        # Mint a short-lived self-service interview link tied to THIS upload, so the
+        # applicant can start the AI call immediately. Returned once, here only.
+        # Non-fatal: if interview links aren't configured, just omit it.
+        interview_token = None
+        interview_url = None
+        try:
+            from .interview_links import mint_link
+            interview_token, interview_url = mint_link(candidate.id, job_id, ttl_minutes=60)
+        except Exception as e:  # noqa: BLE001 - link minting must never block an upload
+            logger.warning("Self-service interview link not minted for candidate %d: %s", candidate.id, e)
+
         return {
             "id": candidate.id,
             "filename": candidate.filename,
             "job_id": candidate.job_id,
             "status": candidate.status,
             "message": "Resume queued for evaluation.",
+            "interview_token": interview_token,
+            "interview_url": interview_url,
         }
 
     except IngestionError as ie:
         raise HTTPException(status_code=ie.status_code, detail=str(ie))
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        logger.exception("Upload failed")
+        raise HTTPException(status_code=500, detail="Upload failed.")
 
 
 # ==========================================
@@ -418,9 +482,10 @@ def update_candidate_status(
         db.commit()
         db.refresh(candidate)
         return candidate
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+        logger.exception("Database update failed")
+        raise HTTPException(status_code=500, detail="Database update failed.")
 
 
 @app.post("/candidates/{candidate_id}/notes", response_model=CandidateResponse)
@@ -445,9 +510,10 @@ def add_candidate_note(
         db.commit()
         db.refresh(candidate)
         return candidate
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+        logger.exception("Database update failed")
+        raise HTTPException(status_code=500, detail="Database update failed.")
 
 
 @app.patch("/candidates/{candidate_id}/score-override", response_model=CandidateResponse)
@@ -483,9 +549,10 @@ def override_candidate_score(
         db.commit()
         db.refresh(candidate)
         return candidate
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+        logger.exception("Database update failed")
+        raise HTTPException(status_code=500, detail="Database update failed.")
 
 
 @app.get("/candidates/{candidate_id}/timeline", response_model=TimelineResponse)
@@ -588,7 +655,10 @@ def reprocess_candidate(candidate_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Candidate not found.")
     candidate.status = S.QUEUED
     db.commit()
-    enqueue_candidate(candidate_id)
+    try:
+        enqueue_candidate(candidate_id)
+    except _queue.Full:
+        raise HTTPException(status_code=503, detail="Server is busy. Please retry in a moment.")
     db.refresh(candidate)
     return {
         "id": candidate.id,
@@ -603,14 +673,146 @@ def reprocess_all_for_job(job_id: int, db: Session = Depends(get_db)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
     candidates = db.query(Candidate).filter(Candidate.job_id == job_id).all()
+    queued = 0
     for cand in candidates:
         cand.status = S.QUEUED
         db.commit()
-        enqueue_candidate(cand.id)
+        try:
+            enqueue_candidate(cand.id)
+            queued += 1
+        except _queue.Full:
+            break  # queue saturated — stop; the rest can be reprocessed later
     return {
-        "message": f"Queued {len(candidates)} candidates for reprocessing.",
-        "count": len(candidates),
+        "message": f"Queued {queued} of {len(candidates)} candidates for reprocessing.",
+        "count": queued,
+        "total": len(candidates),
     }
+
+
+@app.get("/candidates/{candidate_id}/interview")
+def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
+    """Return the candidate's AI interview results (transcript + goals + assessment).
+
+    Reads the voice agent's tables, which live in the same PostgreSQL database.
+    """
+    from sqlalchemy import text
+
+    # Per-candidate resume-scoring (Tier 3) token usage + cost, captured at scoring time.
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    scoring_metrics = {
+        "prompt_tokens": (cand.llm_prompt_tokens or 0) if cand else 0,
+        "completion_tokens": (cand.llm_completion_tokens or 0) if cand else 0,
+        "cost_usd": round(float(cand.llm_cost_usd or 0.0), 6) if cand else 0.0,
+    }
+
+    sess = db.execute(text(
+        "SELECT session_id, role_type, status, started_at, ended_at, total_goals, "
+        "completed_goals, average_progress, overall_assessment, audio_path "
+        "FROM interview_sessions WHERE candidate_id = :cid "
+        "ORDER BY created_at DESC LIMIT 1"
+    ), {"cid": candidate_id}).mappings().first()
+    if not sess:
+        return {
+            "has_interview": False,
+            "metrics": {
+                "interview": {
+                    "stt_tokens": 0, "llm_input_tokens": 0, "llm_output_tokens": 0,
+                    "tts_tokens": 0, "total_tokens": 0, "cost_usd": 0.0,
+                },
+                "scoring": scoring_metrics,
+            },
+        }
+
+    sid = sess["session_id"]
+    transcript = db.execute(text(
+        "SELECT speaker, text, sequence_number, evaluation FROM session_transcripts "
+        "WHERE session_id = :sid ORDER BY sequence_number"
+    ), {"sid": sid}).mappings().all()
+    goals = db.execute(text(
+        "SELECT gt.title, sg.completion_status, sg.progress_score, sg.confidence_level "
+        "FROM session_goals sg JOIN goal_templates gt ON sg.goal_template_id = gt.id "
+        "WHERE sg.session_id = :sid ORDER BY gt.priority_weight DESC"
+    ), {"sid": sid}).mappings().all()
+
+    # Aggregate the interview token usage by service/type (LLM in/out, TTS) from
+    # session_metrics; cost is only the real LLM cost (goal_analysis rows carry a
+    # placeholder cost and are excluded).
+    by_type = db.execute(text(
+        "SELECT metric_type, COALESCE(SUM(token_count), 0) AS tokens, "
+        "COALESCE(SUM(cost_usd), 0) AS cost "
+        "FROM session_metrics WHERE session_id = :sid GROUP BY metric_type"
+    ), {"sid": sid}).mappings().all()
+    tok = {r["metric_type"]: int(r["tokens"]) for r in by_type}
+    cost_by = {r["metric_type"]: float(r["cost"]) for r in by_type}
+    interview_cost = round(cost_by.get("llm_input", 0.0) + cost_by.get("llm_output", 0.0), 6)
+    # STT tokens come from the candidate transcript word counts (the metrics processor
+    # sits after the user-aggregator and never sees the raw transcription frames).
+    stt_t = int(db.execute(text(
+        "SELECT COALESCE(SUM(tokens_estimated), 0) FROM session_transcripts "
+        "WHERE session_id = :sid AND speaker = 'candidate'"
+    ), {"sid": sid}).scalar() or 0)
+    llm_in = tok.get("llm_input", 0)
+    llm_out = tok.get("llm_output", 0)
+    tts_t = tok.get("tts_tokens", 0)
+    interview_metrics = {
+        "stt_tokens": stt_t,
+        "llm_input_tokens": llm_in,
+        "llm_output_tokens": llm_out,
+        "tts_tokens": tts_t,
+        "total_tokens": stt_t + llm_in + llm_out + tts_t,
+        "cost_usd": interview_cost,
+    }
+
+    session_dict = dict(sess)
+    has_audio = bool(session_dict.pop("audio_path", None))
+
+    return {
+        "has_interview": True,
+        "has_audio": has_audio,
+        "session": session_dict,
+        "transcript": [dict(t) for t in transcript],
+        "goals": [dict(g) for g in goals],
+        "metrics": {
+            "interview": interview_metrics,
+            "scoring": scoring_metrics,
+        },
+    }
+
+
+@app.get("/candidates/{candidate_id}/interview-audio")
+def get_candidate_interview_audio(candidate_id: int, db: Session = Depends(get_db)):
+    """Stream the recorded interview audio (merged WAV) for HR playback.
+
+    The voice agent writes recordings to RECORDINGS_DIR and stores the path on the
+    interview_sessions row; this serves that file back through the admin proxy.
+    """
+    from sqlalchemy import text
+
+    audio_path = db.execute(text(
+        "SELECT audio_path FROM interview_sessions WHERE candidate_id = :cid "
+        "ORDER BY created_at DESC LIMIT 1"
+    ), {"cid": candidate_id}).scalar()
+
+    if not audio_path or not os.path.isfile(audio_path):
+        raise HTTPException(status_code=404, detail="Interview audio not found.")
+
+    return FileResponse(audio_path, media_type="audio/wav", filename=os.path.basename(audio_path))
+
+
+@app.post("/candidates/{candidate_id}/interview-invite")
+def send_interview_invite_api(candidate_id: int, db: Session = Depends(get_db)):
+    """HR action: (re)send the time-limited AI-interview link to a candidate."""
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    if not cand.email:
+        raise HTTPException(status_code=400, detail="Candidate has no email address.")
+    job = db.query(Job).filter(Job.id == cand.job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Candidate is not linked to a job.")
+    from .services.interview_invite import invite_candidate
+    url = invite_candidate(db, cand, job, force=True)
+    return {"status": "sent", "candidate_id": candidate_id, "link": url}
 
 
 @app.post("/jobs/{job_id}/email")

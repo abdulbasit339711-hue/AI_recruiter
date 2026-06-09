@@ -19,7 +19,9 @@ export default function ApplyPage() {
     if (!file) return;
     try {
       const result = await upload.mutateAsync(file);
-      router.push(`/applicant/${jobId}/apply/success?candidateId=${result.id}`);
+      const q = new URLSearchParams({ candidateId: String(result.id) });
+      if (result.interview_token) q.set("t", result.interview_token);
+      router.push(`/applicant/${jobId}/apply/success?${q.toString()}`);
     } catch {
       /* error shown below */
     }

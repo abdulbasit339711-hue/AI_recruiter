@@ -10,6 +10,9 @@ from .model_registry import get_embedding_model
 
 logger = logging.getLogger(__name__)
 
+# Bounded to avoid unbounded memory growth over a long-running process. Dicts keep
+# insertion order, so we evict the oldest entry (simple FIFO) when full.
+_MAX_ENTRIES = 512
 _cache: dict[str, np.ndarray] = {}
 _lock = threading.Lock()
 _hits = 0
@@ -41,6 +44,9 @@ def get_jd_embedding(jd_text: str, job_id: Optional[int] = None) -> np.ndarray:
     vector = np.asarray(vector, dtype=np.float32)
 
     with _lock:
+        if len(_cache) >= _MAX_ENTRIES and key not in _cache:
+            oldest = next(iter(_cache))
+            _cache.pop(oldest, None)
         _cache[key] = vector
         _misses += 1
         logger.debug(

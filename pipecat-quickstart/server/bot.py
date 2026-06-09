@@ -115,6 +115,57 @@ def create_interview_session() -> InterviewSession:
         config=config,
     )
 
+
+# --- Generic, per-job session building (used by the real runner.py flow) ---
+
+BASE_INTERVIEWER_PERSONA = (
+    "You are a professional, warm AI interviewer conducting a {interview_type} interview "
+    "for the role of {job_role} at {company_name}. Speak naturally and conversationally, "
+    "like a friendly professional. Ask thoughtful follow-up questions based on what the "
+    "candidate tells you. Keep your responses concise and engaging. Never use bullet points "
+    "or lists. Focus on assessing the candidate against the role's goals."
+)
+
+
+def compose_system_prompt(
+    job_role: str,
+    company_name: str,
+    interview_type: str = "technical",
+    job_llm_prompt: str | None = None,
+) -> str:
+    """Build the interviewer system prompt for a specific job/role."""
+    prompt = BASE_INTERVIEWER_PERSONA.format(
+        interview_type=interview_type or "technical",
+        job_role=job_role or "this role",
+        company_name=company_name or "the company",
+    )
+    if job_llm_prompt:
+        prompt += "\n\nRole-specific evaluation guidance:\n" + job_llm_prompt.strip()
+    return prompt
+
+
+def build_interview_session(
+    *,
+    candidate_id: int | str,
+    candidate_name: str | None,
+    config: RecruiterConfig,
+    job_id: int | None = None,
+) -> InterviewSession:
+    """Assemble an InterviewSession for a specific candidate from a prepared config.
+
+    candidate_id / job_id are carried for DB linkage (interview_sessions.candidate_id/job_id).
+    """
+    session = InterviewSession(
+        candidate_id=str(candidate_id),
+        candidate_name=candidate_name or "Candidate",
+        config=config,
+    )
+    # Carry the numeric DB ids for linkage (read defensively elsewhere).
+    session.db_candidate_id = int(candidate_id) if str(candidate_id).isdigit() else None
+    session.db_job_id = job_id
+    return session
+
+
 async def run_bot(transport: BaseTransport):
     """Main bot logic."""
     logger.info("Starting Interview Bot")

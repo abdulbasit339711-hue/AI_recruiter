@@ -573,19 +573,36 @@
             addLog(`${name} is ${status}`);
         }
 
+        // This dashboard (:7860) is a local testing console — operator endpoints are
+        // OPEN by default, so no auth is needed. If the server is run with
+        // VOICE_REQUIRE_AUTH=true, set localStorage 'admin_token' and it'll be sent.
+        function adminHeaders() {
+            const h = { 'Content-Type': 'application/json' };
+            const t = localStorage.getItem('admin_token');
+            if (t) h['Authorization'] = 'Bearer ' + t;
+            return h;
+        }
+        function handle401(res) {
+            if (res && res.status === 401) {
+                addLog('401 from operator endpoint — server has VOICE_REQUIRE_AUTH on; set localStorage.admin_token.');
+            }
+            return res;
+        }
+
         async function sendMessage() {
             const input = document.getElementById('chat-input');
             const text = input.value.trim();
             if (!text) return;
-            
+
             try {
                 input.value = '';
                 addLog(`Sending message: ${text}`);
-                await fetch('/chat', {
+                const res = await fetch('/chat', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders(),
                     body: JSON.stringify({ text: text })
                 });
+                handle401(res);
             } catch (err) {
                 console.error('Failed to send message', err);
             }
@@ -709,7 +726,7 @@
             try {
                 await fetch('/settings', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders(),
                     body: JSON.stringify({ timeout: parseInt(timeout), auto_kill: autoKill })
                 });
                 addLog('Settings synced to server.');
@@ -725,7 +742,7 @@
             if (confirm('Are you sure you want to terminate the interview?')) {
                 await fetch('/settings', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders(),
                     body: JSON.stringify({ auto_kill: true })
                 });
                 if (room) await room.disconnect();
@@ -762,7 +779,7 @@
 
             const res = await fetch('/pipeline', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: adminHeaders(),
                 body: JSON.stringify({ mode: 'single' })
             });
             const data = await res.json();
@@ -783,7 +800,7 @@
 
             const res = await fetch('/pipeline', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: adminHeaders(),
                 body: JSON.stringify({ mode: 'dual' })
             });
             const data = await res.json();

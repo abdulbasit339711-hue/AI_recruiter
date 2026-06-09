@@ -40,6 +40,11 @@ def test_upload_returns_queued_and_resume_text_endpoint(monkeypatch):
     monkeypatch.setattr("app.main.validate_and_extract", lambda *_args: RESUME_TEXT)
     monkeypatch.setattr("app.main.enqueue_candidate", lambda candidate_id: queued_ids.append(candidate_id))
 
+    # Admin endpoints now require a bearer token (see app/core/auth.py). The guard
+    # reads ADMIN_API_TOKEN at request time, so set a known value and authenticate.
+    monkeypatch.setenv("ADMIN_API_TOKEN", "test-token")
+    auth = {"Authorization": "Bearer test-token"}
+
     client = TestClient(app)
     job_response = client.post(
         "/jobs",
@@ -48,11 +53,13 @@ def test_upload_returns_queued_and_resume_text_endpoint(monkeypatch):
             "department": "Engineering",
             "job_description": "Python FastAPI SQL AWS Docker",
         },
+        headers=auth,
     )
     assert job_response.status_code == 200
     job_id = job_response.json()["id"]
 
     try:
+        # /upload is part of the public apply flow — no token required.
         upload_response = client.post(
             "/upload",
             params={"job_id": job_id},
@@ -65,7 +72,10 @@ def test_upload_returns_queued_and_resume_text_endpoint(monkeypatch):
         assert payload["job_id"] == job_id
         assert queued_ids == [payload["id"]]
 
-        resume_response = client.get(f"/candidates/{payload['id']}/resume")
+        # Reading a candidate's resume is admin-only (PII) -> requires the token.
+        assert client.get(f"/candidates/{payload['id']}/resume").status_code == 401
+
+        resume_response = client.get(f"/candidates/{payload['id']}/resume", headers=auth)
         assert resume_response.status_code == 200
         assert "Jane Smith" in resume_response.text
         assert "FastAPI" in resume_response.text

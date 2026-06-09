@@ -11,6 +11,9 @@ class Job(Base):
     department = Column(String, nullable=False)
     job_description = Column(Text, nullable=False)
     llm_prompt = Column(Text, nullable=True)
+    # Optional explicit interview role slug (e.g. "backend_engineer"); defaults to a
+    # normalized form of the title when blank. Drives goal_templates lookup.
+    role_type = Column(String, nullable=True)
     status = Column(String, default="Active")
     created_at = Column(String, nullable=False)
 
@@ -51,5 +54,14 @@ class Candidate(Base):
     hr_notes = Column(Text, nullable=True, default=None)
     hr_score_override = Column(Float, nullable=True, default=None)
     status_history = Column(Text, nullable=True, default=None)
+
+    # Timestamp (ISO string) when the interview invite email was sent; used to
+    # avoid re-sending on reprocess.
+    interview_invited_at = Column(String, nullable=True, default=None)
+
+    # Tier-3 (resume scoring) LLM token usage + estimated cost, surfaced to HR.
+    llm_prompt_tokens = Column(Integer, nullable=True, default=None)
+    llm_completion_tokens = Column(Integer, nullable=True, default=None)
+    llm_cost_usd = Column(Float, nullable=True, default=None)
 
     job = relationship("Job", back_populates="candidates")

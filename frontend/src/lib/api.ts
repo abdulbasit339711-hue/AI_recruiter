@@ -10,12 +10,32 @@ import {
   TimelineEntry,
 } from "@/types";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+// All backend traffic goes through the same-origin Next proxy
+// (src/app/api/admin/[...path]/route.ts), which injects the admin bearer token
+// server-side. The real backend URL + token live in server env, never the client.
+export const API_BASE_URL = "/api/admin";
 
 const client = axios.create({
   baseURL: API_BASE_URL,
 });
+
+// Surface the backend's human-readable error instead of axios's generic
+// "Request failed with status code 4xx". FastAPI returns `{ detail: string }`
+// for HTTPExceptions and `{ detail: [{ msg, loc }, ...] }` for 422 validation.
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      error.message = detail;
+    } else if (Array.isArray(detail) && detail.length) {
+      error.message = detail
+        .map((d) => (typeof d?.msg === "string" ? d.msg : String(d)))
+        .join("; ");
+    }
+    return Promise.reject(error);
+  }
+);
 
 export function getCandidateEventsUrl(candidateId: number): string {
   return `${API_BASE_URL}/candidates/${candidateId}/events`;
@@ -27,6 +47,60 @@ export function getJobEventsUrl(jobId: number): string {
 
 export function getCandidateResumeUrl(candidateId: number): string {
   return `${API_BASE_URL}/candidates/${candidateId}/resume`;
+}
+
+export function getInterviewAudioUrl(candidateId: number): string {
+  return `${API_BASE_URL}/candidates/${candidateId}/interview-audio`;
+}
+
+export interface InterviewResult {
+  has_interview: boolean;
+  has_audio?: boolean;
+  session?: {
+    session_id: string;
+    role_type: string;
+    status: string;
+    started_at: string | null;
+    ended_at: string | null;
+    total_goals: number;
+    completed_goals: number;
+    average_progress: number;
+    overall_assessment: string | null;
+  };
+  transcript?: {
+    speaker: string;
+    text: string;
+    sequence_number: number;
+    evaluation?: TurnEvaluation | null;
+  }[];
+  goals?: {
+    title: string;
+    completion_status: string;
+    progress_score: number;
+    confidence_level: number;
+  }[];
+  metrics?: {
+    interview: {
+      stt_tokens: number;
+      llm_input_tokens: number;
+      llm_output_tokens: number;
+      tts_tokens: number;
+      total_tokens: number;
+      cost_usd: number;
+    };
+    scoring: { prompt_tokens: number; completion_tokens: number; cost_usd: number };
+  };
+}
+
+export interface TurnEvaluation {
+  score?: number; // 0-10
+  completeness?: number; // 0-1
+  depth?: string;
+  clarity?: number; // 0-1
+  strengths?: string[];
+  weaknesses?: string[];
+  follow_up_needed?: boolean;
+  suggested_probe?: string;
 }
 
 export const api = {
@@ -45,6 +119,7 @@ export const api = {
     department: string;
     job_description: string;
     llm_prompt?: string;
+    role_type?: string;
   }): Promise<Job> {
     const response = await client.post<Job>("/jobs", null, { params });
     return response.data;
@@ -57,6 +132,7 @@ export const api = {
       department?: string;
       job_description?: string;
       llm_prompt?: string;
+      role_type?: string;
       status?: "Active" | "Archived";
     }
   ): Promise<Job> {
@@ -98,6 +174,20 @@ export const api = {
 
   async getCandidate(candidateId: number): Promise<Candidate> {
     const response = await client.get<Candidate>(`/candidates/${candidateId}`);
+    return response.data;
+  },
+
+  async triggerInterviewInvite(
+    candidateId: number
+  ): Promise<{ status: string; candidate_id: number; link: string }> {
+    const response = await client.post(`/candidates/${candidateId}/interview-invite`);
+    return response.data;
+  },
+
+  async getInterviewResult(candidateId: number): Promise<InterviewResult> {
+    const response = await client.get<InterviewResult>(
+      `/candidates/${candidateId}/interview`
+    );
     return response.data;
   },
 

@@ -5,6 +5,7 @@ import React, { useState } from "react";
 import { CandidateTable } from "@/components/admin/CandidateTable";
 import { KanbanBoard } from "@/components/admin/KanbanBoard";
 import { CandidateNotesPanel } from "@/components/candidates/CandidateNotesPanel";
+import { InterviewPanel } from "@/components/candidates/InterviewPanel";
 import { useCandidates } from "@/hooks/useCandidates";
 import { useJobEvaluationEvents } from "@/hooks/useJobEvaluationEvents";
 import { useJobs } from "@/hooks/useJobs";
@@ -44,6 +45,7 @@ export default function AdminCandidatesPage() {
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
 
   const [selected, setSelected] = useState<Candidate | null>(null);
+  const [modalTab, setModalTab] = useState<"details" | "interview">("details");
   const currentJob = jobs.find((j) => j.id === selected?.job_id);
   const [resumeOpen, setResumeOpen] = useState(false);
   const [topN, setTopN] = useState<number>(10);
@@ -64,6 +66,7 @@ export default function AdminCandidatesPage() {
 
   const handleView = (candidate: Candidate) => {
     setSelected(candidate);
+    setModalTab("details");
   };
 
   const handleViewResume = (candidate: Candidate) => {
@@ -344,6 +347,29 @@ export default function AdminCandidatesPage() {
               {selected?.email || "No email captured"} {selected?.phone ? `• ${selected.phone}` : ""}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Tabs */}
+          <div className="mt-2 flex items-center gap-1 border-b border-white/10">
+            {(["details", "interview"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setModalTab(t)}
+                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium capitalize transition ${
+                  modalTab === t
+                    ? "border-primary text-white"
+                    : "border-transparent text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {t === "interview" ? "Interview" : "Details"}
+              </button>
+            ))}
+          </div>
+
+          {modalTab === "interview" ? (
+            <div className="mt-4 overflow-y-auto max-h-[75vh] pr-2">
+              {selected && <InterviewPanel candidateId={selected.id} />}
+            </div>
+          ) : (
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_300px] overflow-y-auto max-h-[75vh] pr-2">
             <div className="space-y-4">
                {/* Recruiter Summary */}
@@ -356,7 +382,7 @@ export default function AdminCandidatesPage() {
                {currentJob && (
                  <div className="rounded-md border border-white/10 bg-white/[0.03] p-4 mt-4 max-h-[250px] overflow-y-auto">
                    <h4 className="mb-1 text-sm font-semibold text-primary">Job Description</h4>
-                   <p className="text-sm leading-6 text-muted-foreground" dangerouslySetInnerHTML={{ __html: currentJob.job_description.replace(/\n/g, "<br/>") }} />
+                   <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{currentJob.job_description}</p>
                  </div>
                )}
 
@@ -469,6 +495,7 @@ export default function AdminCandidatesPage() {
               </div>
             </aside>
           </div>
+          )}
         </DialogContent>
       </Dialog>
 

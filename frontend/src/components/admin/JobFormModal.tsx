@@ -73,17 +73,27 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(submitHandler)} className="space-y-4">
-          <div>
-            <Input placeholder="Title" {...register("title")} />
+          <div className="space-y-1.5">
+            <label htmlFor="job-title" className="text-sm font-medium">
+              Title
+            </label>
+            <Input id="job-title" placeholder="e.g. Senior Python Developer" {...register("title")} />
             {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
           </div>
-          <div>
-            <Input placeholder="Department" {...register("department")} />
+          <div className="space-y-1.5">
+            <label htmlFor="job-department" className="text-sm font-medium">
+              Department
+            </label>
+            <Input id="job-department" placeholder="e.g. Engineering" {...register("department")} />
             {errors.department && <p className="text-sm text-red-500">{errors.department.message}</p>}
           </div>
-          <div>
+          <div className="space-y-1.5">
+            <label htmlFor="job-description" className="text-sm font-medium">
+              Job Description
+            </label>
             <Textarea
-              placeholder="Job description"
+              id="job-description"
+              placeholder="Describe the role, responsibilities, and required skills"
               rows={4}
               {...register("job_description")}
             />
@@ -91,9 +101,13 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
               <p className="text-sm text-red-500">{errors.job_description.message}</p>
             )}
           </div>
-          <div>
+          <div className="space-y-1.5">
+            <label htmlFor="job-llm-prompt" className="text-sm font-medium">
+              LLM Evaluation Prompt <span className="text-muted-foreground font-normal">(optional)</span>
+            </label>
             <Textarea
-              placeholder="LLM prompt (optional)"
+              id="job-llm-prompt"
+              placeholder="Custom instructions for AI scoring of resumes (Tier 3)"
               rows={2}
               {...register("llm_prompt")}
             />

@@ -1,7 +1,13 @@
 import os
 import logging
 import yaml
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+
+# Load .env BEFORE resolving DATABASE_URL: this module reads the env at import
+# time, and it is imported before main.py's own load_dotenv() runs. Without this
+# the app silently falls back to SQLite even when DATABASE_URL is set in .env.
+load_dotenv()
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -57,10 +63,12 @@ def get_db():
 def run_migrations() -> None:
     """Apply additive schema migrations (SQLite + PostgreSQL compatible)."""
     migrations = [
+        "ALTER TABLE jobs ADD COLUMN role_type VARCHAR",
         "ALTER TABLE candidates ADD COLUMN job_id INTEGER",
         "ALTER TABLE candidates ADD COLUMN warnings TEXT",
         "ALTER TABLE candidates ADD COLUMN evaluation_data TEXT",
-        "ALTER TABLE candidates ADD COLUMN current_role VARCHAR",
+        # current_role is a reserved word in PostgreSQL — must be quoted.
+        'ALTER TABLE candidates ADD COLUMN "current_role" VARCHAR',
         "ALTER TABLE candidates ADD COLUMN companies TEXT",
         "ALTER TABLE candidates ADD COLUMN skills_matched TEXT",
         "ALTER TABLE candidates ADD COLUMN skills_missing TEXT",
@@ -68,6 +76,10 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN hr_notes TEXT",
         "ALTER TABLE candidates ADD COLUMN hr_score_override FLOAT",
         "ALTER TABLE candidates ADD COLUMN status_history TEXT",
+        "ALTER TABLE candidates ADD COLUMN interview_invited_at VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN llm_prompt_tokens INTEGER",
+        "ALTER TABLE candidates ADD COLUMN llm_completion_tokens INTEGER",
+        "ALTER TABLE candidates ADD COLUMN llm_cost_usd FLOAT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
@@ -75,5 +87,12 @@ def run_migrations() -> None:
                 conn.execute(text(stmt))
                 conn.commit()
                 logger.info("Migration applied: %s", stmt)
-            except Exception:
+            except Exception as e:
                 conn.rollback()
+                msg = str(e).lower()
+                # "already applied" is the expected/idempotent case for additive
+                # ALTERs; anything else is a REAL failure and must not be silent.
+                if "already exists" in msg or "duplicate column" in msg:
+                    logger.debug("Migration already applied: %s", stmt)
+                else:
+                    logger.warning("Migration failed (%s): %s", stmt, e)

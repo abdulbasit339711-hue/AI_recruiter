@@ -27,6 +27,9 @@ class WorkingTranscriptProcessor(FrameProcessor):
             "estimated_tokens": 0
         }
 
+    def set_session(self, session):
+        self._session = session
+
     async def process_frame(self, frame: Frame, direction):
         await super().process_frame(frame, direction)
 
@@ -41,22 +44,26 @@ class WorkingTranscriptProcessor(FrameProcessor):
                 self._stt_metrics["total_requests"] += 1
                 self._stt_metrics["estimated_tokens"] += len(text.split())  # Estimate ~1 token per word
 
-                # Add to session
-                self._session.add_turn(
-                    speaker="candidate",
-                    text=text,
-                    question_id=self._session.current_question.id if self._session.current_question else None
-                )
+                # Add to session (skip if no session is configured yet — must not
+                # crash the pipeline / block the transcript broadcast below)
+                if self._session:
+                    self._session.add_turn(
+                        speaker="candidate",
+                        text=text,
+                        question_id=self._session.current_question.id if self._session.current_question else None
+                    )
 
-                # Broadcast to dashboard
+                # Broadcast to dashboard (session_id lets the SSE layer route it
+                # only to this interview's candidate page)
                 await self._broadcaster.broadcast("transcript", {
+                    "session_id": self._session.session_id if self._session else None,
                     "speaker": "candidate",
                     "text": text
                 })
 
                 # Broadcast STT metrics
                 await self._broadcaster.broadcast("stt_metrics", {
-                    "session_id": self._session.session_id,
+                    "session_id": self._session.session_id if self._session else None,
                     "text_length": len(text),
                     "estimated_tokens": len(text.split()),
                     "session_totals": self._stt_metrics
@@ -107,6 +114,9 @@ class WorkingMetricsProcessor(FrameProcessor):
             }
         }
 
+    def set_session(self, session):
+        self._session = session
+
     async def process_frame(self, frame: Frame, direction):
         await super().process_frame(frame, direction)
 
@@ -116,7 +126,16 @@ class WorkingMetricsProcessor(FrameProcessor):
             LLMFullResponseEndFrame,
             TTSStartedFrame,
             TTSStoppedFrame,
+            TranscriptionFrame,
         )
+
+        # Count candidate speech (STT) — char + estimated token tally for the breakdown.
+        if isinstance(frame, TranscriptionFrame):
+            stt_text = (frame.text or "").strip()
+            if stt_text:
+                self._session_metrics["stt"]["total_chars_processed"] += len(stt_text)
+                self._session_metrics["stt"]["total_requests"] += 1
+                self._session_metrics["stt"]["estimated_tokens"] += len(stt_text.split())
 
         # Start aggregating response
         if isinstance(frame, LLMFullResponseStartFrame):
@@ -141,18 +160,35 @@ class WorkingMetricsProcessor(FrameProcessor):
                 full_text = " ".join(self._current_response)
                 logger.info(f"[Agent] Complete response: {full_text[:100]}...")
 
-                # Add to session
-                self._session.add_turn(
-                    speaker="agent",
-                    text=full_text,
-                    question_id=self._session.current_question.id if self._session.current_question else None
-                )
+                # Add to session (skip if not configured — must not block the
+                # agent transcript broadcast below)
+                if self._session:
+                    self._session.add_turn(
+                        speaker="agent",
+                        text=full_text,
+                        question_id=self._session.current_question.id if self._session.current_question else None
+                    )
 
                 # Broadcast complete agent transcript
                 await self._broadcaster.broadcast("transcript", {
+                    "session_id": self._session.session_id if self._session else None,
                     "speaker": "agent",
                     "text": full_text
                 })
+
+                # Persist the agent turn so HR sees the full two-sided transcript.
+                if self._session is not None:
+                    try:
+                        import time
+                        from database import db_manager
+                        await db_manager.add_transcript_entry(self._session.session_id, {
+                            "speaker": "agent",
+                            "text": full_text,
+                            "timestamp": str(time.time()),
+                            "tokens_estimated": len(full_text.split()),
+                        })
+                    except Exception as e:
+                        logger.debug(f"[Agent] transcript persist skipped: {e}")
 
                 # Update TTS metrics (characters to be synthesized)
                 self._session_metrics["tts"]["total_chars_synthesized"] += len(full_text)
@@ -209,6 +245,43 @@ class WorkingMetricsProcessor(FrameProcessor):
 
         await self._broadcast_detailed_metrics(prompt_tokens, completion_tokens, total_tokens, "llm_response")
 
+    async def persist_summary(self) -> None:
+        """Write the per-service token breakdown to session_metrics at interview end.
+
+        One row each for STT (est.), LLM input, LLM output, and TTS (est.). STT/TTS counts
+        are character-derived estimates; LLM counts are real usage from the API. Called from
+        BotManager.finalize_session().
+        """
+        if self._session is None:
+            return
+        from database import db_manager
+        llm = self._session_metrics["llm"]
+        stt = self._session_metrics["stt"]
+        tts = self._session_metrics["tts"]
+        input_cost = (llm["prompt_tokens"] / 1_000_000) * 0.20
+        output_cost = (llm["completion_tokens"] / 1_000_000) * 1.00
+        model = getattr(self._session, "model_name", None) or "llama-3.3-70b-versatile"
+        rows = [
+            {"metric_type": "stt_tokens", "service_name": "deepgram", "model_name": None,
+             "token_count": int(stt["estimated_tokens"]), "cost_usd": 0.0, "analysis_type": "estimated"},
+            {"metric_type": "llm_input", "service_name": "groq", "model_name": model,
+             "token_count": int(llm["prompt_tokens"]), "cost_usd": round(input_cost, 6), "analysis_type": "actual"},
+            {"metric_type": "llm_output", "service_name": "groq", "model_name": model,
+             "token_count": int(llm["completion_tokens"]), "cost_usd": round(output_cost, 6), "analysis_type": "actual"},
+            {"metric_type": "tts_tokens", "service_name": "cartesia", "model_name": None,
+             "token_count": int(tts["estimated_tokens"]), "cost_usd": 0.0, "analysis_type": "estimated"},
+        ]
+        for r in rows:
+            try:
+                await db_manager.add_session_metrics(self._session.session_id, r)
+            except Exception as e:
+                logger.debug(f"[Metrics] persist {r['metric_type']} skipped: {e}")
+        logger.info(
+            f"[Metrics] Persisted token breakdown: stt={stt['estimated_tokens']}(est) "
+            f"llm_in={llm['prompt_tokens']} llm_out={llm['completion_tokens']} "
+            f"tts={tts['estimated_tokens']}(est)"
+        )
+
 
     async def _handle_tts_start(self, frame):
         """Handle TTS start events"""
@@ -233,7 +306,7 @@ class WorkingMetricsProcessor(FrameProcessor):
 
         # Broadcast detailed metrics
         await self._broadcaster.broadcast("metrics_detailed", {
-            "session_id": self._session.session_id,
+            "session_id": self._session.session_id if self._session else None,
             "event_type": event_type,
             "timestamp": str(__import__('datetime').datetime.now().isoformat()),
             "current_request": {
@@ -265,7 +338,7 @@ class WorkingMetricsProcessor(FrameProcessor):
 
         # Also broadcast simplified metrics for backward compatibility
         await self._broadcaster.broadcast("metrics", {
-            "session_id": self._session.session_id,
+            "session_id": self._session.session_id if self._session else None,
             "metrics": {
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,

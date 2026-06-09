@@ -63,6 +63,11 @@ def _apply_tier3_fields(candidate: Candidate, t3: dict) -> None:
     candidate.evidence = json.dumps(t3.get("evidence", []))
     candidate.evaluation_data = json.dumps(t3)
 
+    usage = t3.get("usage") or {}
+    candidate.llm_prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+    candidate.llm_completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+    candidate.llm_cost_usd = float(usage.get("cost_usd", 0.0) or 0.0)
+
 
 def _run_tier1(resume_text: str) -> dict:
     return score_tier1(resume_text)

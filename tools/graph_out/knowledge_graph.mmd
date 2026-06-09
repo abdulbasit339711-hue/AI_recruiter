@@ -1,0 +1,101 @@
+graph LR
+  N373870930["runner"]
+  N540198936["database"]
+  N373870930 -->|4| N540198936
+  N115110964["app.main"]
+  N946207010["app.core.model_registry"]
+  N115110964 -->|2| N946207010
+  N820753266["app.queue.worker"]
+  N861084042["app.models"]
+  N820753266 -->|2| N861084042
+  N148258400["session_factory"]
+  N373870930 -->|2| N148258400
+  N413630677["fe:hooks/useCandidateEvaluation.ts"]
+  N740682089["fe:types/index.ts"]
+  N413630677 -->|2| N740682089
+  N487434776["app.interview_links"]
+  N93439364["recruiter_shared"]
+  N487434776 -->|1| N93439364
+  N8849032["app.core.logging_config"]
+  N115110964 -->|1| N8849032
+  N774988743["app.core"]
+  N115110964 -->|1| N774988743
+  N627655996["app.core.auth"]
+  N115110964 -->|1| N627655996
+  N187177208["app.core.ratelimit"]
+  N115110964 -->|1| N187177208
+  N485795713["app.core.jd_embedding_cache"]
+  N115110964 -->|1| N485795713
+  N485291615["app.database"]
+  N115110964 -->|1| N485291615
+  N115110964 -->|1| N861084042
+  N474080942["app.intake.upload"]
+  N115110964 -->|1| N474080942
+  N502437862["app.schemas"]
+  N115110964 -->|1| N502437862
+  N115110964 -->|1| N820753266
+  N297413324["app.llm.groq_client"]
+  N115110964 -->|1| N297413324
+  N515545246["app.events.broadcaster"]
+  N115110964 -->|1| N515545246
+  N375164088["app.events.sse"]
+  N115110964 -->|1| N375164088
+  N740461052["app.events"]
+  N115110964 -->|1| N740461052
+  N520175767["app.services.interview_invite"]
+  N115110964 -->|1| N520175767
+  N115110964 -->|1| N487434776
+  N861084042 -->|1| N485291615
+  N485795713 -->|1| N946207010
+  N574300573["app.dashboard.app"]
+  N574300573 -->|1| N485291615
+  N574300573 -->|1| N861084042
+  N483612799["app.scoring.engine"]
+  N574300573 -->|1| N483612799
+  N574300573 -->|1| N474080942
+  N574300573 -->|1| N820753266
+  N574300573 -->|1| N774988743
+  N515545246 -->|1| N774988743
+  N375164088 -->|1| N774988743
+  N375164088 -->|1| N515545246
+  N499561652["app"]
+  N740461052 -->|1| N499561652
+  N297413324 -->|1| N485291615
+  N412455495["app.core.circuit_breaker"]
+  N297413324 -->|1| N412455495
+  N570093030["app.llm.json_parser"]
+  N297413324 -->|1| N570093030
+  N898095258["app.llm.name_extractor"]
+  N898095258 -->|1| N485291615
+  N898095258 -->|1| N297413324
+  N820753266 -->|1| N774988743
+  style N93439364 fill:#ffd
+  style N740461052 fill:#cde
+  style N820753266 fill:#cde
+  style N502437862 fill:#cde
+  style N570093030 fill:#cde
+  style N515545246 fill:#cde
+  style N148258400 fill:#fcd
+  style N485291615 fill:#cde
+  style N373870930 fill:#fcd
+  style N474080942 fill:#cde
+  style N8849032 fill:#cde
+  style N499561652 fill:#cde
+  style N375164088 fill:#cde
+  style N627655996 fill:#cde
+  style N774988743 fill:#cde
+  style N412455495 fill:#cde
+  style N115110964 fill:#cde
+  style N297413324 fill:#cde
+  style N483612799 fill:#cde
+  style N413630677 fill:#dfc
+  style N946207010 fill:#cde
+  style N574300573 fill:#cde
+  style N898095258 fill:#cde
+  style N540198936 fill:#fcd
+  style N740682089 fill:#dfc
+  style N487434776 fill:#cde
+  style N520175767 fill:#cde
+  style N861084042 fill:#cde
+  style N187177208 fill:#cde
+  style N485795713 fill:#cde

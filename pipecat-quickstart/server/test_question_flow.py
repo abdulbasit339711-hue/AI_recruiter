@@ -1,70 +1,32 @@
 # test_question_flow.py
+#
+# Exercises QuestionFlowProcessor against the real pipecat install. We used to
+# inject fake `pipecat`/`loguru` modules into sys.modules here, but that polluted
+# the global import state and broke every sibling test that needs real pipecat
+# (e.g. test_voice_auth.py). Pipecat is a declared dependency, so import it for
+# real instead.
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
-import sys
-from types import ModuleType
 
-# ── Mock Environment ──────────────────────────────────────────────────────────
-
-def mock_pipecat_setup():
-    class FrameProcessor:
-        def __init__(self, *args, **kwargs): pass
-        async def push_frame(self, frame, direction=None): pass
-
-    class TranscriptionFrame:
-        def __init__(self, text, user_id=None, timestamp=None):
-            self.text = text
-
-    class LLMRunFrame: pass
-    class LLMFullResponseEndFrame: pass
-    class LLMMessagesFrame: pass
-
-    class LLMContext:
-        def __init__(self): self.messages = []
-        def add_message(self, msg): self.messages.append(msg)
-
-    def mock_module(name):
-        m = ModuleType(name)
-        sys.modules[name] = m
-        return m
-
-    p = mock_module("pipecat")
-    pf = mock_module("pipecat.frames")
-    pff = mock_module("pipecat.frames.frames")
-    pp = mock_module("pipecat.processors")
-    ppf = mock_module("pipecat.processors.frame_processor")
-    ppa = mock_module("pipecat.processors.aggregators")
-    ppal = mock_module("pipecat.processors.aggregators.llm_context")
-
-    pff.TranscriptionFrame = TranscriptionFrame
-    pff.LLMRunFrame = LLMRunFrame
-    pff.LLMFullResponseEndFrame = LLMFullResponseEndFrame
-    pff.LLMMessagesFrame = LLMMessagesFrame
-    pff.Frame = MagicMock
-
-    ppf.FrameProcessor = FrameProcessor
-    ppal.LLMContext = LLMContext
-
-    mock_module("loguru")
-    sys.modules["loguru"].logger = MagicMock()
-    
-    return LLMContext, TranscriptionFrame
-
-LLMContext, TranscriptionFrame = mock_pipecat_setup()
+from pipecat.processors.aggregators.llm_context import LLMContext
 
 # ── Imports ───────────────────────────────────────────────────────────────────
-
 from interview_session import (
-    InterviewSession, RecruiterConfig, InterviewQuestion,
-    InterviewGoal, FollowUpPrompt, AnswerDepth,
-    GoalStatus, InterviewStatus
+    AnswerDepth,
+    FollowUpPrompt,
+    GoalStatus,
+    InterviewGoal,
+    InterviewQuestion,
+    InterviewSession,
+    InterviewStatus,
+    RecruiterConfig,
 )
 from question_flow_processor import (
     QuestionFlowProcessor,
     _answer_is_sufficient,
-    _word_count,
     _filler_ratio,
+    _word_count,
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

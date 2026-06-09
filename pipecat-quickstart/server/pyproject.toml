@@ -11,13 +11,28 @@ dependencies = [
     "loguru",
     "python-dotenv",
     "livekit",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.0",
+    "groq>=0.13.0",
+    "alembic>=1.13.0",
+    "pyjwt>=2.8.0",
+    "recruiter-shared",
 ]
+
+[tool.uv.sources]
+recruiter-shared = { path = "../../packages/shared", editable = true }
 
 [dependency-groups]
 dev = [
     "pyright>=1.1.404,<2",
     "ruff>=0.12.11,<1",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
 ]
+
+[tool.pytest.ini_options]
+# auto: any `async def test_*` runs without a per-test marker.
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100

@@ -81,6 +81,10 @@ export interface UploadResponse {
   job_id: number;
   status: CandidateStatus;
   message: string;
+  // Self-service interview link minted at upload time (may be null if the server
+  // has interview links disabled).
+  interview_token?: string | null;
+  interview_url?: string | null;
 }
 
 export interface PaginatedCandidates {

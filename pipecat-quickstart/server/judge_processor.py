@@ -5,8 +5,12 @@ Judge LLM Processor - Evaluates candidate responses in real-time
 from loguru import logger
 from pipecat.frames.frames import Frame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameProcessor
-import json
+from groq import AsyncGroq
 import asyncio
+
+from services.goal_tracking_service import _safe_json_loads
+
+JUDGE_MODEL = "llama-3.1-8b-instant"
 
 
 class JudgeProcessor(FrameProcessor):
@@ -22,6 +26,7 @@ class JudgeProcessor(FrameProcessor):
         self._current_transcript = []
         self._evaluating = False
         self._api_key = api_key
+        self._client = AsyncGroq(api_key=api_key)
 
     def _get_judge_prompt(self):
         """Get the system prompt for the judge model"""
@@ -47,6 +52,9 @@ Respond ONLY with JSON in this format:
     "suggested_probe": "Can you share specific metrics?"
 }"""
 
+    def set_session(self, session):
+        self._session = session
+
     async def process_frame(self, frame: Frame, direction):
         await super().process_frame(frame, direction)
 
@@ -67,6 +75,10 @@ Respond ONLY with JSON in this format:
 
         self._evaluating = True
         try:
+            # Skip if no session is configured yet (race before set_session).
+            if self._session is None:
+                self._evaluating = False
+                return
             # Get current question context
             current_q = self._session.current_question
             if not current_q:
@@ -79,36 +91,27 @@ Candidate response: {text}
 
 Evaluate this response."""
 
-            # Get evaluation from judge
+            # Get a real evaluation from the judge model
             logger.info(f"[Judge] Evaluating response: {text[:100]}...")
 
-            # Make a direct API call for evaluation
-            messages = [
-                {"role": "user", "content": eval_prompt}
-            ]
-
-            # Create a simple evaluation instead of using separate API call
-            # For demo purposes, create a basic evaluation
-            completion_tokens = len(text.split())
-            score = min(10, max(3, 6 + len(text.split()) // 10))  # Score 3-10 based on length
-
-            # Mock completion response for demo
-            class MockCompletion:
-                def __init__(self):
-                    self.choices = [type('Choice', (), {
-                        'message': type('Message', (), {
-                            'content': f'{{"score": {score}, "completeness": 0.{min(9, len(text)//10)}, "depth": "detailed", "relevance": 0.9, "clarity": 0.8, "strengths": ["specific examples"], "weaknesses": ["could use more detail"], "follow_up_needed": {"true" if score < 8 else "false"}, "suggested_probe": "Can you share more specifics about the architecture?"}}'
-                        })()
-                    })()]
-
-            completion = MockCompletion()
+            completion = await self._client.chat.completions.create(
+                model=JUDGE_MODEL,
+                messages=[
+                    {"role": "system", "content": self._get_judge_prompt()},
+                    {"role": "user", "content": eval_prompt},
+                ],
+                temperature=0.2,
+                max_tokens=400,
+                response_format={"type": "json_object"},
+            )
 
             response_text = completion.choices[0].message.content
 
             if response_text:
-                try:
-                    evaluation = json.loads(response_text)
-
+                evaluation = _safe_json_loads(response_text)
+                if not evaluation:
+                    logger.warning("[Judge] Empty/unparseable evaluation, skipping")
+                else:
                     # Store evaluation in session
                     self._session.evaluations.append({
                         "question_id": current_q.id,
@@ -131,11 +134,18 @@ Evaluate this response."""
                     # Add to context for responder LLM
                     self._session.last_evaluation = evaluation
 
+                    # Persist the per-answer evaluation onto the candidate's transcript row
+                    # so HR sees a per-message assessment.
+                    try:
+                        from database import db_manager
+                        await db_manager.attach_transcript_evaluation(
+                            self._session.session_id, text, evaluation
+                        )
+                    except Exception as e:
+                        logger.debug(f"[Judge] eval persist skipped: {e}")
+
                     logger.info(f"[Judge] Score: {evaluation.get('score')}/10, "
                                f"Follow-up needed: {evaluation.get('follow_up_needed')}")
-
-                except json.JSONDecodeError as e:
-                    logger.error(f"[Judge] Failed to parse evaluation: {e}")
 
         except Exception as e:
             logger.error(f"[Judge] Evaluation error: {e}")
@@ -153,37 +163,34 @@ class DualLLMContextProcessor(FrameProcessor):
         self._session = session
         self._context = context
 
+    def set_session(self, session):
+        self._session = session
+
     async def process_frame(self, frame: Frame, direction):
         await super().process_frame(frame, direction)
 
-        # TODO: Fix LLMMessagesFrame import issue
-        # For now, disable context injection to prevent errors
-        # The judge evaluation still works independently
-
-        # Check if we need to inject evaluation context
-        # from pipecat.frames.frames import LLMMessagesFrame
-
-        # if isinstance(frame, LLMMessagesFrame):
-        #     # Get last evaluation if available
-        #     if hasattr(self._session, 'last_evaluation') and self._session.last_evaluation:
-        #         eval_data = self._session.last_evaluation
-        #
-        #         # Inject evaluation as assistant context
-        #         eval_context = f"""[Internal Evaluation]
-        # Score: {eval_data.get('score')}/10
-        # Completeness: {eval_data.get('completeness')}
-        # Depth: {eval_data.get('depth')}
-        # Follow-up needed: {eval_data.get('follow_up_needed')}
-        # Suggested probe: {eval_data.get('suggested_probe', 'None')}
-        #
-        # Use this evaluation to guide your response. If follow-up is needed, ask the suggested probe naturally."""
-        #
-        #         # Add to messages
-        #         frame.messages.append({
-        #             "role": "system",
-        #             "content": eval_context
-        #         })
-        #
-        #         logger.debug(f"[DualLLM] Injected evaluation context into LLM messages")
+        # Wire the judge into the responder: when a fresh evaluation says a
+        # follow-up is needed, inject its suggested probe into the LLM context so
+        # the responder naturally asks it on its next turn. Injected once per
+        # evaluation (tracked by identity) and best-effort so it can never break
+        # the response path.
+        try:
+            ev = getattr(self._session, "last_evaluation", None) if self._session else None
+            if (
+                ev
+                and ev is not getattr(self, "_consumed_eval", None)
+                and ev.get("follow_up_needed")
+                and ev.get("suggested_probe")
+            ):
+                self._consumed_eval = ev
+                guidance = (
+                    "[Interview coach] The candidate's previous answer scored "
+                    f"{ev.get('score')}/10 (depth: {ev.get('depth')}). A follow-up is "
+                    f"warranted — naturally weave in this probe: \"{ev.get('suggested_probe')}\""
+                )
+                self._context.add_message({"role": "system", "content": guidance})
+                logger.debug("[DualLLM] Injected judge follow-up guidance into context")
+        except Exception as e:
+            logger.debug(f"[DualLLM] guidance injection skipped: {e}")
 
         await self.push_frame(frame, direction)

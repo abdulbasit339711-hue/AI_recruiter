@@ -1,0 +1,40 @@
+{
+  "description": "Sample Backend Engineer interview answers for testing goal tracking. The bot's questions/replies are generated automatically; only these candidate (applicant) turns are sent to POST /chat. Each turn is written to exercise the tracked goals.",
+  "session": {
+    "role_type": "Backend Engineer",
+    "candidate_name": "Test Candidate"
+  },
+  "goals_exercised": ["Problem Solving", "Communication"],
+  "turns": [
+    {
+      "speaker": "candidate",
+      "targets": "Problem Solving",
+      "text": "Recently I tackled a performance problem in our orders service. The checkout API had degraded to about three seconds per request under load, and customers were abandoning carts. I started by reproducing it in staging with realistic traffic, then added tracing so I could see where the time actually went rather than guessing."
+    },
+    {
+      "speaker": "candidate",
+      "targets": "Problem Solving",
+      "text": "Walking through my approach step by step: the traces showed a classic N+1 query pattern where we loaded each order line item in a separate round trip to Postgres. I rewrote the access layer to batch those into a single query with a join, added a covering index on the order_id and status columns, and introduced a short-lived Redis cache for the product catalog lookups that were read-heavy but rarely changed."
+    },
+    {
+      "speaker": "candidate",
+      "targets": "Problem Solving",
+      "text": "The measurable outcome was that p95 latency dropped from around three seconds to roughly two hundred milliseconds, database CPU fell by about forty percent, and cart abandonment in that funnel improved by eleven percent over the next two weeks. I also added a regression test and a dashboard alert so we would catch any future query regressions before customers did."
+    },
+    {
+      "speaker": "candidate",
+      "targets": "Communication",
+      "text": "When there are disagreements on the team, my approach is to get the discussion back to the actual constraints and data instead of personal preference. I try to restate the other person's position first so they know I understood it, then lay out the trade-offs I see, and propose a small experiment or spike when we genuinely cannot agree on paper."
+    },
+    {
+      "speaker": "candidate",
+      "targets": "Communication",
+      "text": "A specific example: a teammate wanted to move our monolith straight to microservices, and I felt that was premature given our team size. Rather than block it, I suggested we first extract just the payments module behind a clear interface and measure the operational overhead. After we saw the deployment and on-call cost of that one service, we agreed together to pause the wider split. It kept the relationship healthy and the decision was driven by evidence."
+    },
+    {
+      "speaker": "candidate",
+      "targets": "Communication",
+      "text": "To explain something like microservices to a non-technical stakeholder, I use the analogy of a restaurant moving from one big kitchen to separate specialized stations. Each station can be staffed and scaled on its own, but now they need to coordinate orders, which adds communication overhead. That usually helps them understand why it speeds some things up while making others more complex, without needing any jargon."
+    }
+  ]
+}
