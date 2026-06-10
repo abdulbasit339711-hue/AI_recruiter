@@ -149,6 +149,7 @@ class QuestionFlowProcessor(FrameProcessor):
             logger.info(f"[flow] answer sufficient for {current_q.id}")
             session.mark_question_answered(current_q.id, GoalStatus.COVERED)
             session.advance_question()
+            await self._persist_progress()
             next_q = session.current_question
 
             if next_q:
@@ -181,6 +182,7 @@ class QuestionFlowProcessor(FrameProcessor):
                 )
                 session.mark_question_answered(current_q.id, GoalStatus.WEAK)
                 session.advance_question()
+                await self._persist_progress()
                 next_q = session.current_question
 
                 if next_q:
@@ -213,8 +215,23 @@ class QuestionFlowProcessor(FrameProcessor):
                 f"then ask the next question: {question.text}"
             )
 
+        await self._persist_progress()
         await self._inject_instruction(instruction)
         logger.info(f"[flow] asking question: {question.id}")
+
+    async def _persist_progress(self):
+        """Save the current question-flow position so an interrupted interview resumes
+        in place. Best-effort: DB hiccups must never break the live interview."""
+        session = self._session
+        try:
+            from database import db_manager
+            await db_manager.save_session_progress(
+                session.session_id,
+                session.current_question_index,
+                session.progress_snapshot(),
+            )
+        except Exception as e:
+            logger.debug(f"[flow] progress persist skipped: {e}")
 
     async def _close_interview(self):
         """Inject a closing instruction when all questions are done."""

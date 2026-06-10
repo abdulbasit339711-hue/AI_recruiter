@@ -44,6 +44,7 @@ class BotManager:
         # configure_session(); processors are built session-less and updated then.
         from events.broadcaster import broadcaster
         self.session = None
+        self.resumed = False  # set True in configure_session when a prior transcript exists
         self.broadcaster = broadcaster
 
         # Initialize goal tracking service (session attached later)
@@ -191,6 +192,45 @@ class BotManager:
                 procs.append(p)
         return procs
 
+    @staticmethod
+    def _resume_context_summary(session) -> str:
+        """Build the resume instruction for the LLM from the restored session state.
+
+        The live pipeline is LLM-driven, so 'position' is conveyed as: the topics
+        already covered (don't repeat them) and the next question to ask. The prior
+        transcript is already in context; this just steers continuation."""
+        from interview_session import GoalStatus
+        questions = session.config.questions
+        covered = [
+            q.text for q in questions
+            if session.question_states.get(q.id)
+            and session.question_states[q.id].status in (GoalStatus.COVERED, GoalStatus.WEAK, GoalStatus.SKIPPED)
+        ]
+        parts = [
+            "The candidate has rejoined an interview that was interrupted. "
+            "Their prior conversation is already in the history above — do NOT restart, "
+            "re-introduce yourself, or repeat questions already answered."
+        ]
+        # Deterministic-flow pipeline: a restored position is meaningful, so name the
+        # covered topics and the exact next question. LLM-driven pipeline: no index is
+        # tracked (it stays 0), so steer continuation from the transcript instead of
+        # falsely naming the first question as "next".
+        has_recorded_progress = bool(covered) or session.current_question_index > 0
+        if has_recorded_progress:
+            if covered:
+                parts.append("Topics already covered: " + "; ".join(covered[:8]) + ".")
+            next_q = session.current_question
+            if next_q is not None:
+                parts.append(f"Continue by asking the next question: {next_q.text}")
+            else:
+                parts.append("All planned questions are covered — briefly wrap up and close the interview.")
+        else:
+            parts.append(
+                "Pick up the conversation naturally from where it left off, based on the "
+                "history above, and move on to a question that has not been asked yet."
+            )
+        return " ".join(parts)
+
     async def configure_session(self, session) -> None:
         """Attach a per-interview session to the running pipeline (single concurrency).
 
@@ -209,6 +249,59 @@ class BotManager:
             )
         except Exception as e:
             logger.warning(f"[BotManager] Could not seed system prompt into context: {e}")
+
+        # Resume support: if this link was opened before, replay the prior conversation
+        # into the LLM context so the bot continues with full memory instead of
+        # restarting. self.resumed tells the greeting to say "welcome back" and let the
+        # LLM pick up where it left off rather than re-running the intro.
+        #
+        # Resume detection is AUTHORITATIVE on the prior session row, not on transcript
+        # row count: a session row only exists once a candidate has joined before, so any
+        # non-completed prior status ('active' from a hard drop, or 'interrupted' from a
+        # graceful finalize) means a re-open. Relying on transcript rows alone misfired —
+        # the deterministic greeting/early questions are pushed straight to TTS and never
+        # hit the LLM-aggregation persist path, so an early reload found zero rows and
+        # restarted from the intro. (See runner._greet_once, which now also persists the
+        # opening line so the replayed history is complete.)
+        self.resumed = False
+        try:
+            from database import db_manager
+            prior_status = await db_manager.get_session_status(session.session_id)
+            self.resumed = prior_status in ("active", "interrupted")
+
+            prior = await db_manager.get_transcript(session.session_id)
+            if prior:
+                for entry in prior:
+                    role = "assistant" if entry.get("speaker") == "agent" else "user"
+                    text = (entry.get("text") or "").strip()
+                    if text:
+                        self.context.add_message({"role": role, "content": text})
+
+            if self.resumed:
+                # Restore the exact question-flow position (deterministic pipeline) and
+                # tell the LLM-driven pipeline which topics are already covered so it
+                # continues with the next one instead of repeating.
+                try:
+                    progress = await db_manager.get_session_progress(session.session_id)
+                    if progress:
+                        session.restore_progress(
+                            progress.get("current_question_index", 0),
+                            progress.get("question_states", {}),
+                        )
+                except Exception as e:
+                    logger.warning(f"[BotManager] Could not restore question progress: {e}")
+
+                self.context.add_message({
+                    "role": "system",
+                    "content": self._resume_context_summary(session),
+                })
+                logger.info(
+                    f"[BotManager] Resuming {session.session_id} (prior status='{prior_status}'): "
+                    f"replayed {len(prior)} turns, next question index "
+                    f"{session.current_question_index}"
+                )
+        except Exception as e:
+            logger.warning(f"[BotManager] Could not restore prior session state: {e}")
 
         session.start()
 
@@ -279,8 +372,13 @@ class BotManager:
             logger.error(f"[BotManager] Failed to get question suggestion: {e}")
             return None
 
-    async def finalize_session(self):
+    async def finalize_session(self, graceful: bool = True):
         """Finalize this interview: run the final goal analysis and persist it.
+
+        ``graceful`` is True when the interview reached its natural end (all questions
+        covered); False when the candidate dropped mid-interview. A graceful interview
+        is marked 'completed' (the link is then single-use); an interrupted one is
+        marked 'interrupted' so the candidate can resume the SAME session.
 
         Called once when the bot's worker ends (see runner._make_and_run_bot).
         Note: the DB pool is a process-global shared by every concurrent bot and the
@@ -289,10 +387,23 @@ class BotManager:
         """
         if self.goal_processor:
             try:
-                await self.goal_processor.finalize_session_goals()
+                await self.goal_processor.finalize_session_goals(graceful=graceful)
                 logger.info("[BotManager] Session goals finalized")
             except Exception as e:
                 logger.error(f"[BotManager] Failed to finalize goals: {e}")
+
+        # Authoritatively stamp the terminal status. This guarantees a status even
+        # when goals were never initialized / analysis failed (otherwise the session
+        # stays 'active' forever and the link could be reused and overwritten), and
+        # is idempotent with the status finalize_session_goals already wrote.
+        if self.session:
+            try:
+                from database import db_manager
+                await db_manager.mark_session_status(
+                    self.session.session_id, "completed" if graceful else "interrupted"
+                )
+            except Exception as e:
+                logger.error(f"[BotManager] Failed to stamp session status: {e}")
 
         # Persist the per-service token breakdown (STT/LLM-in/LLM-out/TTS).
         if self.metrics_processor:

@@ -98,6 +98,27 @@ class DatabaseManager:
                 if result == 1:
                     logger.info("[Database] Connection test successful")
 
+            # Self-heal the resume schema (idempotent) so an existing deployment supports
+            # interview resume even if alembic 0005 wasn't run: the progress columns, and
+            # widening valid_session_status to allow 'interrupted' (the status a dropped
+            # interview is marked so its link stays resumable). Non-fatal: a privilege
+            # error here must not stop the server booting.
+            try:
+                async with self.pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        ALTER TABLE interview_sessions
+                            ADD COLUMN IF NOT EXISTS current_question_index INTEGER NOT NULL DEFAULT 0,
+                            ADD COLUMN IF NOT EXISTS question_states JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+                        ALTER TABLE interview_sessions DROP CONSTRAINT IF EXISTS valid_session_status;
+                        ALTER TABLE interview_sessions ADD CONSTRAINT valid_session_status
+                            CHECK (status IN ('active', 'completed', 'cancelled', 'interrupted'));
+                        """
+                    )
+            except Exception as e:
+                logger.warning(f"[Database] Could not ensure resume schema: {e}")
+
         except Exception as e:
             logger.error(f"[Database] Failed to initialize: {e}")
             raise
@@ -198,7 +219,7 @@ class DatabaseManager:
         (session_id, candidate_name, candidate_email, interviewer_name, role_type,
          company_name, pipeline_mode, candidate_id, job_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (session_id) DO UPDATE SET updated_at = NOW()
+        ON CONFLICT (session_id) DO UPDATE SET status = 'active', updated_at = NOW()
         RETURNING id
         """
         session_id = await self.execute_query(
@@ -347,16 +368,19 @@ class DatabaseManager:
         async with self.pool.acquire() as conn:
             await conn.execute(query, session_id)
 
-    async def finalize_session_record(self, session_id: str, overall_assessment: str) -> None:
-        """Mark a session completed and store its final assessment.
+    async def finalize_session_record(self, session_id: str, overall_assessment: str,
+                                      completed: bool = True) -> None:
+        """Store a session's final assessment and stamp its terminal status.
 
         Called once when the interview ends (see GoalTrackingProcessor.finalize_session_goals).
-        Stamps status='completed', ended_at, and a derived duration if not already set,
-        so HR can read the final assessment from interview_sessions later.
+        ``completed`` distinguishes a graceful end (all questions covered) from an
+        interrupted one: a graceful interview is 'completed' (single-use — the link is
+        spent), while an interrupted one is 'interrupted' so the candidate can resume.
         """
+        status = "completed" if completed else "interrupted"
         query = """
         UPDATE interview_sessions SET
-            status = 'completed',
+            status = $3,
             ended_at = COALESCE(ended_at, NOW()),
             duration_seconds = COALESCE(
                 duration_seconds,
@@ -368,7 +392,33 @@ class DatabaseManager:
         """
         await self._ensure_pool()
         async with self.pool.acquire() as conn:
-            await conn.execute(query, session_id, overall_assessment)
+            await conn.execute(query, session_id, overall_assessment, status)
+
+    async def get_session_status(self, session_id: str) -> Optional[str]:
+        """Return the current status of a session ('active'|'completed'|'interrupted'),
+        or None if no such session exists. Used to enforce single-use links."""
+        row = await self.fetch_one(
+            "SELECT status FROM interview_sessions WHERE session_id = $1", session_id
+        )
+        return row["status"] if row else None
+
+    async def mark_session_status(self, session_id: str, status: str) -> None:
+        """Stamp a session's terminal status (and ended_at) without touching the
+        assessment. Fallback used when there is no goal assessment to persist."""
+        query = """
+        UPDATE interview_sessions SET
+            status = $2,
+            ended_at = COALESCE(ended_at, NOW()),
+            duration_seconds = COALESCE(
+                duration_seconds,
+                EXTRACT(EPOCH FROM (NOW() - started_at))::int
+            ),
+            updated_at = NOW()
+        WHERE session_id = $1
+        """
+        await self._ensure_pool()
+        async with self.pool.acquire() as conn:
+            await conn.execute(query, session_id, status)
 
     async def attach_transcript_evaluation(self, session_id: str, response_text: str, evaluation: Dict[str, Any]) -> None:
         """Attach a judge's per-answer evaluation to the matching candidate transcript row.
@@ -405,6 +455,62 @@ class DatabaseManager:
         SELECT * FROM session_overview WHERE session_id = $1
         """
         return await self.fetch_one(query, session_id)
+
+    async def get_transcript(self, session_id: str) -> List[Dict[str, Any]]:
+        """Return the ordered conversation for a session as [{speaker, text}, ...].
+
+        Used to resume an interrupted interview: when the same link is re-opened, the
+        prior turns are replayed into the LLM context so the bot continues with full
+        memory instead of restarting. ``speaker`` is 'agent' or 'candidate'."""
+        rows = await self.fetch_all(
+            "SELECT speaker, text FROM session_transcripts "
+            "WHERE session_id = $1 ORDER BY sequence_number",
+            session_id,
+        )
+        return [{"speaker": r["speaker"], "text": r["text"]} for r in rows]
+
+    async def save_session_progress(
+        self, session_id: str, current_question_index: int, question_states: Dict[str, Any]
+    ) -> None:
+        """Persist the question-flow position so an interrupted interview resumes in place.
+
+        Called whenever the flow advances (question answered / skipped). Together with
+        the persisted transcript this lets a re-opened link continue at the exact next
+        question instead of restarting. Best-effort: a failure here must never break the
+        live interview, so the caller wraps this in try/except."""
+        query = """
+        UPDATE interview_sessions
+        SET current_question_index = $2,
+            question_states = $3::jsonb,
+            updated_at = NOW()
+        WHERE session_id = $1
+        """
+        await self._ensure_pool()
+        async with self.pool.acquire() as conn:
+            await conn.execute(query, session_id, int(current_question_index), json.dumps(question_states or {}))
+
+    async def get_session_progress(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Return the persisted question-flow position for a session, or None if absent.
+
+        Shape: {"current_question_index": int, "question_states": {qid: {...}}}. Used on
+        resume to restore where the candidate left off."""
+        row = await self.fetch_one(
+            "SELECT current_question_index, question_states "
+            "FROM interview_sessions WHERE session_id = $1",
+            session_id,
+        )
+        if not row:
+            return None
+        states = row.get("question_states")
+        if isinstance(states, str):
+            try:
+                states = json.loads(states)
+            except (TypeError, ValueError):
+                states = {}
+        return {
+            "current_question_index": row.get("current_question_index") or 0,
+            "question_states": states or {},
+        }
 
     async def add_transcript_entry(self, session_id: str, transcript_data: Dict[str, Any]) -> str:
         """Add transcript entry to database"""

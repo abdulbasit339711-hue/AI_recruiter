@@ -94,7 +94,7 @@ CREATE TABLE interview_sessions (
     updated_at TIMESTAMP DEFAULT NOW(),
 
     -- Constraints
-    CONSTRAINT valid_session_status CHECK (status IN ('active', 'completed', 'cancelled')),
+    CONSTRAINT valid_session_status CHECK (status IN ('active', 'completed', 'cancelled', 'interrupted')),
     CONSTRAINT valid_pipeline_mode CHECK (pipeline_mode IN ('single', 'dual'))
 );
 

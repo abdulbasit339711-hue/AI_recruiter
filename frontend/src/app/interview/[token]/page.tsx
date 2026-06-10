@@ -21,7 +21,6 @@ import {
   Bot,
   User,
   X,
-  ListChecks,
   Send,
 } from "lucide-react";
 
@@ -44,6 +43,10 @@ export default function InterviewPage() {
   const [showCaptions, setShowCaptions] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  // Browser autoplay policy can block the bot's remote audio when it subscribes
+  // asynchronously (after connect, outside the click gesture). Track that so we can
+  // show a "tap to enable sound" prompt and call room.startAudio() on a gesture.
+  const [audioBlocked, setAudioBlocked] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -52,9 +55,12 @@ export default function InterviewPage() {
   // Subscribe to the live transcript stream as soon as the link is validated —
   // not only once "live" — otherwise the bot's opening greeting (broadcast right
   // at connect) is missed, since the SSE stream isn't replayed to late joiners.
-  const { transcript, goals, judge, connected } = useInterviewLive(
+  // Goals / per-answer AI scores are interviewer-internal and intentionally NOT
+  // surfaced here — they live in the HR dashboard only.
+  const { transcript, connected } = useInterviewLive(
     phase === "ready" || phase === "connecting" || phase === "live",
-    info?.session_id
+    info?.session_id,
+    info?.prior_transcript
   );
 
   useEffect(() => {
@@ -115,7 +121,19 @@ export default function InterviewPage() {
           document.body.appendChild(el);
         }
       });
+      // Autoplay policy: if the browser blocks audio, room.canPlaybackAudio is false
+      // until a user gesture calls room.startAudio(). Surface that to the candidate.
+      room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+        setAudioBlocked(!room.canPlaybackAudio);
+      });
       await room.connect(info.livekit_url, info.livekit_token);
+      // Join is a user gesture, so this usually unblocks remote audio immediately.
+      try {
+        await room.startAudio();
+      } catch {
+        /* fall back to the "enable sound" prompt below */
+      }
+      setAudioBlocked(!room.canPlaybackAudio);
       await room.localParticipant.setMicrophoneEnabled(true);
       setMicEnabled(true);
     } catch (e) {
@@ -140,6 +158,17 @@ export default function InterviewPage() {
   function leave() {
     roomRef.current?.disconnect();
     setPhase("ended");
+  }
+
+  async function enableAudio() {
+    const room = roomRef.current;
+    if (!room) return;
+    try {
+      await room.startAudio();
+      setAudioBlocked(!room.canPlaybackAudio);
+    } catch (e) {
+      setError(describeMediaError(e));
+    }
   }
 
   async function submitChat(e: React.FormEvent) {
@@ -287,6 +316,16 @@ export default function InterviewPage() {
         </div>
       )}
 
+      {audioBlocked && (
+        <button
+          onClick={enableAudio}
+          className="mx-4 flex items-center gap-2 rounded-xl border border-blue-500/40 bg-blue-500/10 p-3 text-left text-sm text-blue-200 transition hover:bg-blue-500/20"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>Your browser blocked audio. <span className="font-semibold underline">Tap here to enable sound</span> and hear the interviewer.</span>
+        </button>
+      )}
+
       {/* Stage + side panel */}
       <div className="flex min-h-0 flex-1 gap-3 px-3 pb-2">
         <main className="relative flex min-w-0 flex-1 items-center justify-center">
@@ -326,28 +365,20 @@ export default function InterviewPage() {
         {showPanel && (
           <aside className="flex w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-zinc-900 ring-1 ring-zinc-800 sm:w-96">
             <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-              <span className="text-sm font-medium text-zinc-200">Interview details</span>
+              <span className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+                <MessageSquareText className="h-4 w-4" /> Transcript
+              </span>
               <button onClick={() => setShowPanel(false)} className="text-zinc-500 hover:text-zinc-300" aria-label="Close panel">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
-              <GoalPanel goals={goals} />
-              {judge && <JudgeCard judge={judge} />}
-
-              <div>
-                <h2 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  <MessageSquareText className="h-3.5 w-3.5" /> Transcript
-                </h2>
-                <div className="space-y-3">
-                  {transcript.length === 0 ? (
-                    <p className="text-xs text-zinc-600">The conversation will appear here.</p>
-                  ) : (
-                    transcript.map((t, i) => <Bubble key={i} speaker={t.speaker} text={t.text} />)
-                  )}
-                </div>
-              </div>
+            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+              {transcript.length === 0 ? (
+                <p className="text-xs text-zinc-600">The conversation will appear here.</p>
+              ) : (
+                transcript.map((t, i) => <Bubble key={i} speaker={t.speaker} text={t.text} />)
+              )}
             </div>
 
             <form onSubmit={submitChat} className="flex gap-2 border-t border-zinc-800 p-3">
@@ -389,9 +420,9 @@ export default function InterviewPage() {
         <ControlButton
           onClick={() => setShowPanel((v) => !v)}
           highlighted={showPanel}
-          label="Interview details"
+          label="Show transcript"
         >
-          <ListChecks className="h-5 w-5" />
+          <MessageSquareText className="h-5 w-5" />
         </ControlButton>
 
         <button
@@ -548,55 +579,6 @@ function Bubble({ speaker, text }: { speaker: string; text: string }) {
         }`}
       >
         {text}
-      </div>
-    </div>
-  );
-}
-
-function GoalPanel({ goals }: { goals: { title: string; progress: number; status: string }[] }) {
-  return (
-    <div>
-      <h2 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-        <ListChecks className="h-3.5 w-3.5" /> Interview goals
-      </h2>
-      {goals.length === 0 ? (
-        <p className="text-xs text-zinc-600">Goals appear as the interview progresses.</p>
-      ) : (
-        <ul className="space-y-3">
-          {goals.map((g) => (
-            <li key={g.title}>
-              <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="text-zinc-300">{g.title}</span>
-                <span className="text-zinc-500">{Math.round((g.progress || 0) * 100)}%</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className={`h-full rounded-full ${g.status === "completed" ? "bg-emerald-500" : "bg-blue-500"}`}
-                  style={{ width: `${Math.min(100, Math.round((g.progress || 0) * 100))}%` }}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function JudgeCard({
-  judge,
-}: {
-  judge: { score: number; completeness: number; depth: string; follow_up_needed: boolean; suggested_probe?: string };
-}) {
-  return (
-    <div className="rounded-xl border border-purple-900/50 bg-purple-900/20 p-3 text-xs">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-semibold text-purple-300">Last answer score</span>
-        <span className="font-bold text-purple-200">{judge.score}/10</span>
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-400">
-        <div>Completeness: {Math.round((judge.completeness || 0) * 100)}%</div>
-        <div>Depth: {judge.depth}</div>
       </div>
     </div>
   );

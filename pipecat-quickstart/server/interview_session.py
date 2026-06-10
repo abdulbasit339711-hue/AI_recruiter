@@ -245,6 +245,52 @@ class InterviewSession:
     def advance_question(self):
         self.current_question_index += 1
 
+    # ── Resume persistence (DB round-trip) ────────────────────────────────────
+
+    def progress_snapshot(self) -> Dict[str, Dict]:
+        """Serialize the live question-flow position for persistence.
+
+        Returns a JSON-safe map keyed by question id; pair it with
+        ``current_question_index`` when saving so an interrupted interview can
+        resume at the exact question it left off on."""
+        return {
+            qid: {
+                "status": qs.status.value,
+                "follow_up_count": qs.follow_up_count,
+                "asked_at": qs.asked_at.isoformat() if qs.asked_at else None,
+                "answered_at": qs.answered_at.isoformat() if qs.answered_at else None,
+            }
+            for qid, qs in self.question_states.items()
+        }
+
+    def restore_progress(self, current_question_index: int,
+                         question_states: Dict[str, Dict]) -> None:
+        """Restore a previously persisted question-flow position onto this session.
+
+        Mirrors ``progress_snapshot``. Unknown/missing fields are ignored so a
+        partial or older snapshot still restores cleanly."""
+        if isinstance(current_question_index, int) and current_question_index >= 0:
+            self.current_question_index = current_question_index
+        for qid, data in (question_states or {}).items():
+            qs = self.question_states.get(qid)
+            if qs is None or not isinstance(data, dict):
+                continue
+            raw_status = data.get("status")
+            if raw_status is not None:
+                try:
+                    qs.status = GoalStatus(raw_status)
+                except ValueError:
+                    pass
+            if isinstance(data.get("follow_up_count"), int):
+                qs.follow_up_count = data["follow_up_count"]
+            for ts_field in ("asked_at", "answered_at"):
+                raw = data.get(ts_field)
+                if raw:
+                    try:
+                        setattr(qs, ts_field, datetime.fromisoformat(raw))
+                    except (TypeError, ValueError):
+                        pass
+
     def add_turn(self, speaker: str, text: str,
                  question_id: Optional[str] = None,
                  is_follow_up: bool = False):

@@ -86,7 +86,7 @@ logging.getLogger("websockets").setLevel(logging.CRITICAL)
 # --- Global State ---
 bot_manager = None
 bot_ready = asyncio.Event()
-pipeline_mode = os.getenv("PIPELINE_MODE", "single")  # Default to single, can be set to "dual"
+pipeline_mode = os.getenv("PIPELINE_MODE", "dual")  # Default to dual (judge + responder); set "single" to disable
 
 # The (candidate_id, job_id) for the NEXT interview to configure on connect.
 # Set via POST /interview/configure (Phase 3 will set it from a validated token),
@@ -109,6 +109,9 @@ _bot_task: "asyncio.Task | None" = None
 DEFAULT_ROOM = os.getenv("LIVEKIT_ROOM_NAME", "test-room")
 START_DEFAULT_BOT = (os.getenv("START_DEFAULT_BOT", "true").strip().lower() in ("1", "true", "yes", "on"))
 MAX_CONCURRENT_INTERVIEWS = int(os.getenv("MAX_CONCURRENT_INTERVIEWS", "3"))
+# Seconds after the candidate's signaling connects to greet anyway if they never
+# publish a mic (denied permission). The normal path greets on mic subscription.
+GREETING_FALLBACK_SECONDS = float(os.getenv("GREETING_FALLBACK_SECONDS", "5"))
 _interviews: dict = {}                      # room_name -> InterviewBot
 _interviews_lock = asyncio.Lock()
 _shutting_down = False
@@ -125,6 +128,11 @@ class InterviewBot:
         self.error = None
         self.ready = asyncio.Event()
         self.task: "asyncio.Task | None" = None
+        # Set when the candidate leaves and the worker is being torn down. A draining
+        # bot must NOT be handed back to a re-opened link — the candidate would join a
+        # dying room and see no resume. ensure_interview waits for it to finish, then
+        # respawns a fresh bot that resumes the SAME session from the DB.
+        self.draining = False
 
 # --- FastAPI App ---
 from contextlib import asynccontextmanager
@@ -291,10 +299,30 @@ async def validate_interview(token: str):
     except InviteTokenError as e:
         return {"valid": False, "error": f"This interview link is invalid or has expired ({e})."}
 
+    # Deterministic session id per interview link (candidate + token jti). Re-opening
+    # the same link maps to the SAME session row, so an interrupted interview resumes
+    # in place rather than spawning a new session and overwriting the old recording.
+    session_id = f"{claims.candidate_id}-{claims.jti}"
+
+    # Single-use after completion: once an interview is finished, the link is spent —
+    # this is the best-practice rule that also prevents re-running the bot and
+    # overwriting the finished transcript/recording/evaluation.
+    try:
+        await db_manager._ensure_pool()
+        prior_status = await db_manager.get_session_status(session_id)
+    except Exception as e:
+        logger.error(f"[Interview] status lookup failed: {e}")
+        prior_status = None
+    if prior_status == "completed":
+        return {
+            "valid": False,
+            "error": "You have already completed this interview. This link can no longer be used.",
+        }
+
     # Unique room per interview link (jti makes it unique). Spin up a dedicated bot
     # bound to THIS candidate/job — no shared room, no global state, no cross-talk.
     room = f"interview-{claims.candidate_id}-{claims.jti[:12]}"
-    bot = await ensure_interview(claims.candidate_id, claims.job_id, room)
+    bot = await ensure_interview(claims.candidate_id, claims.job_id, room, session_id=session_id)
     if bot is None:
         return {
             "valid": False,
@@ -310,6 +338,16 @@ async def validate_interview(token: str):
     except Exception as e:
         logger.error(f"[Interview] validate lookup failed: {e}")
         job, candidate = None, None
+
+    # On a resume, hand back the conversation so far so the candidate's page can
+    # redisplay it immediately (the live SSE stream only carries NEW turns, never a
+    # replay). Empty for a first-time join.
+    prior_transcript: list = []
+    if prior_status in ("active", "interrupted"):
+        try:
+            prior_transcript = await db_manager.get_transcript(session_id)
+        except Exception as e:
+            logger.error(f"[Interview] prior transcript lookup failed: {e}")
 
     api_key = os.getenv("LIVEKIT_API_KEY")
     api_secret = os.getenv("LIVEKIT_API_SECRET")
@@ -327,7 +365,50 @@ async def validate_interview(token: str):
         "session_id": bot.session_id,  # lets the client filter the live event stream
         "livekit_token": lk_token,
         "livekit_url": os.getenv("LIVEKIT_URL"),
+        "prior_transcript": prior_transcript,  # conversation so far, for resume redisplay
     }
+
+@app.get("/interview/debug/{session_id}")
+async def interview_debug(session_id: str):
+    """Read-only resume diagnostics for one session — verify state without psql.
+
+    Returns the persisted status, whether the link would be treated as a resume,
+    the question-flow position, and a transcript turn count + tail. No secrets; safe
+    to hit from a browser while manually testing resume-on-restart."""
+    from database import db_manager
+    try:
+        await db_manager._ensure_pool()
+        status = await db_manager.get_session_status(session_id)
+        progress = await db_manager.get_session_progress(session_id)
+        transcript = await db_manager.get_transcript(session_id)
+    except Exception as e:
+        logger.error(f"[Interview] debug lookup failed for {session_id}: {e}")
+        return {"session_id": session_id, "error": str(e)}
+
+    # Mirror the resume rule in bot_manager_dual.configure_session.
+    resumable = status in ("active", "interrupted")
+    states = (progress or {}).get("question_states", {})
+    return {
+        "session_id": session_id,
+        "exists": status is not None,
+        "status": status,
+        "resumable": resumable,
+        "single_use_spent": status == "completed",
+        "current_question_index": (progress or {}).get("current_question_index", 0),
+        "question_states": states,
+        "questions_covered": sum(
+            1 for s in states.values()
+            if isinstance(s, dict) and s.get("status") in ("covered", "weak", "skipped")
+        ),
+        "transcript_turns": len(transcript),
+        "transcript_tail": [
+            {"speaker": t["speaker"], "text": (t["text"] or "")[:120]}
+            for t in transcript[-4:]
+        ],
+        "live": bool(bot_manager and bot_manager.session
+                     and bot_manager.session.session_id == session_id),
+    }
+
 
 @app.get("/events")
 async def sse_events(session: str | None = None):
@@ -636,8 +717,29 @@ async def get_goal_templates(role_type: str):
         logger.error(f"[API] Failed to get templates: {e}")
         return {"error": str(e)}
 
+async def _persist_agent_line(manager, session_id, text):
+    """Persist a directly-spoken agent line (greeting) to the transcript.
+
+    The greeting is pushed as a raw TTS frame and never passes through the
+    LLM-response aggregator that persists normal agent turns, so we record it here.
+    Best-effort: never let a transcript write block the greeting."""
+    if not session_id or not (manager and manager.session):
+        return
+    try:
+        import time
+        from database import db_manager
+        await db_manager.add_transcript_entry(session_id, {
+            "speaker": "agent",
+            "text": text,
+            "timestamp": str(time.time()),
+            "tokens_estimated": len(text.split()),
+        })
+    except Exception as e:
+        logger.debug(f"[Bot] greeting transcript persist skipped: {e}")
+
+
 # --- Bot runner (one bot per room) ---
-async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_ref=None):
+async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_ref=None, session_id=None):
     """Build a LiveKit bot bound to ONE room (+ optionally one candidate/job) and
     run its worker until it ends (disconnect / idle / cancel).
 
@@ -698,7 +800,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     if candidate_id and job_id:
         try:
             from session_factory import create_session_for
-            pre_session = await create_session_for(candidate_id, job_id)
+            pre_session = await create_session_for(candidate_id, job_id, session_id=session_id)
             if bot_ref:
                 bot_ref.session_id = pre_session.session_id
         except Exception as e:
@@ -732,6 +834,27 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         role = None
         if manager.session and getattr(manager.session, "config", None):
             role = getattr(manager.session.config, "job_role", None)
+        sid = manager.session.session_id if manager.session else None
+        resumed = getattr(manager, "resumed", False)
+
+        if resumed:
+            # The candidate re-opened the same link mid-interview. configure_session has
+            # already replayed the prior conversation into the LLM context AND injected a
+            # system instruction listing covered topics + the next question, so don't
+            # re-run the intro — say a short "welcome back" and let the LLM continue.
+            greeting = "Welcome back. Let's pick up right where we left off."
+            await broadcaster.broadcast("transcript", {"session_id": sid, "speaker": "agent", "text": greeting})
+            try:
+                context.add_message({"role": "assistant", "content": greeting})
+            except Exception:
+                pass
+            await _persist_agent_line(manager, sid, greeting)
+            from pipecat.frames.frames import TTSSpeakFrame, LLMRunFrame
+            await manager.pipeline.push_frame(TTSSpeakFrame(greeting))
+            # Let the LLM produce the next question from the restored history + summary.
+            await manager.pipeline.push_frame(LLMRunFrame())
+            return
+
         greeting = (
             f"Hello, and welcome to your interview for {role}. " if role
             else "Hello, and welcome to your interview. "
@@ -739,12 +862,15 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
             "I'm your AI interviewer. To get started, could you tell me a little "
             "about yourself and your background?"
         )
-        sid = manager.session.session_id if manager.session else None
         await broadcaster.broadcast("transcript", {"session_id": sid, "speaker": "agent", "text": greeting})
         try:
             context.add_message({"role": "assistant", "content": greeting})
         except Exception:
             pass
+        # Persist the opening line. The greeting is pushed straight to TTS (it never goes
+        # through the LLM-response aggregation that normally persists agent turns), so
+        # without this an early reload would find an empty transcript and replay the intro.
+        await _persist_agent_line(manager, sid, greeting)
         from pipecat.frames.frames import TTSSpeakFrame
         await manager.pipeline.push_frame(TTSSpeakFrame(greeting))
 
@@ -771,12 +897,29 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         identity = getattr(participant, "identity", participant)
         logger.info(f"UI Joined Room {room_name}: {identity}")
         await broadcaster.broadcast("participant", {"event": "joined", "identity": str(identity)})
-        await _greet_once(identity)
+        # Do NOT greet here. participant_connected fires the instant the candidate's
+        # SIGNALING connects — before their browser has subscribed to our audio track
+        # and started playback. Greeting now races ahead of their audio and the first
+        # message is never heard. We greet from on_audio_track_subscribed instead (media
+        # negotiated both ways = candidate can hear us). Fallback-greet only if the
+        # candidate never publishes a mic (e.g. denied permission), so they still start.
+        async def _fallback_greet(idn):
+            try:
+                await asyncio.sleep(GREETING_FALLBACK_SECONDS)
+                if not _greeted["done"]:
+                    logger.info(f"[Bot] Fallback greeting (no mic subscription) in {room_name}")
+                    await _greet_once(idn)
+            except asyncio.CancelledError:
+                pass
+        if not _greeted["done"]:
+            asyncio.create_task(_fallback_greet(identity))
 
     @transport.event_handler("on_audio_track_subscribed")
     async def on_audio_track_subscribed(transport, participant, *rest):
-        # Fires when the bot subscribes to the candidate's mic — covers the
-        # already-present-on-connect race.
+        # Primary greeting trigger: fires when the bot subscribes to the candidate's
+        # mic, which means media is negotiated both ways — so the candidate has also
+        # subscribed to our audio track and (with the client's startAudio) can hear the
+        # greeting. This is the reliable "candidate is ready" signal.
         identity = getattr(participant, "identity", participant)
         await _greet_once(identity)
 
@@ -787,6 +930,9 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         await broadcaster.broadcast("participant", {"event": "dropped", "identity": str(identity)})
         # End a REAL interview when the candidate leaves — frees the slot/room.
         if not is_default and str(identity) != "recruiter-bot":
+            # Mark draining FIRST so a fast re-open doesn't grab this dying bot.
+            if bot_ref:
+                bot_ref.draining = True
             try:
                 await manager.worker.cancel()
             except Exception:
@@ -805,18 +951,37 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         # analysis and persist the assessment exactly once, for REAL interviews
         # only — the always-on default bot has no candidate/session to finalize.
         if not is_default:
+            # Graceful = the interview reached its natural end (all questions covered).
+            # An interrupted run (candidate dropped early) stays resumable so the same
+            # link can continue the SAME session rather than being spent.
+            graceful = bool(manager.session and manager.session.is_complete)
             try:
-                await manager.finalize_session()
+                await manager.finalize_session(graceful=graceful)
             except Exception as e:
                 logger.error(f"[Bot] finalize_session failed for {room_name}: {e}")
 
 
-async def ensure_interview(candidate_id, job_id, room_name):
+async def ensure_interview(candidate_id, job_id, room_name, session_id=None):
     """Get-or-spawn the dedicated bot for an interview room. Returns the
-    InterviewBot, or None if the concurrency cap is reached."""
+    InterviewBot, or None if the concurrency cap is reached.
+
+    ``session_id`` (deterministic per interview link) is threaded to the bot so a
+    respawn after an interruption resumes the SAME session row/recording/transcript."""
+    # If a prior bot for this room is still tearing down (candidate just dropped),
+    # wait for it to finish OUTSIDE the lock before deciding — otherwise a fast
+    # re-open would be handed the dying bot and join an empty/closing room. The fresh
+    # bot we spawn below resumes the SAME session from the DB.
+    draining = _interviews.get(room_name)
+    if draining and draining.draining and draining.task and not draining.task.done():
+        logger.info(f"[Interview] {room_name} is draining; waiting before respawn")
+        try:
+            await asyncio.wait_for(asyncio.shield(draining.task), timeout=15.0)
+        except (asyncio.TimeoutError, Exception):
+            pass
+
     async with _interviews_lock:
         existing = _interviews.get(room_name)
-        if existing and existing.task and not existing.task.done():
+        if existing and not existing.draining and existing.task and not existing.task.done():
             return existing
         # prune finished
         for rn in [rn for rn, b in _interviews.items() if b.task and b.task.done()]:
@@ -829,7 +994,8 @@ async def ensure_interview(candidate_id, job_id, room_name):
 
         async def _runner():
             try:
-                await _make_and_run_bot(room_name, candidate_id, job_id, is_default=False, bot_ref=bot)
+                await _make_and_run_bot(room_name, candidate_id, job_id, is_default=False,
+                                        bot_ref=bot, session_id=session_id)
             except asyncio.CancelledError:
                 pass
             except Exception as e:
@@ -838,7 +1004,10 @@ async def ensure_interview(candidate_id, job_id, room_name):
                 bot.ready.set()
             finally:
                 async with _interviews_lock:
-                    _interviews.pop(room_name, None)
+                    # Only remove ourselves — a re-opened link may have already
+                    # replaced us with a fresh resuming bot under the same room name.
+                    if _interviews.get(room_name) is bot:
+                        _interviews.pop(room_name, None)
                 logger.info(f"[Interview {room_name}] ended; slot freed ({len(_interviews)} active)")
 
         bot.task = asyncio.create_task(_runner())

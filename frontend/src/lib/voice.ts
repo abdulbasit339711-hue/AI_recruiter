@@ -12,6 +12,8 @@ export interface InterviewValidation {
   session_id?: string | null;
   livekit_token?: string;
   livekit_url?: string;
+  // Conversation so far when resuming an interrupted interview; empty on a first join.
+  prior_transcript?: { speaker: string; text: string }[];
 }
 
 export async function validateInterview(token: string): Promise<InterviewValidation> {

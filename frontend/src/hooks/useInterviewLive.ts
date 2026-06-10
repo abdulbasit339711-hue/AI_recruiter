@@ -39,13 +39,28 @@ function mapGoals(raw: unknown): GoalRow[] {
 }
 
 /** Subscribe to the voice service's SSE stream and accumulate live interview state.
- *  Pass the interview's sessionId so the stream is scoped to this candidate only. */
-export function useInterviewLive(enabled: boolean, sessionId?: string | null): LiveState {
+ *  Pass the interview's sessionId so the stream is scoped to this candidate only.
+ *  `seed` is the conversation-so-far returned on a resume; it's shown immediately
+ *  (the SSE stream only carries NEW turns, never a replay of history). */
+export function useInterviewLive(
+  enabled: boolean,
+  sessionId?: string | null,
+  seed?: TranscriptTurn[] | null
+): LiveState {
   const [transcript, setTranscript] = useState<TranscriptTurn[]>([]);
   const [goals, setGoals] = useState<GoalRow[]>([]);
   const [judge, setJudge] = useState<JudgeEval | null>(null);
   const [connected, setConnected] = useState(false);
   const streamingRef = useRef(false);
+  const seededRef = useRef(false);
+
+  // Seed the prior conversation once (resume). Prepend so it sits before any live
+  // turn that may have already arrived; the historical turns are always older.
+  useEffect(() => {
+    if (seededRef.current || !seed || seed.length === 0) return;
+    seededRef.current = true;
+    setTranscript((prev) => [...seed, ...prev]);
+  }, [seed]);
 
   useEffect(() => {
     if (!enabled) return;
