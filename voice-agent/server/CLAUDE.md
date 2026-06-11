@@ -48,6 +48,23 @@ model alongside a judge/scoring model.
 - **Resume-on-restart:** re-opening an interview link resumes the *same* session; the DB session status (`resumed` flag) is authoritative.
 - Post-call analysis + session finalization persist scores and broadcast over SSE.
 
+### Shared-Postgres contract with the backend (IMPORTANT)
+
+The voice agent and the FastAPI backend (`app/`) share **one Postgres** (same `DATABASE_URL` /
+`DB_*`). The split of ownership is:
+
+- **Voice agent OWNS / writes:** `interview_sessions`, `session_transcripts`, `session_goals`,
+  `session_metrics`, `goal_progress_events`, `goal_templates`.
+- **Backend OWNS / writes:** `jobs`, `candidates`.
+- **Backend READS the voice tables directly** to show interview results in the HR panel —
+  see `app/main.py::get_candidate_interview` (~L691) and `get_candidate_interview_audio`,
+  which `SELECT … FROM interview_sessions/session_transcripts/session_goals/session_metrics`.
+
+Linkage: `interview_sessions.candidate_id` → `candidates.id` (FK); child rows link to the
+session by the **VARCHAR `session_id`** (not the UUID PK). This is an implicit cross-service
+contract: changing the voice schema of those tables (column names/shapes) will break the
+backend's interview endpoints, and vice-versa. Treat those columns as a shared interface.
+
 ## When something breaks
 
 Check `ERRORS_AND_SOLUTIONS.md` first — it's the running errors-and-fixes runbook for

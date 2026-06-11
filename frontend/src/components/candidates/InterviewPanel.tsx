@@ -1,10 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import toast from "react-hot-toast";
-import { Loader2, Send, ClipboardCheck } from "lucide-react";
+import { Loader2, Send, ClipboardCheck, FileText, Upload } from "lucide-react";
 
-import { api, getInterviewAudioUrl, type InterviewResult, type TurnEvaluation } from "@/lib/api";
+import {
+  api,
+  getInterviewAudioUrl,
+  getCandidateReportUrl,
+  type InterviewResult,
+  type TurnEvaluation,
+} from "@/lib/api";
 
 /**
  * Renders a candidate's AI-interview results (status, goals, assessment,
@@ -15,6 +21,8 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
   const [result, setResult] = useState<InterviewResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const resumeInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,6 +53,22 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
     }
   }
 
+  async function onResumeSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    setUploading(true);
+    try {
+      await api.replaceCandidateResume(candidateId, file);
+      toast.success("Résumé attached — re-scoring queued");
+    } catch (err) {
+      const msg = (err as { message?: string })?.message || "Upload failed";
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 p-8 text-slate-400">
@@ -57,14 +81,43 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-primary">AI Interview</h3>
-        <button
-          onClick={sendInvite}
-          disabled={sending}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-60"
-        >
-          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {result?.has_interview ? "Resend invite" : "Send invite"}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Attach / replace the candidate's résumé and re-score (works even if they had none). */}
+          <input
+            ref={resumeInputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={onResumeSelected}
+          />
+          <button
+            onClick={() => resumeInputRef.current?.click()}
+            disabled={uploading}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/5 disabled:opacity-60"
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Replace résumé
+          </button>
+          {/* One-click report (résumé score + interview assessment + transcript). */}
+          {result?.has_interview && (
+            <a
+              href={getCandidateReportUrl(candidateId, "pdf")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/5"
+            >
+              <FileText className="h-4 w-4" /> Report
+            </a>
+          )}
+          <button
+            onClick={sendInvite}
+            disabled={sending}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-60"
+          >
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {result?.has_interview ? "Resend invite" : "Send invite"}
+          </button>
+        </div>
       </div>
 
       {!result?.has_interview ? (

@@ -666,6 +666,44 @@ def reprocess_candidate(candidate_id: int, db: Session = Depends(get_db)):
     }
 
 
+@app.post("/candidates/{candidate_id}/resume", dependencies=[Depends(upload_rate_limit)])
+async def replace_candidate_resume(
+    candidate_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Attach or replace a candidate's résumé PDF, then re-score them.
+
+    Lets HR give a résumé to a candidate created without one, or swap in a corrected
+    file — reusing the same extraction + scoring pipeline as /upload."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    try:
+        file_bytes = await file.read()
+        filename = file.filename or "resume.pdf"
+        raw_text = validate_and_extract(file_bytes, filename)
+    except IngestionError as ie:
+        raise HTTPException(status_code=ie.status_code, detail=str(ie))
+
+    candidate.filename = filename
+    candidate.raw_text = raw_text
+    candidate.status = S.QUEUED
+    db.commit()
+    try:
+        enqueue_candidate(candidate_id)
+    except _queue.Full:
+        raise HTTPException(status_code=503, detail="Server is busy. Please retry in a moment.")
+    db.refresh(candidate)
+    publish_candidate_event(candidate.id, S.QUEUED, job_id=candidate.job_id, event="queued")
+    return {
+        "id": candidate.id,
+        "filename": candidate.filename,
+        "status": candidate.status,
+        "message": "Résumé attached; re-scoring queued.",
+    }
+
+
 @app.post("/jobs/{job_id}/reprocess")
 def reprocess_all_for_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -819,6 +857,122 @@ def get_candidate_interview_audio(candidate_id: int, db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="Interview audio not found.")
 
     return FileResponse(audio_path, media_type="audio/wav", filename=os.path.basename(audio_path))
+
+
+def _build_candidate_report_md(candidate: Candidate, job_title: str, interview: dict) -> str:
+    """Assemble a single Markdown report: résumé tier scores + AI-interview assessment +
+    transcript. Reuses the candidate record and the get_candidate_interview payload."""
+    def _parse(x):
+        if isinstance(x, (dict, list)):
+            return x
+        try:
+            return json.loads(x) if x else None
+        except (TypeError, ValueError):
+            return None
+
+    name = candidate.name or candidate.filename or f"Candidate {candidate.id}"
+    L = [
+        f"# Candidate Report — {name}",
+        "",
+        f"- **Job:** {job_title}",
+        f"- **Email:** {candidate.email or 'n/a'}",
+        f"- **Status:** {candidate.status}",
+        "",
+        "## Résumé score",
+        f"- Tier 1 (profile rules): {candidate.tier1}/30",
+        f"- Tier 2 (semantic match): {candidate.tier2}/40",
+        f"- Tier 3 (LLM evaluation): {candidate.tier3}/30",
+        f"- **Total: {candidate.total_score}/100**",
+    ]
+    if candidate.summary:
+        L += ["", "### Summary", candidate.summary]
+    ev = _parse(candidate.evidence)
+    if ev:
+        L += ["", "### Evidence"]
+        L += [f"- {e if isinstance(e, str) else json.dumps(e)}" for e in (ev if isinstance(ev, list) else [ev])]
+
+    L += ["", "## AI interview"]
+    if not interview.get("has_interview"):
+        L.append("_No interview conducted yet._")
+    else:
+        sess = interview.get("session") or {}
+        L += [f"- Role: {sess.get('role_type')}", f"- Status: {sess.get('status')}"]
+        oa = _parse(sess.get("overall_assessment"))
+        ov = (oa or {}).get("overall_assessment") if isinstance(oa, dict) else None
+        if isinstance(ov, dict):
+            if ov.get("hiring_recommendation"):
+                L.append(f"- **Recommendation: {ov['hiring_recommendation']}**")
+            for label, key in (("Strengths", "strengths"), ("Areas for improvement", "areas_for_improvement")):
+                vals = ov.get(key) or []
+                if vals:
+                    L.append(f"- {label}: " + "; ".join(str(v) for v in vals))
+        L.append(f"- Recording: {'available' if interview.get('has_audio') else 'none'}")
+        transcript = interview.get("transcript") or []
+        if transcript:
+            L += ["", "### Transcript"]
+            for t in transcript:
+                who = "Interviewer" if t.get("speaker") == "agent" else "Candidate"
+                L.append(f"- **{who}:** {t.get('text')}")
+    return "\n".join(L)
+
+
+def _markdown_to_pdf_bytes(md: str, title: str) -> bytes:
+    """Render the report Markdown to a simple PDF via reportlab (headings + bullets)."""
+    import io, re, html
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=LETTER, title=title)
+    styles = getSampleStyleSheet()
+    flow = []
+    for raw in md.split("\n"):
+        line = raw.rstrip()
+        if not line:
+            flow.append(Spacer(1, 6))
+            continue
+        if line.startswith("### "):
+            style, line = styles["Heading3"], line[4:]
+        elif line.startswith("## "):
+            style, line = styles["Heading2"], line[3:]
+        elif line.startswith("# "):
+            style, line = styles["Title"], line[2:]
+        else:
+            style = styles["BodyText"]
+        text = html.escape(line.lstrip("- ") if line.startswith("- ") else line)
+        text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+        if raw.startswith("- "):
+            text = "• " + text
+        flow.append(Paragraph(text, style))
+    doc.build(flow)
+    return buf.getvalue()
+
+
+@app.get("/candidates/{candidate_id}/report")
+def candidate_report(candidate_id: int, format: str = Query("md", pattern="^(md|pdf)$"),
+                     db: Session = Depends(get_db)):
+    """One-click report combining the résumé score and the AI-interview assessment."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    job = db.query(Job).filter(Job.id == candidate.job_id).first()
+    interview = get_candidate_interview(candidate_id, db)  # reuse the existing assembler
+    md = _build_candidate_report_md(candidate, job.title if job else "n/a", interview)
+    stem = f"candidate_{candidate_id}_report"
+    if format == "pdf":
+        try:
+            pdf = _markdown_to_pdf_bytes(md, title=stem)
+        except ImportError:
+            raise HTTPException(status_code=501, detail="PDF export requires reportlab (pip install reportlab).")
+        import io
+        return StreamingResponse(
+            io.BytesIO(pdf), media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{stem}.pdf"'},
+        )
+    return PlainTextResponse(
+        md, headers={"Content-Disposition": f'attachment; filename="{stem}.md"'}
+    )
 
 
 @app.post("/candidates/{candidate_id}/interview-invite")

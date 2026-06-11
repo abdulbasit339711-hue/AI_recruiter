@@ -53,6 +53,10 @@ export function getInterviewAudioUrl(candidateId: number): string {
   return `${API_BASE_URL}/candidates/${candidateId}/interview-audio`;
 }
 
+export function getCandidateReportUrl(candidateId: number, format: "md" | "pdf" = "pdf"): string {
+  return `${API_BASE_URL}/candidates/${candidateId}/report?format=${format}`;
+}
+
 export interface InterviewResult {
   has_interview: boolean;
   has_audio?: boolean;
@@ -245,6 +249,19 @@ export const api = {
     candidateId: number
   ): Promise<{ id: number; status: string; message: string }> {
     const response = await client.post(`/candidates/${candidateId}/reprocess`);
+    return response.data;
+  },
+
+  // Attach/replace an existing candidate's résumé PDF and re-score them.
+  async replaceCandidateResume(
+    candidateId: number,
+    file: File
+  ): Promise<{ id: number; filename: string; status: string; message: string }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await client.post(`/candidates/${candidateId}/resume`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
     return response.data;
   },
 
