@@ -4,8 +4,8 @@ import sys
 import json
 from datetime import datetime, timezone
 
-# Add the project root to sys.path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add the project root (parent of scripts/) to sys.path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import engine, Base, SessionLocal, run_migrations
 from app.models import Candidate, Job

@@ -3,8 +3,8 @@ import sys
 import json
 from datetime import datetime, timezone
 
-# Add the project root to sys.path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add the project root (parent of scripts/) to sys.path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import SessionLocal
 from app.models import Candidate, Job
@@ -86,7 +86,7 @@ def generate_report():
             report_md.append("\n---\n")
 
         # Save to file
-        report_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recruitment_report.md")
+        report_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recruitment_report.md")
         with open(report_path, "w", encoding="utf-8") as f:
             f.write("\n".join(report_md))
 

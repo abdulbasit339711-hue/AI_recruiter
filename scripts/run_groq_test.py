@@ -12,9 +12,9 @@ os.environ.pop('HTTP_PROXY', None)
 os.environ.pop('HTTPS_PROXY', None)
 os.environ.pop('NO_PROXY', None)
 
-# Ensure the project root is on PYTHONPATH so imports resolve correctly
-PROJECT_ROOT = r'C:\Users\basit\.gemini\antigravity-ide\scratch\ai-recruiter'
-sys.path.append(PROJECT_ROOT)
+# Ensure the project root (parent of scripts/) is on PYTHONPATH so imports resolve correctly
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 # ---------------------------------------------------------------------
 # Import the application components

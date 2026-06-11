@@ -4,15 +4,15 @@ import json
 from dotenv import load_dotenv
 
 # Load environment variables (including GROQ_API_KEY)
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '.env'))
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'))
 
 # Ensure proxies are cleared (just in case)
 for var in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy"]:
     os.environ.pop(var, None)
 
-# Add project root to PYTHONPATH for imports
-PROJECT_ROOT = r"C:\Users\basit\.gemini\antigravity-ide\scratch\ai-recruiter"
-sys.path.append(PROJECT_ROOT)
+# Add project root (parent of scripts/) to PYTHONPATH for imports
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 # Import the necessary components
 from app.database import SessionLocal

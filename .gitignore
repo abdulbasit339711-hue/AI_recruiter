@@ -42,3 +42,7 @@ Thumbs.db
 
 # Runtime interview audio recordings (candidate PII) — not source
 /data/
+
+# Generated artifacts (regenerable via scripts/) — not source
+/project_code_summary.txt
+/recruitment_report.md

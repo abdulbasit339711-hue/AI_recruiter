@@ -8,8 +8,33 @@ AI-Recruiter is a multi-tier automated recruitment system with:
 - **FastAPI backend** for API endpoints and scoring engine
 - **Next.js 15 frontend** for HR admin dashboard
 - **Pipecat voice agent** for real-time candidate interviews
-- **SQLite database** with jobs and candidates tables
+- **SQLite (default) / PostgreSQL** database with jobs and candidates tables
 - **3-Tier Scoring Engine** (Profile Rules, Semantic Similarity, LLM Evaluation)
+
+> **Per-component guides:** each subproject has its own agent guide (mirrored as `GEMINI.md` / `ANTIGRAVITY.md`):
+> [`app/CLAUDE.md`](app/CLAUDE.md) (backend), [`frontend/CLAUDE.md`](frontend/CLAUDE.md), [`pipecat-quickstart/server/CLAUDE.md`](pipecat-quickstart/server/CLAUDE.md) (voice bot).
+
+## Architecture
+
+```
+            HR Administrator
+                  │  Next.js dashboard → same-origin /api/admin proxy (injects admin token)
+                  ▼
+           FastAPI backend  (:8000)
+        ┌─────────┴─────────┐
+        ▼                   ▼
+    jobs table         candidates table
+  (JDs & prompts)     (scores & job_id FK)
+        │                   ▲
+        └─── 3-Tier Scoring Pipeline ───┐  (writes scores back)
+             Tier 1  Profile rules        (spaCy, /30)
+             Tier 2  Semantic similarity  (sentence-transformers, /40)
+             Tier 3  LLM evaluation       (Groq, gated, /30)
+                  │
+                  ▼
+         Pipecat voice interview bot  (:7860)
+       real-time STT → LLM → TTS screening over WebRTC/LiveKit
+```
 
 ## Essential Commands
 
@@ -26,9 +51,9 @@ pip install -r ../requirements.txt
 uvicorn app.main:app --reload  # API runs on http://127.0.0.1:8000
 
 # Testing
-python test_scoring.py         # Test scoring engine
-python test_hr_endpoints.py    # Test HR endpoints
-pytest tests/                  # Run all backend tests
+python scripts/test_scoring.py       # Test scoring engine
+python scripts/test_hr_endpoints.py  # Test HR endpoints
+pytest tests/                        # Run all backend tests
 ```
 
 ### Frontend (Next.js)
@@ -45,17 +70,22 @@ npm run lint   # ESLint check
 cd pipecat-quickstart/server
 uv sync                        # Install dependencies
 cp .env.example .env          # Configure API keys
-uv run bot.py                 # WebRTC mode
-uv run bot.py --transport livekit  # LiveKit mode
+uv run runner.py              # Interview server on :7860 (use THIS to run the voice service)
 pytest                        # Run voice agent tests
 ```
 
-### Database Operations
-```bash
-# SQLite database location: recruiter.db
-# Schema includes: jobs, candidates tables
-# Jobs have soft-delete via status field (Active/Archived)
-```
+**Important:** `runner.py` is the interview HTTP server — it owns `/interview/validate`,
+`/events`, `/chat`, and `/token`, and spawns a `bot.py` worker per interview. Run
+`runner.py`, not `bot.py`. Starting `bot.py` directly binds :7860 with only the Pipecat
+WebRTC server, which lacks `/interview/validate`, so every interview link 404s.
+
+### Database
+
+SQLite by default (`ai_recruiter.db`); override with `DATABASE_URL` for PostgreSQL.
+Jobs use soft-delete (`status` = Active/Archived) to preserve candidate history.
+
+- **`jobs`** — `id`, `title`, `department`, `job_description`, `llm_prompt` (custom Tier-3 prompt), `status`, `created_at`
+- **`candidates`** — `id`, `filename`, `email`, `raw_text`, `job_id` (FK → `jobs.id`), `tier1` (/30), `tier2` (/40), `tier3` (/30), `total_score` (/100), `summary`, `evidence` (JSON), `status` (Pending/Processed/Failed), `created_at`
 
 ## Architecture & Key Components
 
@@ -76,7 +106,8 @@ pytest                        # Run voice agent tests
 - **lib/**: Utilities including CSV export functionality
 
 ### Voice Agent (pipecat-quickstart/server/)
-- **bot.py**: Main bot implementation with STT→LLM→TTS pipeline
+- **runner.py**: Interview HTTP server (run this) — routes `/interview/validate`, `/events`, `/chat`, `/token`; spawns a bot worker per interview
+- **bot.py**: Per-interview bot worker with STT→LLM→TTS pipeline (launched by runner.py, not run directly)
 - **question_flow_processor.py**: Interview state machine
 - **transcript_accumulator.py**: Conversation tracking
 - Uses Deepgram (STT), OpenAI (LLM), Cartesia (TTS)
@@ -84,7 +115,7 @@ pytest                        # Run voice agent tests
 ## Critical Implementation Details
 
 ### Scoring Engine Flow
-1. PDF resumes uploaded via `/upload_resume` endpoint
+1. PDF resumes uploaded via the `/upload` endpoint
 2. Text extraction with pdfplumber
 3. Profile validation (Tier 1) using spaCy
 4. Semantic matching (Tier 2) with sentence-transformers
@@ -121,9 +152,12 @@ CARTESIA_API_KEY=your_cartesia_key  # For Pipecat
 
 ## Key API Endpoints
 
-- `POST /jobs`: Create new job opening
-- `GET /jobs`: List active jobs
-- `POST /upload_resume`: Process candidate resume
-- `GET /candidates/{job_id}`: Get ranked candidates for job
-- `DELETE /candidates/{id}`: Remove candidate
-- `PUT /jobs/{id}`: Update job (including archival)
+(See `app/main.py` for the full surface.)
+
+- `POST /jobs` / `GET /jobs`: Create / list jobs
+- `GET|PUT|PATCH|DELETE /jobs/{job_id}`: Retrieve / update / soft-archive a job
+- `POST /upload`: Process a candidate resume (links to a `job_id`)
+- `GET /jobs/{job_id}/candidates`: Ranked candidates for a job
+- `GET /candidates/{id}`: Candidate detail; `PATCH /candidates/{id}/status`, `/score-override`; `POST /candidates/{id}/notes`
+- `GET /jobs/{job_id}/events`, `GET /candidates/{id}/events`: Server-Sent Events (live score updates)
+- `POST /candidates/{id}/interview-invite`, `GET /candidates/{id}/interview`: Voice interview lifecycle
