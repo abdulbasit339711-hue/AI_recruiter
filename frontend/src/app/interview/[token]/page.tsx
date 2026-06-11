@@ -47,10 +47,19 @@ export default function InterviewPage() {
   // asynchronously (after connect, outside the click gesture). Track that so we can
   // show a "tap to enable sound" prompt and call room.startAudio() on a gesture.
   const [audioBlocked, setAudioBlocked] = useState(false);
+  // Whether the AI interviewer (the "recruiter-bot" participant) is in the room.
+  // null = not yet known / still connecting; false = it has left (session ended/timed out).
+  const [agentPresent, setAgentPresent] = useState<boolean | null>(null);
+  // Demo / watch mode (link opened with ?demo=1): the candidate answers are injected
+  // by the mock driver and only show as captions, so the browser SPEAKS them with a
+  // distinct voice — letting you watch a full two-voice interview without a mic.
+  // (Off by default, so a real candidate's own captions are never read back to them.)
+  const [demoMode, setDemoMode] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const startRef = useRef<number | null>(null);
+  const spokenRef = useRef<Set<string>>(new Set());
 
   // Subscribe to the live transcript stream as soon as the link is validated —
   // not only once "live" — otherwise the bot's opening greeting (broadcast right
@@ -81,6 +90,31 @@ export default function InterviewPage() {
       roomRef.current?.disconnect();
     };
   }, [token]);
+
+  // Enable demo/watch mode from the URL (?demo=1) — read on the client to avoid a
+  // Suspense boundary requirement around useSearchParams.
+  useEffect(() => {
+    setDemoMode(new URLSearchParams(window.location.search).get("demo") === "1");
+  }, []);
+
+  // Demo mode: speak each NEW candidate caption aloud (browser speechSynthesis) with a
+  // distinct voice, so the mock candidate is audible alongside the interviewer's voice.
+  useEffect(() => {
+    if (!demoMode || typeof window === "undefined" || !window.speechSynthesis) return;
+    for (const t of transcript) {
+      if (t.speaker === "agent") continue; // interviewer is voiced by the bot over LiveKit
+      const key = `${t.speaker}:${t.text}`;
+      if (spokenRef.current.has(key)) continue;
+      spokenRef.current.add(key);
+      const u = new SpeechSynthesisUtterance(t.text);
+      u.rate = 1.05;
+      u.pitch = 1.15; // slightly higher → clearly distinct from the interviewer
+      window.speechSynthesis.speak(u);
+    }
+  }, [transcript, demoMode]);
+
+  // Stop any candidate speech when leaving.
+  useEffect(() => () => window.speechSynthesis?.cancel(), []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -126,7 +160,19 @@ export default function InterviewPage() {
       room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
         setAudioBlocked(!room.canPlaybackAudio);
       });
+      // Track the AI interviewer's presence so the candidate can SEE when the bot
+      // joins or leaves (e.g. on session end / idle timeout). The bot joins the room
+      // as "recruiter-bot" before the candidate.
+      const isAgent = (p: Participant) => p.identity === "recruiter-bot";
+      room.on(RoomEvent.ParticipantConnected, (p: Participant) => {
+        if (isAgent(p)) setAgentPresent(true);
+      });
+      room.on(RoomEvent.ParticipantDisconnected, (p: Participant) => {
+        if (isAgent(p)) setAgentPresent(false);
+      });
       await room.connect(info.livekit_url, info.livekit_token);
+      // Seed from whoever is already in the room (the bot is normally there first).
+      setAgentPresent([...room.remoteParticipants.values()].some(isAgent));
       // Join is a user gesture, so this usually unblocks remote audio immediately.
       try {
         await room.startAudio();
@@ -303,6 +349,28 @@ export default function InterviewPage() {
             <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-zinc-500"}`} />
             {connected ? "Live" : "Connecting"}
           </span>
+          {/* Interviewer (bot) presence — so the candidate knows if it joined or left. */}
+          <span
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
+              agentPresent === false
+                ? "bg-red-900/40 text-red-300"
+                : agentPresent
+                ? "bg-emerald-900/40 text-emerald-300"
+                : "bg-zinc-800 text-zinc-400"
+            }`}
+          >
+            <Bot className="h-3 w-3" />
+            {agentPresent === false
+              ? "Interviewer left"
+              : agentPresent
+              ? "Interviewer present"
+              : "Interviewer connecting…"}
+          </span>
+          {demoMode && (
+            <span className="flex items-center gap-1.5 rounded-full bg-amber-900/40 px-2.5 py-1 text-amber-300">
+              <User className="h-3 w-3" /> Demo voice
+            </span>
+          )}
         </div>
       </header>
 

@@ -18,7 +18,10 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${outfit.variable} font-sans`} suppressHydrationWarning>
-      <body className="bg-background text-foreground min-h-screen flex flex-col antialiased selection:bg-primary/20">
+      <body
+        suppressHydrationWarning
+        className="bg-background text-foreground min-h-screen flex flex-col antialiased selection:bg-primary/20"
+      >
         <Providers>
           {children}
         </Providers>
