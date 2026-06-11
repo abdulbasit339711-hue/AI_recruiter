@@ -7,9 +7,7 @@
 # Individual servers:
 #   make backend    # FastAPI   -> http://127.0.0.1:8000
 #   make frontend   # Next.js   -> http://localhost:3000
-#   make voice      # Pipecat voice agent (WebRTC)
-#
-# Override the voice transport:  make voice TRANSPORT=livekit
+#   make voice      # Pipecat interview server (runner.py) -> http://127.0.0.1:7860
 
 .DEFAULT_GOAL := help
 
@@ -18,7 +16,6 @@ PYTHON ?= python
 BACKEND_HOST ?= 127.0.0.1
 BACKEND_PORT ?= 8000
 FRONTEND_PORT ?= 3000
-TRANSPORT ?= webrtc
 PIPECAT_DIR := voice-agent/server
 LOG_DIR := logs
 
@@ -43,8 +40,8 @@ frontend: ## Run the Next.js frontend dev server
 	cd frontend && npm run dev -- --port $(FRONTEND_PORT)
 
 .PHONY: voice
-voice: ## Run the Pipecat voice agent (TRANSPORT=webrtc|livekit)
-	cd $(PIPECAT_DIR) && uv run bot.py $(if $(filter-out webrtc,$(TRANSPORT)),--transport $(TRANSPORT),)
+voice: ## Run the Pipecat interview server (runner.py on :7860 — NOT bot.py)
+	cd $(PIPECAT_DIR) && uv run runner.py
 
 # ---- Setup / install --------------------------------------------------------
 .PHONY: install
