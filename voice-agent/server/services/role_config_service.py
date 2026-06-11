@@ -177,6 +177,28 @@ async def build_recruiter_config(job: dict, candidate: dict | None = None) -> Re
         goals, questions = _generic_config()
         source = "generic"
 
+    # Résumé-tailored preset questions (generated during Tier-3 scoring) — ask these
+    # FIRST so the interviewer probes this candidate's specific experience before the
+    # generic role questions.
+    resume_qs: list[str] = []
+    if candidate and candidate.get("interview_questions"):
+        try:
+            import json as _json
+            resume_qs = [q for q in _json.loads(candidate["interview_questions"])
+                         if isinstance(q, str) and q.strip()]
+        except (TypeError, ValueError):
+            resume_qs = []
+    if resume_qs:
+        goals = [InterviewGoal(id="resume_specific", label="Résumé deep-dive",
+                               description="Probe the candidate's specific résumé claims and experience.",
+                               weight=0.5)] + goals
+        questions = [
+            InterviewQuestion(id=f"rq{i+1}", text=q, goal_id="resume_specific",
+                              expected_depth=AnswerDepth.MEDIUM, expected_theme="resume experience")
+            for i, q in enumerate(resume_qs)
+        ] + questions
+        source += "+resume"
+
     logger.info(
         f"[RoleConfig] role='{job_role}' slug='{role_slug}' "
         f"goals={len(goals)} questions={len(questions)} source={source}"

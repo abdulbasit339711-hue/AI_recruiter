@@ -448,6 +448,24 @@ export default function AdminCandidatesPage() {
                 </ul>
               </div>
 
+              {/* Résumé-tailored interview questions (generated at scoring time) */}
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
+                <h3 className="mb-3 text-sm font-semibold text-primary">Suggested interview questions</h3>
+                <ol className="list-decimal space-y-2 pl-5">
+                  {parseList(selected?.interview_questions).map((q: string, idx: number) => (
+                    <li key={idx} className="text-sm text-muted-foreground">{q}</li>
+                  ))}
+                  {parseList(selected?.interview_questions).length === 0 && (
+                    <li className="list-none text-sm text-muted-foreground">
+                      None yet — generated when the résumé is scored by the LLM (Tier 3).
+                    </li>
+                  )}
+                </ol>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  The AI interviewer asks these as presets at the start of the interview.
+                </p>
+              </div>
+
               {/* Recruitment Notes Panel */}
               {selected && (
                 <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
@@ -508,6 +526,7 @@ export default function AdminCandidatesPage() {
 
               <div className="space-y-2 text-sm border-t border-white/5 pt-3">
                 <p><span className="text-muted-foreground text-xs block">Role:</span> {selected?.current_role || "-"}</p>
+                <p><span className="text-muted-foreground text-xs block">Experience:</span> {selected?.years_experience != null ? `${selected.years_experience} yrs` : "-"}</p>
                 <p><span className="text-muted-foreground text-xs block">Companies:</span> {parseList(selected?.companies).join(", ") || "-"}</p>
                 <p><span className="text-muted-foreground text-xs block">Submitted:</span> {selected ? new Date(selected.created_at).toLocaleString() : "-"}</p>
               </div>

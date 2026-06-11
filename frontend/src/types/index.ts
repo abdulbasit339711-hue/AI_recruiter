@@ -38,8 +38,10 @@ export interface Candidate {
   evaluation_data?: string | null;
   current_role?: string | null;
   companies?: string | null;
+  years_experience?: number | null;
   skills_matched?: string | null;
   skills_missing?: string | null;
+  interview_questions?: string | null;
   status: CandidateStatus;
   created_at: string;
 

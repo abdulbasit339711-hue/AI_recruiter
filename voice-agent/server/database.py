@@ -223,7 +223,8 @@ class DatabaseManager:
     async def get_candidate(self, candidate_id: int) -> Optional[Dict[str, Any]]:
         """Read a candidate (owned by the main API) from the shared database."""
         return await self.fetch_one(
-            "SELECT id, name, email, job_id, current_role FROM candidates WHERE id = $1",
+            "SELECT id, name, email, job_id, current_role, years_experience, "
+            "interview_questions FROM candidates WHERE id = $1",
             candidate_id,
         )
 

@@ -71,6 +71,11 @@ def _apply_tier3_fields(candidate: Candidate, t3: dict) -> None:
     candidate.tier3 = float(t3.get("tier3_score", 0.0))
     candidate.summary = t3.get("summary", "")
     candidate.evidence = json.dumps(t3.get("evidence", []))
+    candidate.interview_questions = json.dumps(t3.get("interview_questions", []))
+    try:
+        candidate.years_experience = float(t3.get("total_years_experience", 0) or 0)
+    except (TypeError, ValueError):
+        candidate.years_experience = None
     candidate.evaluation_data = json.dumps(t3)
 
     usage = t3.get("usage") or {}

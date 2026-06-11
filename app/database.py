@@ -83,6 +83,8 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN llm_prompt_tokens INTEGER",
         "ALTER TABLE candidates ADD COLUMN llm_completion_tokens INTEGER",
         "ALTER TABLE candidates ADD COLUMN llm_cost_usd FLOAT",
+        "ALTER TABLE candidates ADD COLUMN years_experience FLOAT",
+        "ALTER TABLE candidates ADD COLUMN interview_questions TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

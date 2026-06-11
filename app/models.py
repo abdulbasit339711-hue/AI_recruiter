@@ -50,8 +50,12 @@ class Candidate(Base):
 
     current_role = Column(String, nullable=True)
     companies = Column(Text, nullable=True)
+    years_experience = Column(Float, nullable=True)
     skills_matched = Column(Text, nullable=True)
     skills_missing = Column(Text, nullable=True)
+    # Résumé-tailored interview questions (JSON list) generated during Tier-3 scoring;
+    # used as interviewer presets and shown in the HR panel.
+    interview_questions = Column(Text, nullable=True)
 
     status = Column(String, default="Queued")
     created_at = Column(String, nullable=True)

@@ -58,8 +58,10 @@ class CandidateResponse(BaseModel):
     evaluation_data: Optional[str] = None
     current_role: Optional[str] = None
     companies: Optional[str] = None
+    years_experience: Optional[float] = None
     skills_matched: Optional[str] = None
     skills_missing: Optional[str] = None
+    interview_questions: Optional[str] = None
     status: str
     created_at: Optional[str] = None
     

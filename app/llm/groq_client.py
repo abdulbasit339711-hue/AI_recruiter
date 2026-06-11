@@ -57,6 +57,8 @@ class Tier3Evaluation(BaseModel):
     status: str = ""
     summary: str = ""
     evidence: List[str] = Field(default_factory=list)
+    # Résumé-tailored interview questions the AI interviewer asks as presets.
+    interview_questions: List[str] = Field(default_factory=list)
 
     @field_validator("summary")
     @classmethod
@@ -122,7 +124,8 @@ def _build_system_prompt(custom_prompt: Optional[str], llm_wt: int) -> str:
         f'  "tier3_score": <integer 0-{llm_wt}>,\n'
         '  "status": "<Shortlisted|Reviewed|Rejected>",\n'
         '  "summary": "<100-150 word recruiter-style summary>",\n'
-        '  "evidence": ["<concrete evidence>", "..."]\n'
+        '  "evidence": ["<concrete evidence>", "..."],\n'
+        '  "interview_questions": ["<résumé-specific interview question>", "..."]\n'
         "}"
     )
     output_rules = (
@@ -130,7 +133,11 @@ def _build_system_prompt(custom_prompt: Optional[str], llm_wt: int) -> str:
         f"- Return ONLY valid JSON matching:\n{schema}\n"
         "- No markdown, code fences, or text outside JSON.\n"
         "- summary MUST be 100-150 words: direct recruiter tone, strongest positive signal, "
-        "biggest gap, experience relevance, role alignment."
+        "biggest gap, experience relevance, role alignment.\n"
+        "- interview_questions: 4-6 questions TAILORED to THIS candidate — probe their "
+        "specific projects, companies, and claims from the résumé, and the biggest gap vs "
+        "the job description. Phrase each as the interviewer would ask it aloud (one "
+        "sentence, no preamble)."
     )
 
     if custom_prompt and custom_prompt.strip():
