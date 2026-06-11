@@ -124,23 +124,10 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
           )}
 
           <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <h4 className="mb-3 text-sm font-semibold">Goal scores</h4>
+            <h4 className="mb-3 text-sm font-semibold">Goals · questions &amp; answers</h4>
             <ul className="space-y-3">
               {(result.goals ?? []).map((g) => (
-                <li key={g.title}>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span>{g.title}</span>
-                    <span className="text-slate-400">
-                      {g.completion_status} · {Math.round((Number(g.progress_score) || 0) * 100)}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-                    <div
-                      className="h-full rounded-full bg-blue-500"
-                      style={{ width: `${Math.min(100, Math.round((Number(g.progress_score) || 0) * 100))}%` }}
-                    />
-                  </div>
-                </li>
+                <GoalRow key={g.title} goal={g} />
               ))}
               {(result.goals ?? []).length === 0 && (
                 <li className="text-xs text-slate-400">No goals recorded.</li>
@@ -178,10 +165,59 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-3">
       <div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-1 text-sm font-semibold">{value}</div>
+      <div className="mt-1 truncate text-sm font-semibold" title={value}>{value}</div>
     </div>
+  );
+}
+
+/** One goal with its progress, planned questions, and the candidate's answer evidence. */
+function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number] }) {
+  const pct = Math.min(100, Math.round((Number(goal.progress_score) || 0) * 100));
+  const questions = goal.questions ?? [];
+  const evidence = goal.evidence ?? [];
+  const hasDetail = questions.length > 0 || evidence.length > 0;
+  return (
+    <li>
+      <div className="mb-1 flex justify-between gap-2 text-xs">
+        <span className="min-w-0 truncate" title={goal.title}>{goal.title}</span>
+        <span className="shrink-0 text-slate-400">
+          {goal.completion_status} · {pct}%
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+      </div>
+      {hasDetail && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[11px] text-slate-400">Questions &amp; answers</summary>
+          {questions.length > 0 && (
+            <div className="mt-2">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Questions</div>
+              <ul className="ml-4 mt-1 list-disc text-xs text-slate-300">
+                {questions.map((q, i) => <li key={i}>{q}</li>)}
+              </ul>
+            </div>
+          )}
+          {evidence.length > 0 && (
+            <div className="mt-2">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">Candidate answers</div>
+              <ul className="mt-1 space-y-1">
+                {evidence.map((e, i) => (
+                  <li
+                    key={i}
+                    className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-xs italic text-slate-300"
+                  >
+                    “{e.text}”
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </details>
+      )}
+    </li>
   );
 }
 

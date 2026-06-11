@@ -1,17 +1,14 @@
 "use client";
 
 import React, { Suspense } from "react";
-import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Phone, CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function SuccessContent() {
   const { jobId } = useParams<{ jobId: string }>();
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const token = searchParams.get("t");
 
   return (
     <section className="flex min-h-[80vh] items-center justify-center p-4">
@@ -23,31 +20,21 @@ function SuccessContent() {
         <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
         <h1 className="mt-4 text-2xl font-semibold">Application received</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Your resume has been queued for review.
-          {token
-            ? " You can take your AI interview right now — it only takes a few minutes."
-            : " Our recruiting team will follow up if your profile matches the role."}
+          Thanks for applying! Your resume has been received and is being reviewed by our team.
         </p>
 
-        {token && (
-          <div className="mt-6 rounded-xl border border-primary/20 bg-primary/10 p-5">
-            <p className="text-sm font-medium">Ready to start your AI interview?</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              You&apos;ll speak with our AI recruiter. Make sure your microphone is enabled.
-            </p>
-            <Link href={`/interview/${token}`}>
-              <Button className="mt-4 w-full gap-2" size="lg">
-                <Phone className="h-4 w-4" /> Start AI interview now
-              </Button>
-            </Link>
-          </div>
-        )}
+        <div className="mt-6 flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-left">
+          <Mail className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+          <p className="text-sm text-muted-foreground">
+            If your profile matches the role, our recruiting team will email you an invitation to
+            take the AI interview. No further action is needed right now.
+          </p>
+        </div>
 
         <Button
           onClick={() => router.push(`/applicant/${jobId}`)}
-          className="mt-4 w-full"
+          className="mt-6 w-full"
           size="lg"
-          variant={token ? "ghost" : "default"}
         >
           Back to job details
         </Button>

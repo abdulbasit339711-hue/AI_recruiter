@@ -78,6 +78,9 @@ export interface InterviewResult {
     completion_status: string;
     progress_score: number;
     confidence_level: number;
+    // Planned questions for this goal + the candidate-answer evidence gathered for it.
+    questions?: string[];
+    evidence?: { text: string }[];
   }[];
   metrics?: {
     interview: {
