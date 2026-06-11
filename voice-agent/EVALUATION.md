@@ -1,6 +1,6 @@
 # Pipecat Voice Agent: Architecture Evaluation & Critiques
 
-This document provides an objective evaluation and critique of the current architecture and implementation of the Pipecat Voice Agent (`pipecat-quickstart`) sub-project.
+This document provides an objective evaluation and critique of the current architecture and implementation of the Pipecat Voice Agent (`voice-agent`) sub-project.
 
 ---
 

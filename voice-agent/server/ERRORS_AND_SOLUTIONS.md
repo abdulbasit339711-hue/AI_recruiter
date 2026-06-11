@@ -1,6 +1,6 @@
 # Voice Agent — Errors & Solutions Runbook
 
-A reference of errors hit in the Pipecat voice agent (`pipecat-quickstart/server/`)
+A reference of errors hit in the Pipecat voice agent (`voice-agent/server/`)
 and how they were resolved. Grouped by area. Search this file by the error text
 before debugging from scratch.
 

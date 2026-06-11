@@ -1,6 +1,6 @@
 # Refactoring Plan: Pipecat Bot Service - COMPLETED
 
-This document outlines the technical debt and planned improvements for `pipecat-quickstart/server/runner.py`.
+This document outlines the technical debt and planned improvements for `voice-agent/server/runner.py`.
 
 ## Technical Debt / Areas for Improvement
 

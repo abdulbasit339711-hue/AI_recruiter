@@ -38,7 +38,7 @@ The dashboard (`index.html`) is resilient to network drops. Upon loading, it fet
 ## 🚦 Operational Workflows
 
 ### Running the Full Stack
-1. **Navigate to server**: `cd pipecat-quickstart/server`
+1. **Navigate to server**: `cd voice-agent/server`
 2. **Install**: `uv sync`
 3. **Run**: `uv run runner.py`
 4. **Access Dashboard**: `http://127.0.0.1:7860`

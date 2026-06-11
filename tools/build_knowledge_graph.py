@@ -35,7 +35,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 # ---- subsystem roots: (label, base_dir, kind) -----------------------------
 PY_ROOTS = [
     ("backend", ROOT / "app", "app"),
-    ("voice", ROOT / "pipecat-quickstart" / "server", None),
+    ("voice", ROOT / "voice-agent" / "server", None),
     ("shared", ROOT / "packages" / "shared", None),
 ]
 FRONTEND_SRC = ROOT / "frontend" / "src"
@@ -48,7 +48,7 @@ def subsystem_of(path: Path) -> str:
     p = str(path)
     if "/frontend/" in p:
         return "frontend"
-    if "/pipecat-quickstart/" in p:
+    if "/voice-agent/" in p:
         return "voice"
     if "/packages/" in p:
         return "shared"

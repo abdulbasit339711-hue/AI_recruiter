@@ -128,7 +128,7 @@ async def test_get_session_progress_absent_returns_none():
 
 async def test_session_status_drives_resume_detection(session_id):
     """The authoritative resume flag = prior status in (active, interrupted)."""
-    def resumed(status):  # mirrors bot_manager_dual.configure_session
+    def resumed(status):  # mirrors bot_manager.configure_session
         return status in ("active", "interrupted")
 
     assert await db_manager.get_session_status(session_id) == "active"
@@ -184,7 +184,7 @@ async def test_full_restore_lands_on_next_question(session_id):
     assert restored.current_question is not None and restored.current_question.id == "q2"
 
     # The LLM resume instruction should name the covered topic and point at q2.
-    from bot_manager_dual import BotManager
+    from bot_manager import BotManager
     summary = BotManager._resume_context_summary(restored)
     assert "do NOT restart" in summary
     assert "Tell me about a recent project." in summary   # covered topic listed

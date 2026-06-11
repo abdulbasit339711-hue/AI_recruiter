@@ -12,7 +12,7 @@ AI-Recruiter is a multi-tier automated recruitment system with:
 - **3-Tier Scoring Engine** (Profile Rules, Semantic Similarity, LLM Evaluation)
 
 > **Per-component guides:** each subproject has its own agent guide (mirrored as `GEMINI.md` / `ANTIGRAVITY.md`):
-> [`app/CLAUDE.md`](app/CLAUDE.md) (backend), [`frontend/CLAUDE.md`](frontend/CLAUDE.md), [`pipecat-quickstart/server/CLAUDE.md`](pipecat-quickstart/server/CLAUDE.md) (voice bot).
+> [`app/CLAUDE.md`](app/CLAUDE.md) (backend), [`frontend/CLAUDE.md`](frontend/CLAUDE.md), [`voice-agent/server/CLAUDE.md`](voice-agent/server/CLAUDE.md) (voice bot).
 
 ## Architecture
 
@@ -67,7 +67,7 @@ npm run lint   # ESLint check
 
 ### Voice Agent (Pipecat)
 ```bash
-cd pipecat-quickstart/server
+cd voice-agent/server
 uv sync                        # Install dependencies
 cp .env.example .env          # Configure API keys
 uv run runner.py              # Interview server on :7860 (use THIS to run the voice service)
@@ -105,7 +105,7 @@ Jobs use soft-delete (`status` = Active/Archived) to preserve candidate history.
 - **hooks/**: API integration with React Query and Zustand state management
 - **lib/**: Utilities including CSV export functionality
 
-### Voice Agent (pipecat-quickstart/server/)
+### Voice Agent (voice-agent/server/)
 - **runner.py**: Interview HTTP server (run this) — routes `/interview/validate`, `/events`, `/chat`, `/token`; spawns a bot worker per interview
 - **bot.py**: Per-interview bot worker with STT→LLM→TTS pipeline (launched by runner.py, not run directly)
 - **question_flow_processor.py**: Interview state machine

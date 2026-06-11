@@ -19,7 +19,7 @@ BACKEND_HOST ?= 127.0.0.1
 BACKEND_PORT ?= 8000
 FRONTEND_PORT ?= 3000
 TRANSPORT ?= webrtc
-PIPECAT_DIR := pipecat-quickstart/server
+PIPECAT_DIR := voice-agent/server
 LOG_DIR := logs
 
 # ---- Aggregate targets ------------------------------------------------------

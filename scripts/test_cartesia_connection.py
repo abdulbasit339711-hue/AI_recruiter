@@ -9,7 +9,7 @@ from loguru import logger
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('websockets').setLevel(logging.DEBUG)
 
-load_dotenv("pipecat-quickstart/server/.env")
+load_dotenv("voice-agent/server/.env")
 
 async def test_cartesia():
     api_key = os.getenv("CARTESIA_API_KEY")

@@ -36,7 +36,7 @@ from interview_session import (
 )
 from processors.transcript_accumulator import TranscriptAccumulator
 from processors.question_flow_processor import QuestionFlowProcessor
-from fixed_json_parser import FixedLLMResponseParser
+from llm_response_parser import FixedLLMResponseParser
 from events.broadcaster import broadcaster
 
 load_dotenv(override=True)

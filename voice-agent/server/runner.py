@@ -39,7 +39,7 @@ from pipecat.workers.runner import WorkerRunner
 load_dotenv(override=True)
 
 # Import Recruiter-specific components
-from bot_manager_dual import BotManager
+from bot_manager import BotManager
 from events.broadcaster import broadcaster
 
 try:
@@ -385,7 +385,7 @@ async def interview_debug(session_id: str):
         logger.error(f"[Interview] debug lookup failed for {session_id}: {e}")
         return {"session_id": session_id, "error": str(e)}
 
-    # Mirror the resume rule in bot_manager_dual.configure_session.
+    # Mirror the resume rule in bot_manager.configure_session.
     resumable = status in ("active", "interrupted")
     states = (progress or {}).get("question_states", {})
     return {

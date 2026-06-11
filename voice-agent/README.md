@@ -14,12 +14,12 @@ A Pipecat-powered AI voice interviewer with a high-fidelity dashboard.
 ### 1. Install Dependencies
 Navigate to the server directory and sync using `uv`:
 ```bash
-cd pipecat-quickstart/server
+cd voice-agent/server
 uv sync
 ```
 
 ### 2. Configure Environment
-Create a `.env` file in `pipecat-quickstart/server/` with:
+Create a `.env` file in `voice-agent/server/` with:
 - `GROQ_API_KEY`
 - `DEEPGRAM_API_KEY`
 - `CARTESIA_API_KEY`
@@ -35,7 +35,7 @@ Access the dashboard at **`http://127.0.0.1:7860`**.
 ## 🏗️ Project Structure
 
 ```
-pipecat-quickstart/
+voice-agent/
 ├── server/
 │   ├── runner.py        # Main entry point (FastAPI + Bot)
 │   ├── bot_manager.py   # Pipeline orchestration

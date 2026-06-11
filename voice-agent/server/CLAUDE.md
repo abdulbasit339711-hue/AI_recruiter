@@ -1,12 +1,12 @@
 # AI-Recruiter — Voice Bot (Pipecat)
 
-Scope: documents `pipecat-quickstart/server/` — the real-time voice interview agent.
+Scope: documents `voice-agent/server/` — the real-time voice interview agent.
 Whole-repo overview is in the root `CLAUDE.md`.
 
 ## ⚠️ Run `runner.py`, not `bot.py`
 
 ```bash
-cd pipecat-quickstart/server
+cd voice-agent/server
 uv sync
 cp .env.example .env            # fill in API keys + DB connection
 uv run runner.py                # interview HTTP server on :7860
@@ -20,14 +20,14 @@ every interview link 404s. Requires Python ≥ 3.11.
 ## Pipeline
 
 Deepgram (STT) → LLM → Cartesia (TTS), streamed over WebRTC/LiveKit. A dual-LLM setup
-(`bot_manager_dual.py` + `processors/judge_processor.py`) runs a primary conversational
+(`bot_manager.py` + `processors/judge_processor.py`) runs a primary conversational
 model alongside a judge/scoring model.
 
 ## Layout
 
 - `runner.py` — interview HTTP server + per-interview worker spawner (**the entrypoint**).
 - `bot.py` — per-interview pipeline worker (launched by `runner.py`, not run directly).
-- `bot_manager_dual.py` — dual-LLM orchestration.
+- `bot_manager.py` — dual-LLM orchestration.
 - `session_factory.py`, `interview_session.py` — session lifecycle + domain model.
 - `database.py` — `DatabaseConfig` / `db_manager` (PostgreSQL).
 - `processors/` — Pipecat `FrameProcessor`s:
@@ -35,7 +35,7 @@ model alongside a judge/scoring model.
   - `transcript_accumulator.py` — conversation tracking.
   - `goal_tracking_processor.py` + `adaptive_questioning_processor.py` — goal-driven adaptive follow-ups.
   - `judge_processor.py` — dual-LLM scoring/judging.
-  - `resilient_tts.py` — TTS with failover; `working_processors.py` — transcript/metrics helpers.
+  - `resilient_tts.py` — TTS with failover; `transcript_metrics_processors.py` — transcript/metrics helpers.
 - `services/` — `goal_tracking_service.py`, `role_config_service.py`.
 - `events/broadcaster.py` — SSE pub/sub for the dashboard. `core/metrics.py`. `llm/json_parser.py`.
 - `alembic/` + `scripts/bootstrap_db.py` — schema migrations / first-run bootstrap.
@@ -69,7 +69,3 @@ CARTESIA_API_KEY=...    # TTS
 GROQ_API_KEY=...        # judge / scoring LLM
 # + PostgreSQL connection vars (see .env.example)
 ```
-
-
----
-_This file mirrors `CLAUDE.md` in this directory. The three agent guides (`CLAUDE.md`, `GEMINI.md`, `ANTIGRAVITY.md`) are kept identical — update all three together._

@@ -57,11 +57,11 @@ This file consolidates all useful commands for developing, running, testing, and
 
 ## Voice Agent (Pipecat)
 
-> The voice agent lives under `pipecat-quickstart/server/`.
+> The voice agent lives under `voice-agent/server/`.
 
 - **Install dependencies**
   ```bash
-  cd pipecat-quickstart/server
+  cd voice-agent/server
   uv sync
   ```
 

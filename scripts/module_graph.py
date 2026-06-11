@@ -10,7 +10,7 @@ ignored, since the point is to show how *our* modules relate.
 
 Covers three Python roots and the TS frontend:
   - app/                          (package `app.*`)
-  - pipecat-quickstart/server/    (top-level: `database`, `processors.x`, ...)
+  - voice-agent/server/    (top-level: `database`, `processors.x`, ...)
   - packages/shared/              (package `recruiter_shared.*`)
   - frontend/src/                 (relative imports + `@/` alias)
 
@@ -33,7 +33,7 @@ REPO = Path(__file__).resolve().parent.parent
 # acts as the module search path; module names are computed relative to it.
 PY_ROOTS = [
     ("app", REPO / "app", REPO),                       # imported as app.*
-    ("voice", REPO / "pipecat-quickstart" / "server", REPO / "pipecat-quickstart" / "server"),
+    ("voice", REPO / "voice-agent" / "server", REPO / "voice-agent" / "server"),
     ("shared", REPO / "packages" / "shared", REPO / "packages" / "shared"),
 ]
 TS_ROOT = REPO / "frontend" / "src"
@@ -43,7 +43,7 @@ EXCLUDE_DIRS = {".venv", "venv", "__pycache__", "node_modules", ".next", ".git",
 # Subsystem assignment for grouping (by repo-relative path prefix).
 SUBSYSTEMS = [
     ("Backend API (app/)", "app/"),
-    ("Voice agent (server/)", "pipecat-quickstart/server/"),
+    ("Voice agent (server/)", "voice-agent/server/"),
     ("Shared package", "packages/shared/"),
     ("Frontend (frontend/src/)", "frontend/src/"),
 ]
