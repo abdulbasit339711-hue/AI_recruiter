@@ -29,6 +29,7 @@ from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import Speec
 from pipecat.services.cartesia.tts import CartesiaHttpTTSService
 from processors.resilient_tts import ResilientCartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.services.groq.llm import GroqLLMService
 from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.workers.runner import WorkerRunner
@@ -192,6 +193,7 @@ from fastapi.responses import JSONResponse
 _PROTECTED_VOICE_ROUTES = {
     ("POST", "/interview/configure"),
     ("POST", "/chat"),
+    ("POST", "/interview/end"),
     ("POST", "/settings"),
     ("POST", "/pipeline"),
 }
@@ -507,6 +509,26 @@ async def manual_chat(request: Request):
     await target.inject_text(text)
     return {"status": "received"}
 
+
+@app.post("/interview/end")
+async def end_interview(request: Request):
+    """End an interview NOW so it finalizes immediately — saving the recording and
+    running the post-call evaluation — instead of waiting for the idle timeout. Used
+    by the mock driver when it finishes; cancelling the worker triggers
+    finalize_session in _make_and_run_bot's finally block."""
+    data = await request.json()
+    session = data.get("session")
+    if not session:
+        return {"error": "no session provided"}
+    for b in _interviews.values():
+        if b.session_id == session and b.manager:
+            try:
+                await b.manager.worker.cancel()
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"could not end: {e}"}
+            return {"status": "ending"}
+    return {"error": "interview not found or already ended"}
+
 @app.post("/interview/configure")
 async def configure_interview(request: Request):
     """Select which candidate+job the next interview is for, and configure it now.
@@ -775,11 +797,20 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
     )
-    tts = ResilientCartesiaTTSService(
-        api_key=os.environ["CARTESIA_API_KEY"],
-        settings=ResilientCartesiaTTSService.Settings(
-            voice=os.getenv("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121")),
-    )
+    # TTS provider. Cartesia returned HTTP 402 (account out of credits), so the bot
+    # was silent. Default to Deepgram Aura (uses the same working DEEPGRAM_API_KEY as
+    # STT); set TTS_PROVIDER=cartesia to switch back once Cartesia billing is restored.
+    if os.getenv("TTS_PROVIDER", "deepgram").lower() == "cartesia":
+        tts = ResilientCartesiaTTSService(
+            api_key=os.environ["CARTESIA_API_KEY"],
+            settings=ResilientCartesiaTTSService.Settings(
+                voice=os.getenv("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121")),
+        )
+    else:
+        tts = DeepgramTTSService(
+            api_key=os.environ["DEEPGRAM_API_KEY"],
+            voice=os.getenv("DEEPGRAM_VOICE", "aura-2-thalia-en"),
+        )
     context = LLMContext()
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
@@ -850,9 +881,13 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
                 pass
             await _persist_agent_line(manager, sid, greeting)
             from pipecat.frames.frames import TTSSpeakFrame, LLMRunFrame
-            await manager.pipeline.push_frame(TTSSpeakFrame(greeting))
+            # Inject at the pipeline SOURCE (transport input) so the frame flows DOWN
+            # the chain to the TTS — same path inject_text() uses. Pushing on
+            # manager.pipeline pushes OUT of the pipeline, so the TTS never sees it
+            # and the bot stays silent.
+            await manager.transport.input().push_frame(TTSSpeakFrame(greeting))
             # Let the LLM produce the next question from the restored history + summary.
-            await manager.pipeline.push_frame(LLMRunFrame())
+            await manager.transport.input().push_frame(LLMRunFrame())
             return
 
         greeting = (
@@ -872,7 +907,9 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         # without this an early reload would find an empty transcript and replay the intro.
         await _persist_agent_line(manager, sid, greeting)
         from pipecat.frames.frames import TTSSpeakFrame
-        await manager.pipeline.push_frame(TTSSpeakFrame(greeting))
+        # Inject at the pipeline SOURCE (transport input) so it reaches the TTS —
+        # manager.pipeline.push_frame pushes OUT of the pipeline, leaving the bot silent.
+        await manager.transport.input().push_frame(TTSSpeakFrame(greeting))
 
     @transport.event_handler("on_connected")
     async def on_connected(transport, *args):

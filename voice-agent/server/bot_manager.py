@@ -92,9 +92,15 @@ class BotManager:
             logger.info("[BotManager] Initializing SINGLE LLM pipeline")
             self.pipeline = self._create_single_pipeline()
 
-        # Create worker
+        # Create worker.
+        # idle_timeout_secs: a real candidate often pauses to think between answers;
+        # the default idle window tore interviews down after ~1 min of silence (and
+        # took voice + chat with it). Give a generous 10-minute idle window so normal
+        # think-pauses don't end the call, while still freeing the slot if the
+        # candidate truly vanishes (a participant disconnect ends it immediately).
         self.worker = PipelineWorker(
             self.pipeline,
+            idle_timeout_secs=600,
             params=PipelineParams(
                 enable_metrics=True,
                 enable_usage_metrics=True,
