@@ -182,6 +182,23 @@ class DatabaseManager:
             job_id,
         )
 
+    async def update_goal_template(
+        self, template_id: str, *, title: str, description: str,
+        question_templates: list, priority_weight: float,
+    ) -> None:
+        """Edit a goal template in place (FK-safe — keeps the id, so existing
+        session_goals references stay valid). Used by the per-job question editor."""
+        await self.execute_query(
+            """
+            UPDATE goal_templates
+            SET title = $2, description = $3, question_templates = $4::jsonb,
+                priority_weight = $5, updated_at = NOW()
+            WHERE id = $1::uuid
+            """,
+            template_id, title, description,
+            json.dumps(question_templates), float(priority_weight),
+        )
+
     async def add_goal_template(self, t: Dict[str, Any]) -> Optional[str]:
         """Insert a goal template (used to cache LLM-generated role configs)."""
         query = """

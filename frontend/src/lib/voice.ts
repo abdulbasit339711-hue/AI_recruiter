@@ -3,6 +3,38 @@
 export const VOICE_BASE_URL =
   process.env.NEXT_PUBLIC_VOICE_URL || "http://127.0.0.1:7860";
 
+export interface QuestionGoal {
+  id: string;
+  title: string;
+  description: string;
+  priority_weight: number;
+  questions: string[];
+}
+
+// The interview question bank for a job (resolved to its role) — read/edit via the
+// voice service, which owns goal_templates.
+export async function getJobQuestions(
+  jobId: number
+): Promise<{ job_id: number; role_type: string; goals: QuestionGoal[] }> {
+  const res = await fetch(`${VOICE_BASE_URL}/jobs/${jobId}/questions`);
+  if (!res.ok) throw new Error(`Failed to load questions (${res.status})`);
+  return res.json();
+}
+
+export async function updateJobGoal(goal: QuestionGoal): Promise<void> {
+  const res = await fetch(`${VOICE_BASE_URL}/goals/templates/${goal.id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: goal.title,
+      description: goal.description,
+      priority_weight: goal.priority_weight,
+      questions: goal.questions,
+    }),
+  });
+  if (!res.ok) throw new Error(`Failed to save (${res.status})`);
+}
+
 export interface InterviewValidation {
   valid: boolean;
   error?: string;

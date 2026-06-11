@@ -752,6 +752,66 @@ async def get_goal_templates(role_type: str):
         logger.error(f"[API] Failed to get templates: {e}")
         return {"error": str(e)}
 
+
+def _qt_list(v):
+    """question_templates comes back from JSONB as a list or a JSON string."""
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            parsed = json.loads(v)
+            return parsed if isinstance(parsed, list) else []
+        except (TypeError, ValueError):
+            return []
+    return []
+
+
+@app.get("/jobs/{job_id}/questions")
+async def get_job_questions(job_id: int):
+    """The interview question bank for a job, resolved to its role. Questions are stored
+    per ROLE (goal_templates.role_type), so jobs sharing a role share this bank."""
+    from database import db_manager
+    from recruiter_shared import normalize_role_type
+    job = await db_manager.get_job(job_id)
+    if not job:
+        return {"error": "job not found"}
+    role_slug = normalize_role_type(job.get("role_type") or job.get("title") or "")
+    templates = await db_manager.get_goal_templates(role_slug)
+    return {
+        "job_id": job_id,
+        "role_type": role_slug,
+        "goals": [
+            {
+                "id": str(t["id"]),
+                "title": t.get("title") or "",
+                "description": t.get("description") or "",
+                "priority_weight": float(t.get("priority_weight") or 0.5),
+                "questions": _qt_list(t.get("question_templates")),
+            }
+            for t in templates
+        ],
+    }
+
+
+@app.put("/goals/templates/{template_id}")
+async def update_goal_template_api(template_id: str, request: Request):
+    """Edit one goal's title/description/questions in place (FK-safe)."""
+    from database import db_manager
+    data = await request.json()
+    try:
+        await db_manager.update_goal_template(
+            template_id,
+            title=str(data.get("title", "")),
+            description=str(data.get("description", "")),
+            question_templates=[str(q) for q in (data.get("questions") or []) if str(q).strip()],
+            priority_weight=float(data.get("priority_weight", 0.5)),
+        )
+        return {"status": "updated", "id": template_id}
+    except Exception as e:
+        logger.error(f"[API] Failed to update goal template {template_id}: {e}")
+        return {"error": str(e)}
+
+
 async def _persist_agent_line(manager, session_id, text):
     """Persist a directly-spoken agent line (greeting) to the transcript.
 
