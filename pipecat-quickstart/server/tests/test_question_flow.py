@@ -22,7 +22,7 @@ from interview_session import (
     InterviewStatus,
     RecruiterConfig,
 )
-from question_flow_processor import (
+from processors.question_flow_processor import (
     QuestionFlowProcessor,
     _answer_is_sufficient,
     _filler_ratio,

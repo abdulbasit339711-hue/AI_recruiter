@@ -6,9 +6,9 @@ between turns so the bot can reply and the goal-tracking analysis (throttled to 
 analysis per ~5s) can run. Watch the dashboard or the bot logs to see goals progress.
 
 Usage:
-    uv run python test_conversations/replay_conversation.py
-    uv run python test_conversations/replay_conversation.py --file test_conversations/backend_engineer_interview.json --delay 9
-    uv run python test_conversations/replay_conversation.py --url http://127.0.0.1:7860
+    uv run python tests/test_conversations/replay_conversation.py
+    uv run python tests/test_conversations/replay_conversation.py --file tests/test_conversations/backend_engineer_interview.json --delay 9
+    uv run python tests/test_conversations/replay_conversation.py --url http://127.0.0.1:7860
 """
 import argparse
 import json

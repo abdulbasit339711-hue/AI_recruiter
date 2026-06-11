@@ -19,11 +19,14 @@ class InterviewSetupError(Exception):
     """Raised when the candidate/job can't be resolved for an interview."""
 
 
-async def create_session_for(candidate_id: int, job_id: int):
+async def create_session_for(candidate_id: int, job_id: int, session_id: str | None = None):
     """Resolve the job + candidate from the shared DB and build an InterviewSession.
 
     The role-specific questions/goals/system prompt come from the role config
     service (curated templates, with LLM fallback from the job description).
+
+    A caller-supplied ``session_id`` makes the session deterministic per interview link
+    so re-opening the same link resumes the SAME session (no new row / no overwrite).
     """
     await db_manager._ensure_pool()
 
@@ -40,6 +43,7 @@ async def create_session_for(candidate_id: int, job_id: int):
         candidate_name=candidate.get("name"),
         config=config,
         job_id=job_id,
+        session_id=session_id,
     )
     logger.info(
         f"[SessionFactory] Built interview for candidate {candidate_id} / job {job_id} "

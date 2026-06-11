@@ -208,8 +208,11 @@ class GoalTrackingProcessor(FrameProcessor):
             logger.error(f"[GoalTracking] Failed to get question suggestion: {e}")
             return None
 
-    async def finalize_session_goals(self):
-        """Perform final goal analysis when session ends"""
+    async def finalize_session_goals(self, graceful: bool = True):
+        """Perform final goal analysis when session ends.
+
+        ``graceful`` is True when the interview reached its natural end (all questions
+        covered); False when it was interrupted (so the session stays resumable)."""
         if not self.goals_initialized:
             return
 
@@ -224,7 +227,7 @@ class GoalTrackingProcessor(FrameProcessor):
             if isinstance(final_analysis, dict) and "error" not in final_analysis:
                 try:
                     await db_manager.finalize_session_record(
-                        self.session.session_id, json.dumps(final_analysis)
+                        self.session.session_id, json.dumps(final_analysis), completed=graceful
                     )
                 except Exception as e:
                     logger.error(f"[GoalTracking] Failed to persist final assessment: {e}")

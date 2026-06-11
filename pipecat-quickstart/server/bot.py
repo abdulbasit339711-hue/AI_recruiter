@@ -34,8 +34,8 @@ from interview_session import (
     InterviewSession, RecruiterConfig, InterviewQuestion,
     InterviewGoal, FollowUpPrompt, AnswerDepth
 )
-from transcript_accumulator import TranscriptAccumulator
-from question_flow_processor import QuestionFlowProcessor
+from processors.transcript_accumulator import TranscriptAccumulator
+from processors.question_flow_processor import QuestionFlowProcessor
 from fixed_json_parser import FixedLLMResponseParser
 from events.broadcaster import broadcaster
 
@@ -150,15 +150,21 @@ def build_interview_session(
     candidate_name: str | None,
     config: RecruiterConfig,
     job_id: int | None = None,
+    session_id: str | None = None,
 ) -> InterviewSession:
     """Assemble an InterviewSession for a specific candidate from a prepared config.
 
     candidate_id / job_id are carried for DB linkage (interview_sessions.candidate_id/job_id).
+    A caller-supplied ``session_id`` makes the session deterministic per interview link, so
+    re-opening the same link resumes the SAME session row instead of creating a new one;
+    when omitted, a random UUID is used.
     """
+    kwargs = {"session_id": session_id} if session_id else {}
     session = InterviewSession(
         candidate_id=str(candidate_id),
         candidate_name=candidate_name or "Candidate",
         config=config,
+        **kwargs,
     )
     # Carry the numeric DB ids for linkage (read defensively elsewhere).
     session.db_candidate_id = int(candidate_id) if str(candidate_id).isdigit() else None

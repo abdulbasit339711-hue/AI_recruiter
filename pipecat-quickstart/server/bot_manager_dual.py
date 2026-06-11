@@ -9,8 +9,8 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
-from working_processors import WorkingTranscriptProcessor, WorkingMetricsProcessor
-from judge_processor import JudgeProcessor, DualLLMContextProcessor
+from processors.working_processors import WorkingTranscriptProcessor, WorkingMetricsProcessor
+from processors.judge_processor import JudgeProcessor, DualLLMContextProcessor
 from bot import create_interview_session
 from services.goal_tracking_service import GoalTrackingService
 from processors.goal_tracking_processor import GoalTrackingProcessor, GoalAwareTranscriptProcessor
