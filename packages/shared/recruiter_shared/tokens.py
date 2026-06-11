@@ -4,8 +4,9 @@ Used by the API to mint a link when a candidate is shortlisted, and by the voice
 service to validate it when the candidate opens the link. Both import THIS module
 so the claim shape and signing stay identical.
 
-Validity model (see plan): default short TTL (~10 min) from mint; optionally a
-hard ±5-min window around a scheduled ``slot_at`` (nbf = slot-5m, exp = slot+5m).
+Validity model (see plan): default TTL (60 min) from mint; optionally a
+scheduled ``slot_at`` window opening 15 min before the slot and closing 60 min
+after it (nbf = slot-15m, exp = slot+60m).
 """
 
 from __future__ import annotations
@@ -18,8 +19,9 @@ import jwt
 
 TOKEN_TYPE = "interview_invite"
 _ALGO = "HS256"
-_DEFAULT_TTL_MINUTES = 10
-_SLOT_WINDOW_SECONDS = 5 * 60
+_DEFAULT_TTL_MINUTES = 60
+_SLOT_PRE_SECONDS = 15 * 60   # link opens 15 min before the scheduled slot
+_SLOT_POST_SECONDS = 60 * 60  # link closes 60 min after the scheduled slot
 _LEEWAY_SECONDS = 10  # tolerate small clock skew
 
 
@@ -49,13 +51,14 @@ def mint_invite_token(
 ) -> str:
     """Create a signed invite token bound to (candidate_id, job_id).
 
-    If ``slot_at`` (unix seconds) is given, the token is valid only within
-    ±5 minutes of it; otherwise it is valid for ``ttl_minutes`` from now.
+    If ``slot_at`` (unix seconds) is given, the token opens 15 minutes before it
+    and closes 60 minutes after it; otherwise it is valid for ``ttl_minutes``
+    from now.
     """
     issued = int(now if now is not None else time.time())
     if slot_at is not None:
-        nbf = int(slot_at) - _SLOT_WINDOW_SECONDS
-        exp = int(slot_at) + _SLOT_WINDOW_SECONDS
+        nbf = int(slot_at) - _SLOT_PRE_SECONDS
+        exp = int(slot_at) + _SLOT_POST_SECONDS
     else:
         nbf = issued
         exp = issued + ttl_minutes * 60

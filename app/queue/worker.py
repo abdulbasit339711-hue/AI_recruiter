@@ -69,23 +69,9 @@ def _worker_loop() -> None:
                 publish_candidate_event(candidate_id, S.QUEUED, job_id=job_id, event="queued")
             evaluate_candidate_pipeline(candidate_id, db)
 
-            # Auto-send the interview invite when the candidate is shortlisted.
-            # Runs in its OWN session so an email/DB hiccup here can never roll back
-            # or corrupt the already-committed scoring write above.
-            try:
-                invite_db = SessionLocal()
-                try:
-                    cand = invite_db.query(Candidate).filter(Candidate.id == candidate_id).first()
-                    if cand and S.is_shortlisted_for_email(cand.status) and not cand.interview_invited_at:
-                        from ..services.interview_invite import invite_candidate
-                        from ..models import Job
-                        job = invite_db.query(Job).filter(Job.id == cand.job_id).first()
-                        if job:
-                            invite_candidate(invite_db, cand, job)
-                finally:
-                    invite_db.close()
-            except Exception as e:  # never fail scoring on invite issues
-                logger.error("Interview invite step failed for candidate %d: %s", candidate_id, e)
+            # No interview invite is minted here. Invites are sent only when HR
+            # explicitly triggers POST /candidates/{id}/interview-invite after review —
+            # never automatically as a side effect of an applicant's upload.
 
             elapsed_ms = (time.perf_counter() - started) * 1000
             logger.info(

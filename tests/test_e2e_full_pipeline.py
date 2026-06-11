@@ -302,7 +302,9 @@ def test_full_recruitment_pipeline(monkeypatch, capsys):
         candidate_id = payload["id"]
         assert payload["status"] == S.QUEUED
         assert payload["job_id"] == job_id
-        assert payload.get("interview_token")  # apply flow hands back an interview link
+        # Upload must NOT hand back an interview link: invites are minted only when HR
+        # explicitly triggers them after review, never self-service from the apply flow.
+        assert "interview_token" not in payload
         log(f"[2] applicant uploaded     id={candidate_id} status={payload['status']}")
 
         # --- 3. Resume evaluation (Tier 1 + Tier 2 + Tier 3) ------------------

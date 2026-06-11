@@ -253,7 +253,12 @@ def simulate_tier3_evaluation(
     resume_words = set(re.findall(r"\b[a-z]{4,15}\b", resume_lower))
     common_words = jd_words.intersection(resume_words)
     match_count = len(common_words)
-    simulated_score = min(max_score, 10 + int(match_count / 2))
+    # Scale by how much of the JD's vocabulary the resume covers, so different resumes
+    # spread across the range instead of all clustering at a flat floor (the old
+    # `10 + match_count/2` collapsed to ~10 whenever the JD was short). A small base
+    # keeps a weak-but-present match from scoring zero.
+    coverage = (match_count / len(jd_words)) if jd_words else 0.0
+    simulated_score = round(min(float(max_score), max_score * (0.2 + 0.8 * coverage)), 1)
 
     evidence = []
     for keyword, label in [

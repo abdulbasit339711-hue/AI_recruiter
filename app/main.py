@@ -340,25 +340,15 @@ async def upload_resume(
             event="queued",
         )
 
-        # Mint a short-lived self-service interview link tied to THIS upload, so the
-        # applicant can start the AI call immediately. Returned once, here only.
-        # Non-fatal: if interview links aren't configured, just omit it.
-        interview_token = None
-        interview_url = None
-        try:
-            from .interview_links import mint_link
-            interview_token, interview_url = mint_link(candidate.id, job_id, ttl_minutes=60)
-        except Exception as e:  # noqa: BLE001 - link minting must never block an upload
-            logger.warning("Self-service interview link not minted for candidate %d: %s", candidate.id, e)
-
+        # Note: no interview link is minted here. Interview invites are sent only from
+        # the HR admin dashboard (POST /candidates/{id}/interview-invite) after review —
+        # never self-service from the applicant upload flow.
         return {
             "id": candidate.id,
             "filename": candidate.filename,
             "job_id": candidate.job_id,
             "status": candidate.status,
             "message": "Resume queued for evaluation.",
-            "interview_token": interview_token,
-            "interview_url": interview_url,
         }
 
     except IngestionError as ie:
@@ -728,8 +718,12 @@ def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
         "SELECT speaker, text, sequence_number, evaluation FROM session_transcripts "
         "WHERE session_id = :sid ORDER BY sequence_number"
     ), {"sid": sid}).mappings().all()
+    # Include each goal's planned questions (goal_templates.question_templates) and the
+    # candidate-answer evidence gathered for it (session_goals.evidence), so HR can see
+    # the goal-related questions and the candidate's answers alongside the goal score.
     goals = db.execute(text(
-        "SELECT gt.title, sg.completion_status, sg.progress_score, sg.confidence_level "
+        "SELECT gt.title, sg.completion_status, sg.progress_score, sg.confidence_level, "
+        "gt.question_templates, sg.evidence "
         "FROM session_goals sg JOIN goal_templates gt ON sg.goal_template_id = gt.id "
         "WHERE sg.session_id = :sid ORDER BY gt.priority_weight DESC"
     ), {"sid": sid}).mappings().all()
@@ -766,12 +760,31 @@ def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
     session_dict = dict(sess)
     has_audio = bool(session_dict.pop("audio_path", None))
 
+    def _norm_goal(g) -> dict:
+        """Flatten a goal row into {title, status, scores, questions[], evidence[{text}]}.
+        question_templates / evidence are jsonb whose items may be plain strings or dicts."""
+        d = dict(g)
+        qt = d.pop("question_templates", None) or []
+        d["questions"] = [
+            (q if isinstance(q, str) else (q.get("text") or q.get("question") or "")).strip()
+            for q in (qt if isinstance(qt, list) else [])
+        ]
+        d["questions"] = [q for q in d["questions"] if q]
+        ev = d.get("evidence") or []
+        d["evidence"] = [
+            {"text": (e if isinstance(e, str)
+                      else (e.get("text") or e.get("quote") or e.get("evidence_text") or "")).strip()}
+            for e in (ev if isinstance(ev, list) else [])
+        ]
+        d["evidence"] = [e for e in d["evidence"] if e["text"]]
+        return d
+
     return {
         "has_interview": True,
         "has_audio": has_audio,
         "session": session_dict,
         "transcript": [dict(t) for t in transcript],
-        "goals": [dict(g) for g in goals],
+        "goals": [_norm_goal(g) for g in goals],
         "metrics": {
             "interview": interview_metrics,
             "scoring": scoring_metrics,

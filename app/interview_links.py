@@ -26,7 +26,7 @@ def _secret() -> str:
 def mint_link(candidate_id: int, job_id: int, *, ttl_minutes: int | None = None,
               slot_at: int | None = None) -> tuple[str, str]:
     """Return (token, full_url) for a candidate's interview."""
-    ttl = ttl_minutes if ttl_minutes is not None else int(os.getenv("INTERVIEW_LINK_TTL_MIN", "10"))
+    ttl = ttl_minutes if ttl_minutes is not None else int(os.getenv("INTERVIEW_LINK_TTL_MIN", "60"))
     token = mint_invite_token(candidate_id, job_id, _secret(), ttl_minutes=ttl, slot_at=slot_at)
     base = os.getenv("WEB_BASE_URL", "http://localhost:3000").rstrip("/")
     return token, f"{base}/interview/{token}"
