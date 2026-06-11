@@ -1,11 +1,15 @@
+import asyncio
+import os
+
 from loguru import logger
 from pipecat.frames.frames import (
     Frame,
     TranscriptionFrame,
     LLMRunFrame,
     BotConnectedFrame,
+    EndTaskFrame,
 )
-from pipecat.processors.frame_processor import FrameProcessor
+from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.processors.aggregators.llm_context import LLMContext
 from interview_session import (
     InterviewSession,
@@ -248,6 +252,19 @@ class QuestionFlowProcessor(FrameProcessor):
         session.end()
         await broadcaster.broadcast("status", {"status": "completed"})
         logger.info(f"[flow] interview complete. goals covered: {covered}/{total}")
+
+        # End the pipeline shortly after the closing line is spoken so the worker
+        # terminates and runner._make_and_run_bot's finally block finalizes the session
+        # (saves the recording + runs the post-call evaluation) immediately — instead of
+        # waiting out the idle timeout. Delay lets the goodbye TTS actually play.
+        grace = float(os.getenv("INTERVIEW_CLOSE_GRACE_SECS", "14"))
+
+        async def _end_after_closing():
+            await asyncio.sleep(grace)
+            logger.info("[flow] ending pipeline to finalize the completed interview")
+            await self.push_frame(EndTaskFrame(), FrameDirection.UPSTREAM)
+
+        asyncio.create_task(_end_after_closing())
 
     async def _inject_instruction(self, instruction: str):
         """

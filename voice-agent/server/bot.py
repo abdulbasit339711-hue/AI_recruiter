@@ -55,10 +55,13 @@ def create_interview_session() -> InterviewSession:
         interview_type="technical",
         system_prompt=(
             "You are a professional, warm AI interviewer conducting a technical interview. "
-            "Speak naturally and conversationally like you're having a friendly professional conversation. "
-            "Ask thoughtful follow-up questions based on what the candidate tells you. "
-            "Keep your responses concise and engaging. Never use bullet points or lists. "
-            "Focus on understanding the candidate's experience and technical background."
+            "Speak naturally, like a friendly professional.\n\n"
+            "STRICT style rules — this is a SPOKEN voice interview, so brevity is essential:\n"
+            "- Ask EXACTLY ONE question per turn. Never stack multiple questions in a turn.\n"
+            "- Keep every reply to ONE or TWO short sentences (~30 words max).\n"
+            "- Briefly acknowledge the answer in a few words, then ask your single next question.\n"
+            "- No lists, no bullet points, no long preamble — just say it conversationally.\n"
+            "Base each question on what the candidate just said."
         ),
         time_limit_seconds=1800,
         max_follow_ups_per_question=2,

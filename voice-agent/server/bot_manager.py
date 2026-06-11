@@ -273,9 +273,14 @@ class BotManager:
         try:
             from database import db_manager
             prior_status = await db_manager.get_session_status(session.session_id)
-            self.resumed = prior_status in ("active", "interrupted")
-
             prior = await db_manager.get_transcript(session.session_id)
+            # A session row is created at VALIDATE time (status 'active') BEFORE the
+            # candidate first joins, so 'active' alone is NOT a resume — that made fresh
+            # interviews greet "Welcome back". Only resume when there's real prior
+            # conversation persisted (the opening line is persisted now), or the prior
+            # run was finalized as 'interrupted'.
+            self.resumed = (prior_status == "interrupted") or bool(prior)
+
             if prior:
                 for entry in prior:
                     role = "assistant" if entry.get("speaker") == "agent" else "user"

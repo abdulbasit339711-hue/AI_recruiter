@@ -27,7 +27,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import SpeechTimeoutUserTurnStopStrategy
 from pipecat.services.cartesia.tts import CartesiaHttpTTSService
-from processors.resilient_tts import ResilientCartesiaTTSService
+from processors.resilient_tts import ResilientCartesiaTTSService, ResilientDeepgramTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.services.groq.llm import GroqLLMService
@@ -253,6 +253,10 @@ async def health():
     else:
         status = "initializing"
     svc = "connected" if default_ready else ("error" if err else "initializing")
+    # Surface the configured providers + whether TTS has degraded (e.g. ran out of
+    # credits) so a silently-broken provider is visible to operators, not hidden.
+    tts_obj = getattr(bot_manager, "tts", None) if bot_manager else None
+    tts_degraded = getattr(tts_obj, "degraded_reason", None) if tts_obj else None
     return {
         "status": status,
         "default_bot_running": default_running,
@@ -262,6 +266,12 @@ async def health():
         "default_room": DEFAULT_ROOM,
         "session": bot_manager.session.session_id if (bot_manager and bot_manager.session) else "none",
         "services": {"STT": svc, "LLM": svc, "TTS": svc},
+        "providers": {
+            "stt": "deepgram",
+            "llm": f"groq:{os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')}",
+            "tts": os.getenv("TTS_PROVIDER", "deepgram").lower(),
+            "tts_degraded": tts_degraded,
+        },
     }
 
 @app.get("/token")
@@ -807,7 +817,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
                 voice=os.getenv("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121")),
         )
     else:
-        tts = DeepgramTTSService(
+        tts = ResilientDeepgramTTSService(
             api_key=os.environ["DEEPGRAM_API_KEY"],
             voice=os.getenv("DEEPGRAM_VOICE", "aura-2-thalia-en"),
         )
