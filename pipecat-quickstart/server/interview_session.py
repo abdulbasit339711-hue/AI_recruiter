@@ -1,10 +1,18 @@
 # interview_session.py
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List, Dict
 from uuid import uuid4
+
+
+def _utcnow() -> datetime:
+    """Naive UTC timestamp — drop-in for the deprecated stdlib utcnow().
+
+    Returns a naive datetime so it stays comparable with other naive timestamps in
+    this module (e.g. ended_at − started_at) and keeps `.isoformat()` output stable."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────────
@@ -204,7 +212,7 @@ class InterviewSession:
     def elapsed_seconds(self) -> float:
         if not self.started_at:
             return 0.0
-        end = self.ended_at or datetime.utcnow()
+        end = self.ended_at or _utcnow()
         return (end - self.started_at).total_seconds()
 
     @property
@@ -226,17 +234,17 @@ class InterviewSession:
 
     def start(self):
         self.status = InterviewStatus.ACTIVE
-        self.started_at = datetime.utcnow()
+        self.started_at = _utcnow()
 
     def mark_question_asked(self, question_id: str):
         if question_id in self.question_states:
             self.question_states[question_id].status = GoalStatus.IN_PROGRESS
-            self.question_states[question_id].asked_at = datetime.utcnow()
+            self.question_states[question_id].asked_at = _utcnow()
 
     def mark_question_answered(self, question_id: str, status: GoalStatus):
         if question_id in self.question_states:
             self.question_states[question_id].status = status
-            self.question_states[question_id].answered_at = datetime.utcnow()
+            self.question_states[question_id].answered_at = _utcnow()
 
     def increment_follow_up(self, question_id: str):
         if question_id in self.question_states:
@@ -297,7 +305,7 @@ class InterviewSession:
         self.transcript.append(TranscriptTurn(
             speaker=speaker,
             text=text,
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             question_id=question_id,
             is_follow_up=is_follow_up,
         ))
@@ -305,26 +313,26 @@ class InterviewSession:
     def log_connection_event(self, event_type: str, detail: str = ""):
         self.connection_events.append(ConnectionEvent(
             event_type=event_type,
-            timestamp=datetime.utcnow(),
+            timestamp=_utcnow(),
             detail=detail,
         ))
 
     def end(self, status: InterviewStatus = InterviewStatus.COMPLETED):
         self.status = status
-        self.ended_at = datetime.utcnow()
+        self.ended_at = _utcnow()
 
     # ── Dashboard write helpers ──────────────────────────────────────────────
 
     def add_evaluation(self, evaluation: Dict):
         self.evaluations.append({
             **evaluation,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": _utcnow().isoformat()
         })
 
     def add_metrics(self, turn_metrics: Dict):
         self.metrics.append({
             **turn_metrics,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": _utcnow().isoformat()
         })
 
     def update_settings(self, timeout: int, auto_kill: bool):

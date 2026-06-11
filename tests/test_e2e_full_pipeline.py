@@ -29,7 +29,7 @@ Run it:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -337,7 +337,7 @@ def test_full_recruitment_pipeline(monkeypatch, capsys):
         try:
             goal_ids = _goal_template_ids(db, n=3)
             assert goal_ids, f"no goal_templates seeded for role_type={ROLE_TYPE}"
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
 
             chat_sid = _seed_interview(
                 db,

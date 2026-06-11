@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
@@ -123,7 +123,7 @@ def test_queued_candidate_can_complete_pipeline_without_external_services(monkey
         department="Engineering",
         job_description="Python FastAPI SQL AWS Docker",
         status="Active",
-        created_at=datetime.utcnow().isoformat(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
     )
     db.add(job)
     db.commit()
@@ -134,7 +134,7 @@ def test_queued_candidate_can_complete_pipeline_without_external_services(monkey
         raw_text=RESUME_TEXT,
         job_id=job.id,
         status=S.QUEUED,
-        created_at=datetime.utcnow().isoformat(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
     )
     db.add(candidate)
     db.commit()

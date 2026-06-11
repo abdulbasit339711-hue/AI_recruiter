@@ -3,7 +3,8 @@ import json
 import logging
 import os
 import queue as _queue
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from math import ceil
 from typing import Optional
 
@@ -42,7 +43,32 @@ load_dotenv()
 setup_logging(config.get("logging", {}).get("level", "INFO"))
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AI Recruiter API", version="2.0.0")
+
+def _utcnow() -> datetime:
+    """Naive UTC timestamp — drop-in for the deprecated stdlib utcnow().
+
+    Keeps the existing naive-UTC `.isoformat()`/`.strftime()` output byte-for-byte
+    so stored timestamps don't change format."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    event_hub.bind_loop(asyncio.get_running_loop())
+    Base.metadata.create_all(bind=engine)
+    run_migrations()
+    start_worker()
+    get_groq_client()
+    # Load heavy sentence‑transformer embedding model once at startup to avoid first‑request latency
+    from .core.model_registry import get_embedding_model
+    get_embedding_model()
+    yield
+    # Shutdown
+    stop_worker()
+
+
+app = FastAPI(title="AI Recruiter API", version="2.0.0", lifespan=lifespan)
 
 # Require a valid admin bearer token on every non-public endpoint (logic in
 # core/auth.py so it stays unit-testable).
@@ -62,23 +88,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
-
-
-@app.on_event("startup")
-async def on_startup():
-    event_hub.bind_loop(asyncio.get_running_loop())
-    Base.metadata.create_all(bind=engine)
-    run_migrations()
-    start_worker()
-    get_groq_client()
-    # Load heavy sentence‑transformer embedding model once at startup to avoid first‑request latency
-    from .core.model_registry import get_embedding_model
-    get_embedding_model()
-
-
-@app.on_event("shutdown")
-def on_shutdown():
-    stop_worker()
 
 
 @app.get("/")
@@ -155,7 +164,7 @@ def create_job(
             job_description=job_description,
             llm_prompt=llm_prompt,
             status="Active",
-            created_at=datetime.utcnow().isoformat(),
+            created_at=_utcnow().isoformat(),
         )
         db.add(job)
         db.commit()
@@ -319,7 +328,7 @@ async def upload_resume(
             raw_text=raw_text,
             job_id=job_id,
             status=S.QUEUED,
-            created_at=datetime.utcnow().isoformat(),
+            created_at=_utcnow().isoformat(),
         )
         db.add(candidate)
         db.commit()
@@ -460,7 +469,7 @@ def update_candidate_status(
         "type": "status_change",
         "status": payload.hr_status,
         "changed_by": payload.changed_by,
-        "changed_at": datetime.utcnow().isoformat() + "Z",
+        "changed_at": _utcnow().isoformat() + "Z",
         "note": payload.note
     }
     history.append(new_entry)
@@ -488,7 +497,7 @@ def add_candidate_note(
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
     
-    timestamp_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp_str = _utcnow().strftime("%Y-%m-%d %H:%M UTC")
     formatted_note = f"[{timestamp_str}] {payload.author}: {payload.note}"
     
     if candidate.hr_notes:
@@ -527,7 +536,7 @@ def override_candidate_score(
         "type": "score_override",
         "status": f"Score Overridden: {payload.override_score}",
         "changed_by": payload.changed_by,
-        "changed_at": datetime.utcnow().isoformat() + "Z",
+        "changed_at": _utcnow().isoformat() + "Z",
         "note": payload.reason
     }
     history.append(new_entry)
