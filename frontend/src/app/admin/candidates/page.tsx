@@ -13,6 +13,7 @@ import type { Candidate, CandidateStatus } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ResumeViewer } from "@/components/admin/ResumeViewer";
+import { ScoringWeightsEditor } from "@/components/admin/ScoringWeightsEditor";
 import { Mail, ClipboardCheck, FileText, LayoutGrid, List, ArrowUpDown } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "react-hot-toast";
@@ -318,6 +319,7 @@ export default function AdminCandidatesPage() {
             <Button variant="outline" size="sm" onClick={exportCSV} className="flex items-center gap-1.5 text-xs">
               <ClipboardCheck className="h-4 w-4" /> Export CSV
             </Button>
+            {activeJobId && <ScoringWeightsEditor jobId={activeJobId} />}
           </div>
 
           {viewMode === "table" ? (

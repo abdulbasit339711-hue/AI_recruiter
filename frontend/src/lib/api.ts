@@ -252,6 +252,23 @@ export const api = {
     return response.data;
   },
 
+  async getScoringWeights(
+    jobId: number
+  ): Promise<{ tier1_weight: number; tier2_weight: number; tier3_weight: number }> {
+    const response = await client.get(`/jobs/${jobId}/scoring-weights`);
+    return response.data;
+  },
+
+  async setScoringWeights(
+    jobId: number,
+    w: { tier1_weight: number; tier2_weight: number; tier3_weight: number }
+  ): Promise<{ message: string }> {
+    const response = await client.put(`/jobs/${jobId}/scoring-weights`, null, {
+      params: { tier1_weight: w.tier1_weight, tier2_weight: w.tier2_weight, tier3_weight: w.tier3_weight },
+    });
+    return response.data;
+  },
+
   // Attach/replace an existing candidate's résumé PDF and re-score them.
   async replaceCandidateResume(
     candidateId: number,
