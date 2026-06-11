@@ -13,6 +13,7 @@
 # deletes them in teardown (session_transcripts cascade on FK). Auto-skips when Postgres
 # is unreachable so it stays green without a DB.
 
+import asyncio
 import os
 import uuid
 
@@ -31,6 +32,21 @@ from interview_session import (  # noqa: E402
 # One shared module-scoped loop so the asyncpg pool is created once and reused
 # (see the note in test_finalization_db_integration.py).
 pytestmark = pytest.mark.asyncio(loop_scope="module")
+
+
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="module")
+async def _isolate_db_pool():
+    """Ensure this module builds its OWN asyncpg pool on its OWN event loop.
+
+    asyncpg pools and asyncio.Lock bind to the loop that created them. A pool left
+    over from a prior DB-test module is bound to that module's now-closed loop, so
+    reusing it raises 'attached to a different loop' / 'Event loop is closed'. We
+    can't await-close that stranded pool (its loop is dead), so just orphan it here
+    — synchronously, no await — and let _ensure_pool() rebuild a fresh pool on the
+    current loop on the first DB call."""
+    db_manager.pool = None
+    db_manager._init_lock = asyncio.Lock()
+    yield
 
 
 def _refresh_config_from_env():

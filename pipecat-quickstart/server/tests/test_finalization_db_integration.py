@@ -10,6 +10,7 @@
 # touches real interview data. Auto-skips when Postgres is unreachable, so it stays
 # green in environments without a DB (CI without services).
 
+import asyncio
 import json
 import os
 import uuid
@@ -27,6 +28,19 @@ from database import DatabaseConfig, db_manager  # noqa: E402
 # the pool after the first test. Pin every test + fixture in this module to ONE
 # shared module-scoped loop so the real pool is created once and reused.
 pytestmark = pytest.mark.asyncio(loop_scope="module")
+
+
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="module")
+async def _isolate_db_pool():
+    """Ensure this module builds its OWN asyncpg pool on its OWN event loop.
+
+    Pools/locks bind to their creating loop; a pool left over from a prior DB-test
+    module is bound to that module's now-closed loop and can't be reused or
+    await-closed. Orphan any leftover here — synchronously, no await — so
+    _ensure_pool() rebuilds a fresh pool on the current loop on the first DB call."""
+    db_manager.pool = None
+    db_manager._init_lock = asyncio.Lock()
+    yield
 
 
 def _refresh_config_from_env():
