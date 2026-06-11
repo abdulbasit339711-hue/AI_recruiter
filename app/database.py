@@ -64,6 +64,9 @@ def run_migrations() -> None:
     """Apply additive schema migrations (SQLite + PostgreSQL compatible)."""
     migrations = [
         "ALTER TABLE jobs ADD COLUMN role_type VARCHAR",
+        "ALTER TABLE jobs ADD COLUMN tier1_weight FLOAT DEFAULT 1.0",
+        "ALTER TABLE jobs ADD COLUMN tier2_weight FLOAT DEFAULT 1.0",
+        "ALTER TABLE jobs ADD COLUMN tier3_weight FLOAT DEFAULT 1.0",
         "ALTER TABLE candidates ADD COLUMN job_id INTEGER",
         "ALTER TABLE candidates ADD COLUMN warnings TEXT",
         "ALTER TABLE candidates ADD COLUMN evaluation_data TEXT",

@@ -17,6 +17,12 @@ class Job(Base):
     status = Column(String, default="Active")
     created_at = Column(String, nullable=False)
 
+    # Per-job scoring weights: multipliers applied to each tier in the final total
+    # (default 1.0 → the plain tier sum). Lets HR re-weight tiers per role.
+    tier1_weight = Column(Float, default=1.0)
+    tier2_weight = Column(Float, default=1.0)
+    tier3_weight = Column(Float, default=1.0)
+
     candidates = relationship("Candidate", back_populates="job", cascade="all, delete-orphan")
 
 

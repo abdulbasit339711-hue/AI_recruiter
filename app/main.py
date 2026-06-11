@@ -190,6 +190,9 @@ def _serialize_job(job: Job, include_private: bool) -> dict:
     }
     if include_private:
         data["llm_prompt"] = job.llm_prompt
+        data["tier1_weight"] = job.tier1_weight if job.tier1_weight is not None else 1.0
+        data["tier2_weight"] = job.tier2_weight if job.tier2_weight is not None else 1.0
+        data["tier3_weight"] = job.tier3_weight if job.tier3_weight is not None else 1.0
     return data
 
 
@@ -213,6 +216,44 @@ def get_job(job_id: int, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job not found.")
     is_admin = token_is_valid(request.headers.get("authorization"))
     return _serialize_job(job, is_admin)
+
+
+@app.get("/jobs/{job_id}/scoring-weights")
+def get_scoring_weights(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    return {
+        "tier1_weight": job.tier1_weight if job.tier1_weight is not None else 1.0,
+        "tier2_weight": job.tier2_weight if job.tier2_weight is not None else 1.0,
+        "tier3_weight": job.tier3_weight if job.tier3_weight is not None else 1.0,
+    }
+
+
+@app.put("/jobs/{job_id}/scoring-weights")
+def set_scoring_weights(
+    job_id: int,
+    tier1_weight: float = Query(1.0, ge=0, le=5),
+    tier2_weight: float = Query(1.0, ge=0, le=5),
+    tier3_weight: float = Query(1.0, ge=0, le=5),
+    db: Session = Depends(get_db),
+):
+    """Set per-tier scoring multipliers for a job. Applies to FUTURE scoring — reprocess
+    the job's candidates (POST /jobs/{id}/reprocess) to recompute existing totals."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    job.tier1_weight = tier1_weight
+    job.tier2_weight = tier2_weight
+    job.tier3_weight = tier3_weight
+    db.commit()
+    return {
+        "id": job.id,
+        "tier1_weight": tier1_weight,
+        "tier2_weight": tier2_weight,
+        "tier3_weight": tier3_weight,
+        "message": "Weights updated. Reprocess this job's candidates to recompute totals.",
+    }
 
 
 @app.put("/jobs/{job_id}")

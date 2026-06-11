@@ -21,6 +21,16 @@ def _pipeline_cfg() -> dict:
     return config.get("pipeline", {})
 
 
+def _weighted_total(candidate: Candidate, job) -> float:
+    """Final score = tier1*w1 + tier2*w2 + tier3*w3 using the job's per-tier weights.
+    Weights default to 1.0 (→ the plain tier sum), so behaviour is unchanged unless HR
+    sets custom weights for the role."""
+    w1 = (getattr(job, "tier1_weight", None) if job else None) or 1.0
+    w2 = (getattr(job, "tier2_weight", None) if job else None) or 1.0
+    w3 = (getattr(job, "tier3_weight", None) if job else None) or 1.0
+    return round(candidate.tier1 * w1 + candidate.tier2 * w2 + candidate.tier3 * w3, 2)
+
+
 def _resolve_final_status(total_score: float, llm_status: str | None) -> str:
     cfg = _pipeline_cfg()
     shortlisted_min = float(cfg.get("shortlisted_min_score", 75.0))
@@ -93,6 +103,7 @@ def evaluate_candidate_pipeline(
     target_jd = jd_text
     custom_prompt = None
     job_id = candidate.job_id
+    job = None
 
     if candidate.job_id:
         job = db.query(Job).filter(Job.id == candidate.job_id).first()
@@ -136,7 +147,7 @@ def evaluate_candidate_pipeline(
 
         if combined < tier3_threshold:
             candidate.tier3 = 0.0
-            candidate.total_score = round(combined, 2)
+            candidate.total_score = _weighted_total(candidate, job)
             candidate.status = S.UNGRADED
             candidate.summary = (
                 f"Automated screening completed without LLM evaluation "
@@ -160,10 +171,7 @@ def evaluate_candidate_pipeline(
         t3 = evaluate_with_llm(resume_text, target_jd, custom_prompt=custom_prompt)
         _apply_tier3_fields(candidate, t3)
 
-        candidate.total_score = round(
-            candidate.tier1 + candidate.tier2 + candidate.tier3,
-            2,
-        )
+        candidate.total_score = _weighted_total(candidate, job)
         candidate.status = _resolve_final_status(
             candidate.total_score,
             t3.get("status"),
