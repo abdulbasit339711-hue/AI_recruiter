@@ -14,6 +14,8 @@ export interface InterviewValidation {
   livekit_url?: string;
   // Conversation so far when resuming an interrupted interview; empty on a first join.
   prior_transcript?: { speaker: string; text: string }[];
+  // Soft guideline duration (seconds) for the on-screen countdown.
+  time_limit_seconds?: number;
 }
 
 export async function validateInterview(token: string): Promise<InterviewValidation> {

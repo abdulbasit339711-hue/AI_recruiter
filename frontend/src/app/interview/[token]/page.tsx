@@ -66,7 +66,7 @@ export default function InterviewPage() {
   // at connect) is missed, since the SSE stream isn't replayed to late joiners.
   // Goals / per-answer AI scores are interviewer-internal and intentionally NOT
   // surfaced here — they live in the HR dashboard only.
-  const { transcript, connected } = useInterviewLive(
+  const { transcript, connected, goals } = useInterviewLive(
     phase === "ready" || phase === "connecting" || phase === "live",
     info?.session_id,
     info?.prior_transcript
@@ -340,6 +340,23 @@ export default function InterviewPage() {
           <p className="truncate text-xs text-zinc-500">{info?.candidate_name || "you"}</p>
         </div>
         <div className="flex items-center gap-2 text-xs">
+          {/* Topic progress (covered / total) from the live goal stream. */}
+          {goals.length > 0 && (
+            <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-zinc-300">
+              Topics {goals.filter((g) => g.progress >= 0.5 || /complete|cover|done/i.test(g.status)).length}/{goals.length}
+            </span>
+          )}
+          {/* Soft countdown (guideline only — the interview ends on completion, not a hard cap). */}
+          {info?.time_limit_seconds ? (
+            (() => {
+              const remaining = Math.max(0, info.time_limit_seconds - elapsed);
+              return (
+                <span className={`tabular-nums ${remaining <= 60 ? "text-amber-400" : "text-zinc-500"}`}>
+                  {remaining > 0 ? `${fmtTime(remaining)} left` : "time’s up"}
+                </span>
+              );
+            })()
+          ) : null}
           <span className="tabular-nums text-zinc-400">{fmtTime(elapsed)}</span>
           <span
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 ${

@@ -378,6 +378,9 @@ async def validate_interview(token: str):
         "livekit_token": lk_token,
         "livekit_url": os.getenv("LIVEKIT_URL"),
         "prior_transcript": prior_transcript,  # conversation so far, for resume redisplay
+        # Soft guideline duration for the candidate's on-screen countdown (the interview
+        # actually ends on completion/idle, not a hard time cap).
+        "time_limit_seconds": int(os.getenv("INTERVIEW_TIME_LIMIT_SECS", "1800")),
     }
 
 @app.get("/interview/debug/{session_id}")

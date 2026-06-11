@@ -43,6 +43,7 @@ export default function AdminCandidatesPage() {
   const [sortBy, setSortBy] = useState<string>("total_score");
   const [order, setOrder] = useState<string>("desc");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
+  const [query, setQuery] = useState("");
 
   const [selected, setSelected] = useState<Candidate | null>(null);
   const [modalTab, setModalTab] = useState<"details" | "interview">("details");
@@ -61,6 +62,13 @@ export default function AdminCandidatesPage() {
     order,
   });
   const candidates = data?.items ?? [];
+  // Client-side text search over the loaded page (name / email / filename).
+  const q = query.trim().toLowerCase();
+  const filteredCandidates = q
+    ? candidates.filter((c) =>
+        [c.name, c.email, c.filename].some((f) => (f ?? "").toLowerCase().includes(q))
+      )
+    : candidates;
 
   useJobEvaluationEvents(activeJobId);
 
@@ -147,6 +155,19 @@ export default function AdminCandidatesPage() {
       {/* Filters and Controls */}
       <div className="flex flex-col gap-4 rounded-md border border-white/10 bg-card/70 p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
+          {/* Text search (name / email / filename) over the loaded candidates */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground" htmlFor="candidate-search">Search</label>
+            <input
+              id="candidate-search"
+              type="search"
+              placeholder="Name, email, or file…"
+              className="h-10 w-full rounded-md border border-white/10 bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+
           {/* Job select */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-muted-foreground" htmlFor="job-filter">Job Opening</label>
@@ -301,14 +322,14 @@ export default function AdminCandidatesPage() {
 
           {viewMode === "table" ? (
             <CandidateTable
-              candidates={candidates}
+              candidates={filteredCandidates}
               isLoading={isLoading || jobsLoading}
               onView={handleView}
               onUpdate={refetch}
             />
           ) : (
             <KanbanBoard
-              candidates={candidates}
+              candidates={filteredCandidates}
               onView={handleView}
               onUpdate={refetch}
             />
