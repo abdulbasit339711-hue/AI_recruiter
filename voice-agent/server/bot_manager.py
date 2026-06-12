@@ -2,6 +2,7 @@
 Dual-mode Bot Manager - Supports both Single LLM and Dual LLM (Judge + Responder) pipelines
 """
 
+import asyncio
 import os
 import wave
 from loguru import logger
@@ -15,6 +16,21 @@ from bot import create_interview_session
 from services.goal_tracking_service import GoalTrackingService
 from processors.goal_tracking_processor import GoalTrackingProcessor, GoalAwareTranscriptProcessor
 from database import initialize_database
+
+
+# One lock per session_id, shared across all BotManager instances in this process.
+# On a fast re-open a second bot can spawn for the same link while the first is still
+# finalizing; serializing here prevents two bots from interleaving writes to the same
+# session row (last-writer-wins assessment loss).
+_FINALIZE_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _finalize_lock_for(session_id: str) -> asyncio.Lock:
+    lock = _FINALIZE_LOCKS.get(session_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _FINALIZE_LOCKS[session_id] = lock
+    return lock
 
 
 class BotManager:
@@ -248,13 +264,16 @@ class BotManager:
             if hasattr(p, "set_session"):
                 p.set_session(session)
 
-        # Per-session system prompt (LLM service is built config-free).
+        # Per-session system prompt (LLM service is built config-free). This is NOT
+        # optional — without the persona the responder has no instructions and the
+        # whole interview degrades to gibberish, so fail loudly instead of swallowing.
         try:
             self.context.add_message(
                 {"role": "system", "content": session.config.system_prompt}
             )
         except Exception as e:
-            logger.warning(f"[BotManager] Could not seed system prompt into context: {e}")
+            logger.error(f"[BotManager] Failed to seed system prompt into context: {e}")
+            raise RuntimeError(f"interview cannot start without its system prompt: {e}") from e
 
         # Resume support: if this link was opened before, replay the prior conversation
         # into the LLM context so the bot continues with full memory instead of
@@ -384,7 +403,7 @@ class BotManager:
             return None
 
     async def finalize_session(self, graceful: bool = True):
-        """Finalize this interview: run the final goal analysis and persist it.
+        """Finalize this interview, serialized per session_id (see _FINALIZE_LOCKS).
 
         ``graceful`` is True when the interview reached its natural end (all questions
         covered); False when the candidate dropped mid-interview. A graceful interview
@@ -396,6 +415,17 @@ class BotManager:
         HTTP API, so we must NOT close it here — that is owned by process shutdown,
         not by a single interview ending.
         """
+        sid = self.session.session_id if self.session else None
+        if sid is None:
+            await self._finalize_unlocked(graceful)
+            return
+        async with _finalize_lock_for(sid):
+            await self._finalize_unlocked(graceful)
+
+    async def _finalize_unlocked(self, graceful: bool = True):
+        if getattr(self, "_finalized", False):
+            return  # this bot already finalized; don't double-write
+        self._finalized = True
         if self.goal_processor:
             try:
                 await self.goal_processor.finalize_session_goals(graceful=graceful)

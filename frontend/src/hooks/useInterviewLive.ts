@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { interviewEventsUrl } from "@/lib/voice";
+import { openReconnectingSSE } from "@/lib/sse";
 
 export interface TranscriptTurn {
   speaker: string; // "candidate" | "agent"
@@ -78,9 +79,10 @@ export function useInterviewLive(
 
   useEffect(() => {
     if (!enabled) return;
-    const es = new EventSource(interviewEventsUrl(sessionId));
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
+    const handle = openReconnectingSSE(() => interviewEventsUrl(sessionId), {
+      onOpen: () => setConnected(true),
+      onError: () => setConnected(false),
+      setup: (es) => {
 
     es.addEventListener("transcript", (e) => {
       const d = parseEventData(e);
@@ -130,8 +132,10 @@ export function useInterviewLive(
         suggested_probe: typeof d.suggested_probe === "string" ? d.suggested_probe : undefined,
       });
     });
+      },
+    });
 
-    return () => es.close();
+    return () => handle.close();
   }, [enabled, sessionId]);
 
   return { transcript, goals, judge, connected };

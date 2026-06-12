@@ -24,7 +24,10 @@ class JudgeProcessor(FrameProcessor):
         self._session = session
         self._broadcaster = broadcaster
         self._current_transcript = []
-        self._evaluating = False
+        # Serialize evaluations instead of dropping overlapping ones: a quick run of
+        # answers previously got skipped by a boolean single-flight gate. The lock
+        # runs them one at a time (no concurrent judge calls) without losing any.
+        self._eval_lock = asyncio.Lock()
         self._api_key = api_key
         self._client = AsyncGroq(api_key=api_key)
         # Track in-flight evaluation tasks so they can be cancelled on teardown
@@ -91,20 +94,19 @@ Respond ONLY with JSON in this format:
             await parent_cleanup()
 
     async def _evaluate_response(self, text: str):
-        """Evaluate the candidate's response asynchronously"""
-        if self._evaluating:
-            return  # Skip if already evaluating
+        """Evaluate the candidate's response. Serialized via a lock so concurrent
+        answers queue and all get scored (no single-flight dropping)."""
+        async with self._eval_lock:
+            await self._evaluate_locked(text)
 
-        self._evaluating = True
+    async def _evaluate_locked(self, text: str):
         try:
             # Skip if no session is configured yet (race before set_session).
             if self._session is None:
-                self._evaluating = False
                 return
             # Get current question context
             current_q = self._session.current_question
             if not current_q:
-                self._evaluating = False
                 return
 
             # Create evaluation prompt
@@ -171,8 +173,6 @@ Evaluate this response."""
 
         except Exception as e:
             logger.error(f"[Judge] Evaluation error: {e}")
-        finally:
-            self._evaluating = False
 
 
 class DualLLMContextProcessor(FrameProcessor):

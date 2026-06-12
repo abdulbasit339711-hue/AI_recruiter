@@ -160,6 +160,17 @@ def test_submit_bad_token_400(client):
     assert client.post("/iq-test/submit", json={"test_token": "nope", "answers": {}}).status_code == 400
 
 
+def test_submit_rejects_oversized_answers(client):
+    answers = {f"q{i}": 0 for i in range(101)}  # over the 100 cap
+    r = client.post("/iq-test/submit", json={"test_token": "x", "answers": answers})
+    assert r.status_code == 422  # rejected by schema before scoring
+
+
+def test_submit_rejects_out_of_range_index(client):
+    r = client.post("/iq-test/submit", json={"test_token": "x", "answers": {"a": 999}})
+    assert r.status_code == 422
+
+
 def test_upload_attaches_iq_score(client):
     jid = _make_job()
     token = mint_result_token(jid, 8, 10, 80.0, ttl_seconds=3600)

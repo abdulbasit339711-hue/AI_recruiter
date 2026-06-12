@@ -17,8 +17,20 @@ class IqTestResponse(BaseModel):
 
 
 class IqSubmitRequest(BaseModel):
-    test_token: str
+    test_token: str = Field(..., max_length=4096)
     answers: Dict[str, int]  # {question_id: chosen_option_index}
+
+    @field_validator("answers")
+    @classmethod
+    def _bound_answers(cls, v: Dict[str, int]) -> Dict[str, int]:
+        if len(v) > 100:
+            raise ValueError("too many answers")
+        for qid, idx in v.items():
+            if len(qid) > 64:
+                raise ValueError("question id too long")
+            if not (0 <= idx < 50):
+                raise ValueError("option index out of range")
+        return v
 
 
 class IqSubmitResponse(BaseModel):

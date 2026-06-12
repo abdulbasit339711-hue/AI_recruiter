@@ -165,10 +165,10 @@ def get_metrics(db: Session = Depends(get_db)):
 
 @app.post("/jobs")
 def create_job(
-    title: str,
-    department: str,
-    job_description: str,
-    llm_prompt: Optional[str] = None,
+    title: str = Query(..., min_length=1, max_length=200),
+    department: str = Query(..., min_length=1, max_length=200),
+    job_description: str = Query(..., min_length=1, max_length=20000),
+    llm_prompt: Optional[str] = Query(None, max_length=10000),
     db: Session = Depends(get_db),
 ):
     try:
@@ -273,11 +273,11 @@ def set_scoring_weights(
 @app.put("/jobs/{job_id}")
 def update_job(
     job_id: int,
-    title: Optional[str] = None,
-    department: Optional[str] = None,
-    job_description: Optional[str] = None,
-    llm_prompt: Optional[str] = None,
-    status: Optional[str] = None,
+    title: Optional[str] = Query(None, min_length=1, max_length=200),
+    department: Optional[str] = Query(None, min_length=1, max_length=200),
+    job_description: Optional[str] = Query(None, min_length=1, max_length=20000),
+    llm_prompt: Optional[str] = Query(None, max_length=10000),
+    status: Optional[str] = Query(None, pattern="^(Active|Archived)$"),
     db: Session = Depends(get_db),
 ):
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -308,10 +308,10 @@ def update_job(
 @app.patch("/jobs/{job_id}")
 def patch_job(
     job_id: int,
-    department: Optional[str] = None,
-    job_description: Optional[str] = None,
-    llm_prompt: Optional[str] = None,
-    status: Optional[str] = None,
+    department: Optional[str] = Query(None, min_length=1, max_length=200),
+    job_description: Optional[str] = Query(None, min_length=1, max_length=20000),
+    llm_prompt: Optional[str] = Query(None, max_length=10000),
+    status: Optional[str] = Query(None, pattern="^(Active|Archived)$"),
     db: Session = Depends(get_db),
 ):
     job = db.query(Job).filter(Job.id == job_id).first()

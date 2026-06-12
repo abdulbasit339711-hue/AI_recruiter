@@ -38,10 +38,20 @@ if DATABASE_URL.startswith("sqlite:///"):
         os.makedirs(db_dir, exist_ok=True)
 
 connect_args = {}
+engine_kwargs = {"pool_pre_ping": True}
 if "sqlite" in DATABASE_URL:
     connect_args["check_same_thread"] = False
+else:
+    # Tune the connection pool for the API + background worker under concurrency.
+    # SQLite uses its own (non-overflow) pool, so these apply only to real DBs.
+    engine_kwargs.update(
+        pool_size=int(os.getenv("DB_POOL_SIZE", "10")),
+        max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20")),
+        pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),  # recycle stale conns
+        pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
+    )
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
+engine = create_engine(DATABASE_URL, connect_args=connect_args, **engine_kwargs)
 
 if DATABASE_URL.startswith("sqlite"):
     with engine.connect() as conn:
