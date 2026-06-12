@@ -12,17 +12,30 @@ from datetime import datetime
 from dataclasses import dataclass
 
 
-def _coerce_timestamp(value: Any) -> datetime:
-    """Normalize a frame timestamp into a datetime for TIMESTAMP columns.
+def _naive_local(dt: datetime) -> datetime:
+    """Strip tzinfo so the value matches the naive ``TIMESTAMP`` columns.
 
-    Pipecat frame timestamps arrive as epoch seconds (often stringified, e.g.
-    '1780829342.226'), but asyncpg requires a datetime for TIMESTAMP columns.
-    Accepts datetime, epoch int/float/str, or ISO strings; falls back to now().
+    asyncpg binds a tz-aware datetime to a ``TIMESTAMP`` (without time zone)
+    column by subtracting the naive Postgres epoch, which raises "can't subtract
+    offset-naive and offset-aware datetimes". The agent transcript path already
+    produces naive *local* datetimes (via ``datetime.fromtimestamp``), so convert
+    aware values to local time and drop the tzinfo to stay consistent.
+    """
+    return dt.astimezone().replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+def _coerce_timestamp(value: Any) -> datetime:
+    """Normalize a frame timestamp into a naive datetime for TIMESTAMP columns.
+
+    Pipecat frame timestamps arrive either as a tz-aware ``datetime`` or as epoch
+    seconds (often stringified, e.g. '1780829342.226'), but asyncpg requires a
+    *naive* datetime for ``TIMESTAMP`` columns. Accepts datetime, epoch
+    int/float/str, or ISO strings; falls back to now().
     """
     if value is None:
         return datetime.now()
     if isinstance(value, datetime):
-        return value
+        return _naive_local(value)
     # Epoch seconds as int/float/str
     try:
         return datetime.fromtimestamp(float(value))
@@ -30,7 +43,7 @@ def _coerce_timestamp(value: Any) -> datetime:
         pass
     # ISO-8601 string
     try:
-        return datetime.fromisoformat(str(value))
+        return _naive_local(datetime.fromisoformat(str(value)))
     except (TypeError, ValueError):
         return datetime.now()
 
@@ -221,10 +234,15 @@ class DatabaseManager:
         )
 
     async def get_candidate(self, candidate_id: int) -> Optional[Dict[str, Any]]:
-        """Read a candidate (owned by the main API) from the shared database."""
+        """Read a candidate (owned by the main API) from the shared database.
+
+        Includes the Tier-3 résumé-screening evaluation (summary, scores, matched/
+        missing skills) so the interviewer can be briefed on the scored profile, plus
+        the résumé-tailored ``interview_questions``."""
         return await self.fetch_one(
             "SELECT id, name, email, job_id, current_role, years_experience, "
-            "interview_questions FROM candidates WHERE id = $1",
+            "interview_questions, summary, tier3, total_score, "
+            "skills_matched, skills_missing FROM candidates WHERE id = $1",
             candidate_id,
         )
 

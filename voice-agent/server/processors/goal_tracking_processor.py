@@ -222,6 +222,21 @@ class GoalTrackingProcessor(FrameProcessor):
             # Perform comprehensive analysis
             final_analysis = await self.goal_service.comprehensive_goal_analysis(self.session.session_id)
 
+            # Non-technical screening interview: also extract the structured qualifying
+            # summary (experience, salary, stack, achievements, …) from the transcript
+            # and attach it so HR reads it alongside (or instead of) the goal scores.
+            interview_type = getattr(getattr(self.session, "config", None), "interview_type", "") or ""
+            if "screening" in interview_type.lower():
+                try:
+                    from services.screening_extraction import extract_screening_summary
+                    screening_summary = await extract_screening_summary(self.session.session_id)
+                    if not isinstance(final_analysis, dict) or "error" in final_analysis:
+                        # Goal analysis was thin/failed — still persist the screening summary.
+                        final_analysis = {"interview_type": interview_type}
+                    final_analysis["screening_summary"] = screening_summary
+                except Exception as e:
+                    logger.error(f"[GoalTracking] screening extraction failed: {e}")
+
             # Persist the final assessment so HR can read it later. Skip on analysis
             # error so we never overwrite the record with an error blob.
             if isinstance(final_analysis, dict) and "error" not in final_analysis:
