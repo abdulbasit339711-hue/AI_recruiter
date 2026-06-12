@@ -49,9 +49,10 @@ pytest tests/                      # backend test suite
 ## Key endpoints (see `main.py`)
 
 - Jobs: `POST/GET /jobs`, `GET/PUT/PATCH/DELETE /jobs/{job_id}`
-- Candidates: `POST /upload`, `GET /jobs/{job_id}/candidates`, `GET /candidates/{id}`, `GET /candidates/{id}/resume`, `PATCH /candidates/{id}/status`, `POST /candidates/{id}/notes`, `PATCH /candidates/{id}/score-override`, `GET /candidates/{id}/timeline`
+- IQ screen (public, pre-application): `GET /iq-test?job_id=` (sampled, time-limited questions + signed token), `POST /iq-test/submit` (server-scored → result token). Built-in bank in `iq/bank.py`, stateless JWT tokens in `iq/tokens.py`. The score is attached to the candidate at upload via the optional `iq_token` form field — **recorded, never gates the application**.
+- Candidates: `POST /upload` (accepts optional `iq_token`), `GET /jobs/{job_id}/candidates`, `GET /candidates/{id}`, `GET /candidates/{id}/resume`, `PATCH /candidates/{id}/status`, `POST /candidates/{id}/notes`, `PATCH /candidates/{id}/score-override`, `GET /candidates/{id}/timeline`
 - Live updates (SSE): `GET /jobs/{job_id}/events`, `GET /candidates/{id}/events`
-- Reprocess: `POST /candidates/{id}/reprocess`, `POST /jobs/{job_id}/reprocess`
+- Reprocess: `POST /candidates/{id}/reprocess`, `POST /jobs/{job_id}/reprocess` (bounded by `limit`, default 500; call again while `remaining > 0`)
 - Interview: `GET /candidates/{id}/interview`, `GET /candidates/{id}/interview-audio`, `POST /candidates/{id}/interview-invite`
 - Ops: `GET /health`, `GET /metrics`, `POST /jobs/{job_id}/email`
 

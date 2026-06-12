@@ -18,4 +18,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy the application code
 COPY ./local_bot.py local_bot.py
 COPY ./runner.py runner.py
-COPY ./.env ./.env
+
+# NOTE: secrets are NOT baked into the image. Inject them at runtime instead, e.g.
+#   docker run --env-file .env ...           (compose: `env_file:` / `environment:`)
+# or a secrets manager. `.env` is also excluded via .dockerignore so it can never be
+# copied into a layer (where `docker history` / image pulls would expose it).

@@ -15,12 +15,21 @@ from collections import defaultdict, deque
 from fastapi import HTTPException, Request
 
 
+# Every window registers here so tests can reset limiter state between cases.
+_ALL_WINDOWS: list["_SlidingWindow"] = []
+
+
 class _SlidingWindow:
     def __init__(self, max_requests: int, window_seconds: float):
         self.max = max_requests
         self.window = window_seconds
         self._hits: dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
+        _ALL_WINDOWS.append(self)
+
+    def reset(self) -> None:
+        with self._lock:
+            self._hits.clear()
 
     def allow(self, key: str) -> bool:
         now = time.monotonic()
@@ -61,6 +70,31 @@ def rate_limit(max_requests: int, window_seconds: float = 60.0):
     return _dep
 
 
-# Configurable limits (per IP). Upload is the expensive one (LLM scoring).
+# Configurable limits (per IP). Upload is the expensive one (LLM scoring); the IQ
+# screen (fetch test / submit answers) is cheap, so it gets its own, looser budget
+# rather than eating into the upload allowance.
 upload_rate_limit = rate_limit(int(os.getenv("UPLOAD_RATE_PER_MIN", "10")), 60.0)
 jobs_rate_limit = rate_limit(int(os.getenv("JOBS_RATE_PER_MIN", "120")), 60.0)
+iq_rate_limit = rate_limit(int(os.getenv("IQ_RATE_PER_MIN", "30")), 60.0)
+
+
+def reset_rate_limits() -> None:
+    """Clear all limiter windows. Intended for test isolation, not production use."""
+    for w in _ALL_WINDOWS:
+        w.reset()
+
+
+# Admin mutations share one bearer token, so a leaked/abused token can otherwise
+# spam every PUT/PATCH/DELETE/POST. Enforced centrally in the auth middleware (so
+# no individual route can be left unprotected) — see core/auth.py.
+_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_admin_mutation_window = _SlidingWindow(
+    int(os.getenv("ADMIN_MUTATION_RATE_PER_MIN", "120")), 60.0
+)
+
+
+def admin_mutation_rate_ok(method: str, request: Request) -> bool:
+    """True if this admin request is allowed. Only mutating methods are limited."""
+    if method.upper() not in _MUTATING_METHODS:
+        return True
+    return _admin_mutation_window.allow(_client_ip(request))

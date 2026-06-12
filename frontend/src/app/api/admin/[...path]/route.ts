@@ -21,6 +21,8 @@ const ADMIN_API_TOKEN = process.env.ADMIN_API_TOKEN || "";
 function isPublic(method: string, path: string): boolean {
   if (method === "GET" && path === "jobs") return true; // careers listing
   if (method === "GET" && /^jobs\/\d+$/.test(path)) return true; // view one job
+  if (method === "GET" && path === "iq-test") return true; // fetch pre-application IQ test
+  if (method === "POST" && path === "iq-test/submit") return true; // submit IQ answers
   if (method === "POST" && path === "upload") return true; // submit a resume
   return false;
 }

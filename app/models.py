@@ -74,4 +74,10 @@ class Candidate(Base):
     llm_completion_tokens = Column(Integer, nullable=True, default=None)
     llm_cost_usd = Column(Float, nullable=True, default=None)
 
+    # Pre-application IQ screen (server-scored). Recorded for HR ranking; never
+    # gates the application. iq_score is a percentage (0–100); correct/total are raw.
+    iq_score = Column(Float, nullable=True, default=None)
+    iq_correct = Column(Integer, nullable=True, default=None)
+    iq_total = Column(Integer, nullable=True, default=None)
+
     job = relationship("Job", back_populates="candidates")

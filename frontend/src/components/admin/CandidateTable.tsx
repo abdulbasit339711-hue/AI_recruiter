@@ -97,6 +97,12 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
                       <span className="text-xs text-muted-foreground">
                         T1 {cand.tier1?.toFixed(1) ?? "0.0"} / T2 {cand.tier2?.toFixed(1) ?? "0.0"} / T3 {cand.tier3?.toFixed(1) ?? "0.0"}
                       </span>
+                      {cand.iq_score !== null && cand.iq_score !== undefined && (
+                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                          IQ {Math.round(cand.iq_score)}%
+                          {cand.iq_total ? ` (${cand.iq_correct}/${cand.iq_total})` : ""}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell><StatusBadge status={cand.status} /></TableCell>
                     <TableCell><HRStatusBadge status={cand.hr_status} /></TableCell>

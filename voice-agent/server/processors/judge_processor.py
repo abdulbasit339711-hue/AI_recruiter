@@ -27,6 +27,10 @@ class JudgeProcessor(FrameProcessor):
         self._evaluating = False
         self._api_key = api_key
         self._client = AsyncGroq(api_key=api_key)
+        # Track in-flight evaluation tasks so they can be cancelled on teardown
+        # instead of outliving the worker and writing to a closed pool / finalized
+        # session (fire-and-forget create_task previously leaked these).
+        self._tasks: set[asyncio.Task] = set()
 
     def _get_judge_prompt(self):
         """Get the system prompt for the judge model"""
@@ -62,11 +66,29 @@ Respond ONLY with JSON in this format:
         if isinstance(frame, TranscriptionFrame):
             text = frame.text.strip()
             if text and len(text) > 20:  # Only evaluate substantial responses
-                # Start evaluation in background
-                asyncio.create_task(self._evaluate_response(text))
+                # Start evaluation in background, but keep a handle so it can be
+                # cancelled on cleanup() (self-removing when it finishes).
+                task = asyncio.create_task(self._evaluate_response(text))
+                self._tasks.add(task)
+                task.add_done_callback(self._tasks.discard)
 
         # Always pass frame through
         await self.push_frame(frame, direction)
+
+    async def cleanup(self):
+        """Cancel any in-flight judge evaluations before the pipeline tears down."""
+        pending = list(self._tasks)
+        for task in pending:
+            task.cancel()
+        for task in pending:
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001 — teardown is best-effort
+                pass
+        self._tasks.clear()
+        parent_cleanup = getattr(super(), "cleanup", None)
+        if parent_cleanup is not None:
+            await parent_cleanup()
 
     async def _evaluate_response(self, text: str):
         """Evaluate the candidate's response asynchronously"""

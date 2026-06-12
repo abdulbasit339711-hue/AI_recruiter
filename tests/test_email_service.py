@@ -12,6 +12,7 @@ import pytest
 
 from app.services.email import (
     ConsoleEmailSender,
+    OutgoingEmail,
     SmtpEmailSender,
     get_email_sender,
     send_interview_invite,
@@ -87,6 +88,67 @@ def test_smtp_login_failure_propagates():
         with pytest.raises(RuntimeError, match="auth failed"):
             SmtpEmailSender("h", 587, "u", "p").send("to@x.com", "s", "b")
     server.send_message.assert_not_called()  # never sends if auth fails
+
+
+# ── Batch send reuses a single connection ───────────────────────────────────────
+
+def test_smtp_batch_reuses_one_connection_for_all_recipients():
+    smtp_cls, server = _mock_smtp()
+    msgs = [
+        OutgoingEmail("a@x.com", "S", "B"),
+        OutgoingEmail("b@x.com", "S", "B"),
+        OutgoingEmail("c@x.com", "S", "B"),
+    ]
+    with patch("app.services.email.smtplib.SMTP", smtp_cls):
+        errors = SmtpEmailSender("h", 587, "u", "p").send_batch(msgs)
+
+    assert errors == {}
+    smtp_cls.assert_called_once()        # ONE connection for the whole batch...
+    server.login.assert_called_once()    # ...one auth...
+    assert server.send_message.call_count == 3  # ...three messages.
+
+
+def test_smtp_batch_isolates_per_recipient_failure():
+    smtp_cls, server = _mock_smtp()
+    # Second recipient fails; the rest still go out.
+    server.send_message.side_effect = [None, RuntimeError("550 rejected"), None]
+    with patch("app.services.email.smtplib.SMTP", smtp_cls):
+        errors = SmtpEmailSender("h", 587, "u", "p").send_batch(
+            [OutgoingEmail("a@x.com", "S", "B"),
+             OutgoingEmail("bad@x.com", "S", "B"),
+             OutgoingEmail("c@x.com", "S", "B")]
+        )
+
+    assert list(errors) == ["bad@x.com"]
+    assert "550 rejected" in errors["bad@x.com"]
+    assert server.send_message.call_count == 3
+
+
+def test_smtp_batch_connection_failure_marks_all_undelivered():
+    smtp_cls, server = _mock_smtp()
+    server.login.side_effect = RuntimeError("535 auth failed")
+    with patch("app.services.email.smtplib.SMTP", smtp_cls):
+        errors = SmtpEmailSender("h", 587, "u", "p").send_batch(
+            [OutgoingEmail("a@x.com", "S", "B"), OutgoingEmail("b@x.com", "S", "B")]
+        )
+
+    assert set(errors) == {"a@x.com", "b@x.com"}
+    assert all("SMTP connection failed" in e for e in errors.values())
+    server.send_message.assert_not_called()
+
+
+def test_smtp_batch_empty_is_a_noop():
+    smtp_cls, _ = _mock_smtp()
+    with patch("app.services.email.smtplib.SMTP", smtp_cls):
+        assert SmtpEmailSender("h", 587, "u", "p").send_batch([]) == {}
+    smtp_cls.assert_not_called()  # no connection opened for an empty batch
+
+
+def test_console_batch_falls_back_to_per_message_send():
+    errors = ConsoleEmailSender().send_batch(
+        [OutgoingEmail("a@x.com", "S", "B"), OutgoingEmail("b@x.com", "S", "B")]
+    )
+    assert errors == {}  # console sender never fails
 
 
 # ── Interview-invite composition over the SMTP path ─────────────────────────────

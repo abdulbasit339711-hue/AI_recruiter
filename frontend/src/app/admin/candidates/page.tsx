@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ResumeViewer } from "@/components/admin/ResumeViewer";
 import { ScoringWeightsEditor } from "@/components/admin/ScoringWeightsEditor";
 import { QuestionBankEditor } from "@/components/admin/QuestionBankEditor";
-import { Mail, ClipboardCheck, FileText, LayoutGrid, List, ArrowUpDown } from "lucide-react";
+import { Mail, ClipboardCheck, FileText, LayoutGrid, List, ArrowUpDown, Brain } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { downloadCSV } from "@/lib/csv";
@@ -94,6 +94,7 @@ export default function AdminCandidatesPage() {
       hr_status: c.hr_status ?? "Applied",
       effective_score: (c.hr_score_override ?? c.total_score)?.toFixed(1) ?? "0",
       total_score: c.total_score?.toFixed(1) ?? "0",
+      iq_score: c.iq_score != null ? Math.round(c.iq_score).toString() : "-",
       status: c.status,
       submitted: c.created_at,
     }));
@@ -523,6 +524,22 @@ export default function AdminCandidatesPage() {
                   <p className="text-sm font-semibold">{selected?.tier3?.toFixed(1) ?? "0.0"}</p>
                 </div>
               </div>
+
+              {selected?.iq_score != null && (
+                <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                  <span className="flex items-center gap-1.5 text-xs uppercase text-muted-foreground">
+                    <Brain className="h-3.5 w-3.5" /> Aptitude screen
+                  </span>
+                  <span className="text-sm font-semibold">
+                    {Math.round(selected.iq_score)}%
+                    {selected.iq_total ? (
+                      <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                        ({selected.iq_correct}/{selected.iq_total})
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+              )}
 
               <div className="space-y-2 text-sm border-t border-white/5 pt-3">
                 <p><span className="text-muted-foreground text-xs block">Role:</span> {selected?.current_role || "-"}</p>

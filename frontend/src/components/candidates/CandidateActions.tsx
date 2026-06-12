@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { MessageSquare, ShieldAlert, History, ChevronDown } from "lucide-react";
 import { api } from "@/lib/api";
+import { getHrActor } from "@/lib/actor";
 import { toast } from "react-hot-toast";
 import type { Candidate, StatusUpdatePayload, ScoreOverridePayload } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
@@ -38,7 +39,7 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
     try {
       await api.updateCandidateStatus(candidate.id, {
         hr_status: newStatus,
-        changed_by: "hr@company.com", // Simulated logged in user
+        changed_by: getHrActor(),
         note: `Status updated to ${newStatus}`,
       });
       toast.success(`Status updated to ${newStatus}`);
@@ -68,7 +69,7 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
       await api.overrideCandidateScore(candidate.id, {
         override_score: scoreVal,
         reason: overrideReason.trim(),
-        changed_by: "hr@company.com",
+        changed_by: getHrActor(),
       });
       toast.success("Candidate score overridden successfully.");
       setOverrideOpen(false);

@@ -50,6 +50,11 @@ export interface Candidate {
   hr_notes: string | null;
   hr_score_override: number | null;
   status_history: TimelineEntry[] | null;
+
+  // Pre-application IQ screen (server-scored; recorded, never gates).
+  iq_score?: number | null;   // percentage 0–100
+  iq_correct?: number | null;
+  iq_total?: number | null;
 }
 
 export interface TimelineEntry {
@@ -75,6 +80,27 @@ export interface ScoreOverridePayload {
   override_score: number;
   reason: string;
   changed_by: string;
+}
+
+// ── Pre-application IQ screen ──────────────────────────────────────────────────
+export interface IqQuestion {
+  id: string;
+  prompt: string;
+  options: string[];
+}
+
+export interface IqTestResponse {
+  questions: IqQuestion[];
+  test_token: string;
+  time_limit_seconds: number;
+  total: number;
+}
+
+export interface IqSubmitResponse {
+  correct: number;
+  total: number;
+  score: number; // percentage 0–100
+  result_token: string;
 }
 
 export interface UploadResponse {

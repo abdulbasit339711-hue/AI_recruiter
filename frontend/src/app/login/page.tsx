@@ -2,9 +2,11 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { setHrActor } from "@/lib/actor";
 
 function LoginForm() {
   const [token, setToken] = useState("");
+  const [actor, setActor] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -24,6 +26,7 @@ function LoginForm() {
         body: JSON.stringify({ token }),
       });
       if (res.ok) {
+        if (actor.trim()) setHrActor(actor);  // attribute audit-trail changes to this operator
         router.push(next);
         router.refresh();
       } else {
@@ -55,6 +58,13 @@ function LoginForm() {
           value={token}
           onChange={(e) => setToken(e.target.value)}
           placeholder="Admin token"
+          className="w-full rounded-md border px-3 py-2 text-sm"
+        />
+        <input
+          type="email"
+          value={actor}
+          onChange={(e) => setActor(e.target.value)}
+          placeholder="Your email (optional — for the audit trail)"
           className="w-full rounded-md border px-3 py-2 text-sm"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}

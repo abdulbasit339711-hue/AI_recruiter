@@ -29,6 +29,12 @@ llm:
     failure_threshold: 5
     recovery_timeout_seconds: 60
 
+# Pre-application IQ screen (server-scored, recorded, never gates the application).
+iq:
+  num_questions: 10
+  time_limit_seconds: 600   # how long the candidate has; enforced via the test token's exp
+  result_ttl_seconds: 3600  # how long a result token stays valid for upload attachment
+
 logging:
   level: INFO
 

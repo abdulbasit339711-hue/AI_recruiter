@@ -64,9 +64,16 @@ def _worker_loop() -> None:
         started = time.perf_counter()
         try:
             cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-            job_id = cand.job_id if cand else None
-            if cand and cand.status == S.QUEUED:
-                publish_candidate_event(candidate_id, S.QUEUED, job_id=job_id, event="queued")
+            if cand is None:
+                # Deleted between enqueue and pickup — skip cleanly rather than
+                # running the pipeline against a missing row (silent no-op before).
+                logger.warning(
+                    "Skipping candidate %d: no longer exists (deleted before processing).",
+                    candidate_id,
+                )
+                continue  # still runs the finally block (task_done + processing count)
+            if cand.status == S.QUEUED:
+                publish_candidate_event(candidate_id, S.QUEUED, job_id=cand.job_id, event="queued")
             evaluate_candidate_pipeline(candidate_id, db)
 
             # No interview invite is minted here. Invites are sent only when HR

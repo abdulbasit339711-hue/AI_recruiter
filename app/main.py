@@ -9,9 +9,10 @@ from math import ceil
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse, FileResponse
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import func
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 from .core.logging_config import setup_logging
 from .core import status as S
 from .core.auth import admin_token_guard, token_is_valid
-from .core.ratelimit import upload_rate_limit, jobs_rate_limit
+from .core.ratelimit import upload_rate_limit, jobs_rate_limit, iq_rate_limit
 from .core.jd_embedding_cache import invalidate_job, cache_stats
 from .core.model_registry import models_loaded
 from .database import engine, Base, get_db, config, run_migrations, DATABASE_URL
@@ -32,8 +33,21 @@ from .schemas import (
     CandidateResponse,
     TimelineEntry,
     TimelineResponse,
+    IqTestResponse,
+    IqSubmitRequest,
+    IqSubmitResponse,
+)
+from .iq import (
+    sample_questions,
+    score_answers,
+    mint_test_token,
+    verify_test_token,
+    mint_result_token,
+    verify_result_token,
+    IqTokenError,
 )
 from .queue.worker import enqueue_candidate, start_worker, stop_worker, get_queue_stats
+from .services.email import OutgoingEmail, get_email_sender
 from .llm.groq_client import groq_circuit_state, get_groq_client
 from .events.broadcaster import event_hub
 from .events.sse import stream_candidate_events, stream_job_events
@@ -343,10 +357,60 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
 # UPLOAD (immediate response + background queue)
 # ==========================================
 
+# ==========================================
+# IQ SCREEN (public, pre-application)
+# ==========================================
+
+@app.get("/iq-test", response_model=IqTestResponse, dependencies=[Depends(iq_rate_limit)])
+def get_iq_test(job_id: int = Query(..., description="Target Job ID"), db: Session = Depends(get_db)):
+    """Serve a sampled, time-limited IQ test for the apply flow.
+
+    Returns questions WITHOUT correct answers plus a signed token pinning which
+    questions were served and a server-enforced deadline. Public, like /upload.
+    """
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+    if job.status == "Archived":
+        raise HTTPException(status_code=400, detail=f"Job '{job.title}' is archived.")
+
+    iq_cfg = config.get("iq", {}) or {}
+    n = int(iq_cfg.get("num_questions", 10))
+    ttl = int(iq_cfg.get("time_limit_seconds", 600))
+    questions = sample_questions(n)
+    token = mint_test_token(job_id, [q.id for q in questions], ttl_seconds=ttl)
+    return {
+        "questions": [q.to_public() for q in questions],
+        "test_token": token,
+        "time_limit_seconds": ttl,
+        "total": len(questions),
+    }
+
+
+@app.post("/iq-test/submit", response_model=IqSubmitResponse, dependencies=[Depends(iq_rate_limit)])
+def submit_iq_test(payload: IqSubmitRequest):
+    """Score answers server-side against the bank and issue a signed result token.
+
+    The result token is what the applicant later hands to /upload so the score is
+    attached to their candidate row (tamper-proof, so it can ride through the client).
+    """
+    try:
+        claims = verify_test_token(payload.test_token)
+    except IqTokenError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid or expired test: {e}")
+
+    correct, total = score_answers(payload.answers, claims.question_ids)
+    score = round((correct / total) * 100, 2) if total else 0.0
+    result_ttl = int((config.get("iq", {}) or {}).get("result_ttl_seconds", 3600))
+    result_token = mint_result_token(claims.job_id, correct, total, score, ttl_seconds=result_ttl)
+    return {"correct": correct, "total": total, "score": score, "result_token": result_token}
+
+
 @app.post("/upload", dependencies=[Depends(upload_rate_limit)])
 async def upload_resume(
     job_id: int = Query(..., description="Target Job ID"),
     file: UploadFile = File(...),
+    iq_token: Optional[str] = Form(None, description="Signed IQ result token (optional)"),
     db: Session = Depends(get_db),
 ):
     """
@@ -371,6 +435,23 @@ async def upload_resume(
             status=S.QUEUED,
             created_at=_utcnow().isoformat(),
         )
+        # Attach the IQ screen result if a valid token was supplied. This NEVER
+        # blocks the application: an absent/invalid/mismatched token simply leaves
+        # the IQ score null.
+        if iq_token:
+            try:
+                res = verify_result_token(iq_token)
+                if res.job_id == job_id:
+                    candidate.iq_score = res.score
+                    candidate.iq_correct = res.correct
+                    candidate.iq_total = res.total
+                else:
+                    logger.warning(
+                        "IQ token job mismatch (token job=%s, upload job=%s); ignoring.",
+                        res.job_id, job_id,
+                    )
+            except IqTokenError as e:
+                logger.warning("Ignoring invalid IQ token on upload: %s", e)
         db.add(candidate)
         db.commit()
         db.refresh(candidate)
@@ -489,6 +570,34 @@ def get_candidate_resume(candidate_id: int, db: Session = Depends(get_db)):
     )
 
 
+def _load_status_history(candidate) -> list:
+    """Parse a candidate's status_history JSON, *preserving* unreadable data.
+
+    The old code silently swallowed a JSON error and reset history to ``[]`` —
+    the next write then overwrote the column, permanently losing the audit trail.
+    Here, corrupt/non-list data is wrapped into a 'recovered' entry instead of
+    being dropped, and the problem is logged.
+    """
+    raw = candidate.status_history
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return parsed
+        logger.warning("status_history for candidate %s is not a list; preserving it.", candidate.id)
+    except Exception:
+        logger.warning("status_history for candidate %s is unreadable; preserving it.", candidate.id)
+    return [{
+        "type": "recovered",
+        "status": "",
+        "changed_by": "system",
+        "changed_at": _utcnow().isoformat() + "Z",
+        "note": "Previous status history was unreadable and has been preserved.",
+        "raw": str(raw)[:2000],
+    }]
+
+
 @app.patch("/candidates/{candidate_id}/status", response_model=CandidateResponse)
 def update_candidate_status(
     candidate_id: int,
@@ -498,14 +607,9 @@ def update_candidate_status(
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
-    
-    history = []
-    if candidate.status_history:
-        try:
-            history = json.loads(candidate.status_history)
-        except Exception:
-            pass
-    
+
+    history = _load_status_history(candidate)
+
     new_entry = {
         "type": "status_change",
         "status": payload.hr_status,
@@ -566,13 +670,8 @@ def override_candidate_score(
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
     
-    history = []
-    if candidate.status_history:
-        try:
-            history = json.loads(candidate.status_history)
-        except Exception:
-            pass
-    
+    history = _load_status_history(candidate)
+
     new_entry = {
         "type": "score_override",
         "status": f"Score Overridden: {payload.override_score}",
@@ -604,13 +703,8 @@ def get_candidate_timeline(
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
     
-    history = []
-    if candidate.status_history:
-        try:
-            history = json.loads(candidate.status_history)
-        except Exception:
-            pass
-    
+    history = _load_status_history(candidate)
+
     entries = []
     for entry in history:
         entries.append(
@@ -746,25 +840,45 @@ async def replace_candidate_resume(
 
 
 @app.post("/jobs/{job_id}/reprocess")
-def reprocess_all_for_job(job_id: int, db: Session = Depends(get_db)):
+def reprocess_all_for_job(
+    job_id: int,
+    limit: int = Query(500, ge=1, le=2000, description="Max candidates to (re)queue in this call"),
+    db: Session = Depends(get_db),
+):
+    """Re-queue a job's candidates in bounded batches.
+
+    Capped at ``limit`` per call (and by the queue's own capacity) so a job with
+    thousands of candidates can't time out the request or flood the queue. When
+    ``remaining > 0`` the caller can invoke this again to continue.
+    """
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
-    candidates = db.query(Candidate).filter(Candidate.job_id == job_id).all()
+
+    total = db.query(Candidate).filter(Candidate.job_id == job_id).count()
+    batch = (
+        db.query(Candidate)
+        .filter(Candidate.job_id == job_id)
+        .order_by(Candidate.created_at.asc())
+        .limit(limit)
+        .all()
+    )
+
     queued = 0
-    for cand in candidates:
-        cand.status = S.QUEUED
-        db.commit()
+    for cand in batch:
         try:
-            enqueue_candidate(cand.id)
-            queued += 1
+            enqueue_candidate(cand.id)  # enqueue first so we only mark what we accept
         except _queue.Full:
             break  # queue saturated — stop; the rest can be reprocessed later
-    return {
-        "message": f"Queued {queued} of {len(candidates)} candidates for reprocessing.",
-        "count": queued,
-        "total": len(candidates),
-    }
+        cand.status = S.QUEUED
+        queued += 1
+    db.commit()  # one commit for the whole batch, not one-per-candidate
+
+    remaining = total - queued
+    msg = f"Queued {queued} of {total} candidates for reprocessing."
+    if remaining > 0:
+        msg += f" {remaining} remaining — call again to continue."
+    return {"message": msg, "count": queued, "total": total, "remaining": remaining}
 
 
 @app.get("/candidates/{candidate_id}/interview")
@@ -1033,14 +1147,11 @@ def send_interview_invite_api(candidate_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/jobs/{job_id}/email")
-def send_shortlist_emails_api(
+async def send_shortlist_emails_api(
     job_id: int,
     top_n: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
-    import smtplib
-    from email.message import EmailMessage
-
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -1054,42 +1165,33 @@ def send_shortlist_emails_api(
     )
 
     if not shortlisted:
-        return {"message": "No shortlisted candidates to email."}
-
-    smtp_email = os.getenv("SMTP_EMAIL")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    if not smtp_email or not smtp_password:
-        raise HTTPException(status_code=500, detail="SMTP credentials not configured.")
+        return {"message": "No shortlisted candidates to email.", "failed_count": 0, "errors": []}
 
     limit = top_n if top_n is not None else len(shortlisted)
-    sent_count = 0
-    errors = []
-
+    errors: list[str] = []
+    messages: list[OutgoingEmail] = []
     for cand in shortlisted[:limit]:
         if not cand.email:
             errors.append(f"{cand.filename}: no email address.")
             continue
-        try:
-            msg = EmailMessage()
-            msg["From"] = smtp_email
-            msg["To"] = cand.email
-            msg["Subject"] = f"Your Application for {job.title} – Shortlisted"
-            name = cand.name or cand.filename.replace("_", " ")
-            body = (
+        name = cand.name or cand.filename.replace("_", " ")
+        messages.append(OutgoingEmail(
+            to=cand.email,
+            subject=f"Your Application for {job.title} – Shortlisted",
+            body=(
                 f"Dear {name},\n\n"
                 f"You have been shortlisted for {job.title}.\n\n"
                 "Our team will contact you shortly.\n\n"
                 "Best regards,\nAI Recruiter Team"
-            )
-            msg.set_content(body)
-            with smtplib.SMTP("smtp.gmail.com", 587) as server:
-                server.starttls()
-                server.login(smtp_email, smtp_password)
-                server.send_message(msg)
-            sent_count += 1
-        except Exception as e:
-            errors.append(f"{cand.email}: {str(e)}")
+            ),
+        ))
 
+    # SMTP is blocking I/O over one reused connection — run it off the event loop
+    # so a slow mail server can't stall the API.
+    send_errors = await run_in_threadpool(get_email_sender().send_batch, messages)
+    errors.extend(f"{to}: {err}" for to, err in send_errors.items())
+
+    sent_count = len(messages) - len(send_errors)
     return {
         "message": f"Sent {sent_count} emails.",
         "failed_count": len(errors),

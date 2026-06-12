@@ -139,6 +139,30 @@ class InterviewBot:
 from contextlib import asynccontextmanager
 
 
+def validate_required_keys() -> None:
+    """Fail fast if the API keys the interview pipeline needs are missing/empty.
+
+    ``os.environ["X"]`` only catches a *missing* var — an empty value (``X=``)
+    sailed through and the service died mid-interview with a cryptic error. Here we
+    check presence AND non-emptiness at startup so misconfiguration is loud and
+    immediate. CARTESIA is only required when it's the selected TTS provider.
+    """
+    required = {
+        "DEEPGRAM_API_KEY": "speech-to-text (and default TTS)",
+        "GROQ_API_KEY": "responder + judge LLM",
+    }
+    if os.getenv("TTS_PROVIDER", "deepgram").lower() == "cartesia":
+        required["CARTESIA_API_KEY"] = "text-to-speech (TTS_PROVIDER=cartesia)"
+
+    missing = [name for name in required if not (os.getenv(name) or "").strip()]
+    if missing:
+        details = ", ".join(f"{n} ({required[n]})" for n in missing)
+        raise RuntimeError(
+            f"Missing/empty required API key(s): {details}. "
+            "Set them in the environment (.env) before starting the interview server."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """ASGI startup/shutdown.
@@ -149,6 +173,7 @@ async def lifespan(app: FastAPI):
     launcher (uvicorn runner:app, gunicorn, container CMD) boots the full system.
     """
     global _bot_task, _shutting_down
+    validate_required_keys()  # fail fast on misconfiguration, not mid-interview
     _shutting_down = False
     if START_DEFAULT_BOT:
         _bot_task = asyncio.create_task(_supervise_default_bot())

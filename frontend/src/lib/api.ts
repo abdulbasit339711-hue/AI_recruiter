@@ -8,6 +8,8 @@ import {
   NotePayload,
   ScoreOverridePayload,
   TimelineEntry,
+  IqTestResponse,
+  IqSubmitResponse,
 } from "@/types";
 
 // All backend traffic goes through the same-origin Next proxy
@@ -138,8 +140,8 @@ export const api = {
       title?: string;
       department?: string;
       job_description?: string;
-      llm_prompt?: string;
-      role_type?: string;
+      llm_prompt?: string | null;
+      role_type?: string | null;
       status?: "Active" | "Archived";
     }
   ): Promise<Job> {
@@ -235,12 +237,28 @@ export const api = {
     return response.data;
   },
 
-  async uploadResume(jobId: number, file: File): Promise<UploadResponse> {
+  async uploadResume(jobId: number, file: File, iqToken?: string): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append("file", file);
+    if (iqToken) formData.append("iq_token", iqToken); // attach IQ screen result (optional)
     const response = await client.post<UploadResponse>("/upload", formData, {
       params: { job_id: jobId },
       headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  },
+
+  async getIqTest(jobId: number): Promise<IqTestResponse> {
+    const response = await client.get<IqTestResponse>("/iq-test", {
+      params: { job_id: jobId },
+    });
+    return response.data;
+  },
+
+  async submitIqTest(testToken: string, answers: Record<string, number>): Promise<IqSubmitResponse> {
+    const response = await client.post<IqSubmitResponse>("/iq-test/submit", {
+      test_token: testToken,
+      answers,
     });
     return response.data;
   },

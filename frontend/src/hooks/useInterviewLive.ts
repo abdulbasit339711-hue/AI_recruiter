@@ -38,6 +38,20 @@ function mapGoals(raw: unknown): GoalRow[] {
   }));
 }
 
+/** Parse an SSE payload defensively: a malformed/non-object event yields null
+ *  instead of throwing inside the listener (which would surface as an uncaught
+ *  error) or feeding garbage into React state. */
+function parseEventData(e: Event): Record<string, unknown> | null {
+  const raw = (e as MessageEvent).data;
+  if (typeof raw !== "string") return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Subscribe to the voice service's SSE stream and accumulate live interview state.
  *  Pass the interview's sessionId so the stream is scoped to this candidate only.
  *  `seed` is the conversation-so-far returned on a resume; it's shown immediately
@@ -69,29 +83,36 @@ export function useInterviewLive(
     es.onerror = () => setConnected(false);
 
     es.addEventListener("transcript", (e) => {
-      const d = JSON.parse((e as MessageEvent).data);
+      const d = parseEventData(e);
+      if (!d) return;
       // When scoped to a session, ignore any transcript that isn't ours (e.g. the
       // default/testing bot's events, which carry no session_id).
       if (sessionId && d.session_id !== sessionId) return;
-      if (d.speaker === "agent" && d.streaming) {
+      const text = typeof d.text === "string" ? d.text : "";
+      const speaker = typeof d.speaker === "string" ? d.speaker : "agent";
+      if (!text) return;
+      if (speaker === "agent" && d.streaming) {
         setTranscript((prev) => {
           if (streamingRef.current && prev.length && prev[prev.length - 1].speaker === "agent") {
             const copy = [...prev];
-            copy[copy.length - 1] = { speaker: "agent", text: copy[copy.length - 1].text + " " + d.text };
+            copy[copy.length - 1] = { speaker: "agent", text: copy[copy.length - 1].text + " " + text };
             return copy;
           }
           streamingRef.current = true;
-          return [...prev, { speaker: "agent", text: d.text }];
+          return [...prev, { speaker: "agent", text }];
         });
       } else {
         streamingRef.current = false;
-        setTranscript((prev) => [...prev, { speaker: d.speaker, text: d.text }]);
+        setTranscript((prev) => [...prev, { speaker, text }]);
       }
     });
 
     const onGoals = (e: Event) => {
-      const d = JSON.parse((e as MessageEvent).data);
-      const g = d.summary?.goals ?? d.goals?.goals ?? d.goals;
+      const d = parseEventData(e);
+      if (!d) return;
+      const summary = d.summary as Record<string, unknown> | undefined;
+      const goalsObj = d.goals as Record<string, unknown> | undefined;
+      const g = summary?.goals ?? goalsObj?.goals ?? d.goals;
       const mapped = mapGoals(g);
       if (mapped.length) setGoals(mapped);
     };
@@ -99,13 +120,14 @@ export function useInterviewLive(
     es.addEventListener("goal_progress_update", onGoals);
 
     es.addEventListener("judge_evaluation", (e) => {
-      const d = JSON.parse((e as MessageEvent).data);
+      const d = parseEventData(e);
+      if (!d) return;
       setJudge({
-        score: d.score,
-        completeness: d.completeness,
-        depth: d.depth,
-        follow_up_needed: d.follow_up_needed,
-        suggested_probe: d.suggested_probe,
+        score: Number(d.score ?? 0),
+        completeness: Number(d.completeness ?? 0),
+        depth: String(d.depth ?? "unknown"),
+        follow_up_needed: Boolean(d.follow_up_needed),
+        suggested_probe: typeof d.suggested_probe === "string" ? d.suggested_probe : undefined,
       });
     });
 

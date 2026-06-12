@@ -23,6 +23,8 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from .ratelimit import admin_mutation_rate_ok
+
 _bearer = HTTPBearer(auto_error=False)
 
 # Endpoints reachable without the admin token. Everything else requires it.
@@ -33,6 +35,8 @@ _PUBLIC_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GET", re.compile(r"^/health/?$")),
     ("GET", re.compile(r"^/jobs/?$")),            # careers listing (public job postings)
     ("GET", re.compile(r"^/jobs/\d+/?$")),        # view one job to apply
+    ("GET", re.compile(r"^/iq-test/?$")),         # fetch the pre-application IQ test
+    ("POST", re.compile(r"^/iq-test/submit/?$")), # submit IQ answers (scored server-side)
     ("POST", re.compile(r"^/upload/?$")),         # submit a resume
 )
 
@@ -81,6 +85,13 @@ async def admin_token_guard(request: Request, call_next):
             status_code=401,
             content={"detail": "Missing or invalid admin credentials."},
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    # Authenticated, but the shared token must not be a license to spam mutations.
+    if not admin_mutation_rate_ok(request.method, request):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many requests. Please wait a moment and try again."},
+            headers={"Retry-After": "60"},
         )
     return await call_next(request)
 

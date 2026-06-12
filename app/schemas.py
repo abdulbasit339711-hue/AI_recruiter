@@ -1,5 +1,31 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
+
+
+# ── Pre-application IQ screen ──────────────────────────────────────────────────
+class IqQuestionPublic(BaseModel):
+    id: str
+    prompt: str
+    options: List[str]
+
+
+class IqTestResponse(BaseModel):
+    questions: List[IqQuestionPublic]
+    test_token: str
+    time_limit_seconds: int
+    total: int
+
+
+class IqSubmitRequest(BaseModel):
+    test_token: str
+    answers: Dict[str, int]  # {question_id: chosen_option_index}
+
+
+class IqSubmitResponse(BaseModel):
+    correct: int
+    total: int
+    score: float  # percentage 0–100
+    result_token: str
 
 class StatusUpdateRequest(BaseModel):
     hr_status: str
@@ -70,5 +96,10 @@ class CandidateResponse(BaseModel):
     hr_notes: Optional[str] = None
     hr_score_override: Optional[float] = None
     status_history: Optional[str] = None
+
+    # Pre-application IQ screen (server-scored; recorded, never gates).
+    iq_score: Optional[float] = None
+    iq_correct: Optional[int] = None
+    iq_total: Optional[int] = None
 
     model_config = {"from_attributes": True}
