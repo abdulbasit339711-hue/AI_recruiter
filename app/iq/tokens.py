@@ -47,7 +47,9 @@ class IqResultClaims:
     job_id: int
     correct: int
     total: int
-    score: float  # percentage 0–100
+    score: float  # time-adjusted percentage 0–100
+    time_seconds: int  # server-measured time the candidate took
+    detail: list  # per-question breakdown (prompt/options/chosen/correct/time)
     iat: int
     exp: int
     jti: str
@@ -99,6 +101,8 @@ def mint_result_token(
     total: int,
     score: float,
     *,
+    time_seconds: int = 0,
+    detail: list | None = None,
     ttl_seconds: int,
     secret: str | None = None,
     now: int | None = None,
@@ -110,6 +114,8 @@ def mint_result_token(
         "correct": int(correct),
         "total": int(total),
         "score": round(float(score), 2),
+        "time_seconds": int(time_seconds),
+        "detail": detail or [],
         "iat": issued,
         "exp": issued + int(ttl_seconds),
         "jti": uuid.uuid4().hex,
@@ -127,6 +133,8 @@ def verify_result_token(token: str, secret: str | None = None) -> IqResultClaims
             correct=int(payload["correct"]),
             total=int(payload["total"]),
             score=float(payload["score"]),
+            time_seconds=int(payload.get("time_seconds", 0)),
+            detail=payload.get("detail") or [],
             iat=int(payload["iat"]),
             exp=int(payload["exp"]),
             jti=str(payload.get("jti", "")),

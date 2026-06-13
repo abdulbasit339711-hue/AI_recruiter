@@ -25,6 +25,9 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const answersRef = useRef(answers);
   answersRef.current = answers;
+  // Per-question time tracking (client-reported, for the HR breakdown).
+  const timesRef = useRef<Record<string, number>>({});
+  const questionStartRef = useRef<number>(0);
 
   const perQuestion = test ? Math.max(15, Math.floor(test.time_limit_seconds / test.total)) : 0;
 
@@ -50,7 +53,7 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
     if (!test) return;
     setPhase("submitting");
     try {
-      const result = await api.submitIqTest(test.test_token, answersRef.current);
+      const result = await api.submitIqTest(test.test_token, answersRef.current, timesRef.current);
       onComplete(result);
     } catch {
       // Scoring failed (e.g. the test token expired) — don't trap the applicant.
@@ -61,6 +64,11 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
   const advance = useCallback(() => {
     setIndex((i) => {
       if (!test) return i;
+      // Record time spent on the question we're leaving (once).
+      const qid = test.questions[i].id;
+      if (timesRef.current[qid] === undefined) {
+        timesRef.current[qid] = Math.max(0, Math.round((Date.now() - questionStartRef.current) / 1000));
+      }
       if (i + 1 >= test.total) {
         void submit();
         return i;
@@ -73,6 +81,7 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
   useEffect(() => {
     if (phase !== "active" || !test) return;
     setSecondsLeft(perQuestion);
+    questionStartRef.current = Date.now();  // start this question's clock
     const id = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {

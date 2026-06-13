@@ -75,9 +75,16 @@ class Candidate(Base):
     llm_cost_usd = Column(Float, nullable=True, default=None)
 
     # Pre-application IQ screen (server-scored). Recorded for HR ranking; never
-    # gates the application. iq_score is a percentage (0–100); correct/total are raw.
+    # gates the application. iq_score is the time-adjusted percentage (0–100);
+    # correct/total are the raw accuracy; iq_time_seconds is the server-measured
+    # duration; iq_attempted_at is when it was submitted (ISO).
     iq_score = Column(Float, nullable=True, default=None)
     iq_correct = Column(Integer, nullable=True, default=None)
     iq_total = Column(Integer, nullable=True, default=None)
+    iq_time_seconds = Column(Integer, nullable=True, default=None)
+    iq_attempted_at = Column(String, nullable=True, default=None)
+    # Per-question breakdown (JSON list): prompt, options, chosen, correct, is_correct,
+    # time_seconds — shown in the HR "Aptitude screen" block.
+    iq_details = Column(Text, nullable=True, default=None)
 
     job = relationship("Job", back_populates="candidates")

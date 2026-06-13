@@ -8,13 +8,17 @@ blocking the application when the token is absent, invalid, or for another job.
 import pytest
 from fastapi.testclient import TestClient
 
+import time
+
 from app.iq import (
     IqTokenError,
+    build_detail,
     get_bank,
     mint_result_token,
     mint_test_token,
     sample_questions,
     score_answers,
+    time_adjusted_score,
     verify_result_token,
     verify_test_token,
 )
@@ -46,6 +50,15 @@ def test_score_perfect_and_partial():
     answers = {q.id: q.answer for q in qs}
     answers[ids[0]] = (qs[0].answer + 1) % len(qs[0].options)
     assert score_answers(answers, ids) == (4, 5)
+
+
+def test_time_adjusted_score():
+    # accuracy is the ceiling; using more time erodes it by up to speed_weight
+    assert time_adjusted_score(8, 10, 0, 600, 0.2) == 80.0      # instant -> full accuracy
+    assert time_adjusted_score(8, 10, 300, 600, 0.2) == 72.0    # half time -> 80 * 0.9
+    assert time_adjusted_score(8, 10, 600, 600, 0.2) == 64.0    # full time -> 80 * 0.8
+    assert time_adjusted_score(0, 10, 0, 600, 0.2) == 0.0       # wrong -> 0 regardless of speed
+    assert time_adjusted_score(5, 5, 999, 0, 0.2) == 100.0      # no limit -> pure accuracy
 
 
 def test_score_ignores_unknown_and_unserved():
@@ -158,6 +171,77 @@ def test_submit_scores_and_issues_result(client):
 
 def test_submit_bad_token_400(client):
     assert client.post("/iq-test/submit", json={"test_token": "nope", "answers": {}}).status_code == 400
+
+
+def test_submit_response_has_accuracy_and_time(client):
+    jid = _make_job()
+    test = client.get(f"/iq-test?job_id={jid}").json()
+    answers = {q["id"]: 0 for q in test["questions"]}
+    body = client.post("/iq-test/submit", json={"test_token": test["test_token"], "answers": answers}).json()
+    assert {"correct", "total", "accuracy", "score", "time_seconds", "detail", "result_token"} <= set(body)
+    assert body["time_seconds"] >= 0
+
+
+def test_build_detail_marks_correctness_and_time():
+    qs = get_bank()[:2]
+    ids = [q.id for q in qs]
+    answers = {qs[0].id: qs[0].answer, qs[1].id: (qs[1].answer + 1) % len(qs[1].options)}
+    times = {qs[0].id: 12, qs[1].id: 30}
+    d = build_detail(ids, answers, times)
+    assert d[0]["is_correct"] is True and d[0]["time_seconds"] == 12
+    assert d[1]["is_correct"] is False and d[1]["chosen_text"] != d[1]["correct_text"]
+
+
+def test_submit_returns_per_question_detail(client):
+    jid = _make_job()
+    test = client.get(f"/iq-test?job_id={jid}").json()
+    answers = {q["id"]: 0 for q in test["questions"]}
+    times = {q["id"]: 7 for q in test["questions"]}
+    body = client.post(
+        "/iq-test/submit", json={"test_token": test["test_token"], "answers": answers, "times": times}
+    ).json()
+    assert len(body["detail"]) == test["total"]
+    q0 = body["detail"][0]
+    assert {"prompt", "options", "chosen", "correct", "is_correct", "time_seconds"} <= set(q0)
+    assert q0["time_seconds"] == 7
+
+
+def test_upload_stores_iq_details(client):
+    jid = _make_job()
+    qs = get_bank()[:3]
+    detail = build_detail([q.id for q in qs], {q.id: q.answer for q in qs}, {q.id: 5 for q in qs})
+    token = mint_result_token(jid, 3, 3, 100.0, time_seconds=15, detail=detail, ttl_seconds=3600)
+    r = _upload(client, jid, iq_token=token)
+    assert r.status_code == 200, r.text
+    cand = _candidate(r.json()["id"])
+    import json as _json
+    stored = _json.loads(cand.iq_details)
+    assert len(stored) == 3 and stored[0]["is_correct"] is True
+
+
+def test_slower_attempt_scores_lower(client):
+    # Same correct answers, but the slower attempt (issued 300s ago) scores lower.
+    qs = get_bank()[:5]
+    ids = [q.id for q in qs]
+    answers = {q.id: q.answer for q in qs}
+    now = int(time.time())
+    fast = mint_test_token(1, ids, ttl_seconds=600, now=now)
+    slow = mint_test_token(1, ids, ttl_seconds=600, now=now - 300)  # ~half the limit elapsed
+    rf = client.post("/iq-test/submit", json={"test_token": fast, "answers": answers}).json()
+    rs = client.post("/iq-test/submit", json={"test_token": slow, "answers": answers}).json()
+    assert rf["accuracy"] == rs["accuracy"] == 100.0  # identical correctness
+    assert rs["score"] < rf["score"]                  # but speed lowers the slow one
+    assert rs["time_seconds"] > rf["time_seconds"]
+
+
+def test_upload_attaches_time_and_attempted_at(client):
+    jid = _make_job()
+    token = mint_result_token(jid, 8, 10, 72.0, time_seconds=300, ttl_seconds=3600)
+    r = _upload(client, jid, iq_token=token)
+    assert r.status_code == 200, r.text
+    cand = _candidate(r.json()["id"])
+    assert cand.iq_score == 72.0 and cand.iq_time_seconds == 300
+    assert cand.iq_attempted_at is not None
 
 
 def test_submit_rejects_oversized_answers(client):

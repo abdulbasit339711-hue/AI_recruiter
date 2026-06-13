@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import queue as _queue
+import time as _time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from math import ceil
@@ -40,6 +41,8 @@ from .schemas import (
 from .iq import (
     sample_questions,
     score_answers,
+    time_adjusted_score,
+    build_detail,
     mint_test_token,
     verify_test_token,
     mint_result_token,
@@ -399,11 +402,32 @@ def submit_iq_test(payload: IqSubmitRequest):
     except IqTokenError as e:
         raise HTTPException(status_code=400, detail=f"Invalid or expired test: {e}")
 
+    iq_cfg = config.get("iq", {}) or {}
+    time_limit = int(iq_cfg.get("time_limit_seconds", 600))
+    speed_weight = float(iq_cfg.get("speed_weight", 0.2))
+    # Time taken is measured server-side (test issuance -> submit), so it can't be
+    # forged by the client; clamped to the time limit.
+    elapsed = min(max(0, int(_time.time()) - claims.iat), time_limit)
+
     correct, total = score_answers(payload.answers, claims.question_ids)
-    score = round((correct / total) * 100, 2) if total else 0.0
-    result_ttl = int((config.get("iq", {}) or {}).get("result_ttl_seconds", 3600))
-    result_token = mint_result_token(claims.job_id, correct, total, score, ttl_seconds=result_ttl)
-    return {"correct": correct, "total": total, "score": score, "result_token": result_token}
+    accuracy = round((correct / total) * 100, 2) if total else 0.0
+    score = time_adjusted_score(correct, total, elapsed, time_limit, speed_weight)
+    detail = build_detail(claims.question_ids, payload.answers, payload.times or {})
+
+    result_ttl = int(iq_cfg.get("result_ttl_seconds", 3600))
+    result_token = mint_result_token(
+        claims.job_id, correct, total, score,
+        time_seconds=elapsed, detail=detail, ttl_seconds=result_ttl,
+    )
+    return {
+        "correct": correct,
+        "total": total,
+        "accuracy": accuracy,
+        "score": score,
+        "time_seconds": elapsed,
+        "detail": detail,
+        "result_token": result_token,
+    }
 
 
 @app.post("/upload", dependencies=[Depends(upload_rate_limit)])
@@ -445,6 +469,12 @@ async def upload_resume(
                     candidate.iq_score = res.score
                     candidate.iq_correct = res.correct
                     candidate.iq_total = res.total
+                    candidate.iq_time_seconds = res.time_seconds
+                    candidate.iq_details = json.dumps(res.detail) if res.detail else None
+                    # When the screen was taken (result token issuance = submit time).
+                    candidate.iq_attempted_at = datetime.fromtimestamp(
+                        res.iat, tz=timezone.utc
+                    ).isoformat()
                 else:
                     logger.warning(
                         "IQ token job mismatch (token job=%s, upload job=%s); ignoring.",
@@ -1045,6 +1075,30 @@ def _build_candidate_report_md(candidate: Candidate, job_title: str, interview: 
     if ev:
         L += ["", "### Evidence"]
         L += [f"- {e if isinstance(e, str) else json.dumps(e)}" for e in (ev if isinstance(ev, list) else [ev])]
+
+    # Candidate profile extracted during scoring (role, companies, experience, skills, IQ).
+    companies = _parse(candidate.companies) or []
+    matched = _parse(candidate.skills_matched) or []
+    missing = _parse(candidate.skills_missing) or []
+    profile = []
+    if candidate.current_role:
+        profile.append(f"- **Current role:** {candidate.current_role}")
+    if candidate.years_experience is not None:
+        profile.append(f"- **Experience:** {candidate.years_experience} years")
+    if companies:
+        profile.append("- **Companies:** " + ", ".join(str(c) for c in companies))
+    if matched:
+        profile.append("- **Matched skills:** " + ", ".join(str(s) for s in matched))
+    if missing:
+        profile.append("- **Missing skills:** " + ", ".join(str(s) for s in missing))
+    if candidate.iq_score is not None:
+        iq = f"- **Aptitude (IQ) screen:** {round(candidate.iq_score)}%"
+        if candidate.iq_total:
+            iq += f" ({candidate.iq_correct}/{candidate.iq_total}"
+            iq += f", {candidate.iq_time_seconds}s)" if candidate.iq_time_seconds is not None else ")"
+        profile.append(iq)
+    if profile:
+        L += ["", "## Profile"] + profile
 
     L += ["", "## AI interview"]
     if not interview.get("has_interview"):

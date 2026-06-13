@@ -255,10 +255,15 @@ export const api = {
     return response.data;
   },
 
-  async submitIqTest(testToken: string, answers: Record<string, number>): Promise<IqSubmitResponse> {
+  async submitIqTest(
+    testToken: string,
+    answers: Record<string, number>,
+    times?: Record<string, number>
+  ): Promise<IqSubmitResponse> {
     const response = await client.post<IqSubmitResponse>("/iq-test/submit", {
       test_token: testToken,
       answers,
+      times,
     });
     return response.data;
   },

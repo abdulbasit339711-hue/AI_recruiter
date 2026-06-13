@@ -19,6 +19,10 @@ python scripts/test_scoring.py     # seed the DB with sample candidates
 pytest tests/                      # backend test suite
 ```
 
+The test suite is **isolated from the real DB**: the root `conftest.py` points every
+pytest run at a throwaway SQLite file (and `tests/conftest.py` creates the schema), so
+tests never pollute the configured Postgres. Set `KEEP_TEST_DB=1` to opt out.
+
 ## Layout (`app/`)
 
 - `main.py` — all FastAPI routes (job CRUD, upload, candidate ops, SSE, email/invite). Large; route surface listed below.
@@ -49,7 +53,7 @@ pytest tests/                      # backend test suite
 ## Key endpoints (see `main.py`)
 
 - Jobs: `POST/GET /jobs`, `GET/PUT/PATCH/DELETE /jobs/{job_id}`
-- IQ screen (public, pre-application): `GET /iq-test?job_id=` (sampled, time-limited questions + signed token), `POST /iq-test/submit` (server-scored → result token). Built-in bank in `iq/bank.py`, stateless JWT tokens in `iq/tokens.py`. The score is attached to the candidate at upload via the optional `iq_token` form field — **recorded, never gates the application**.
+- IQ screen (public, pre-application): `GET /iq-test?job_id=` (sampled, time-limited questions + signed token), `POST /iq-test/submit` (server-scored → result token). Built-in **static** bank in `iq/bank.py` (randomized per attempt, no LLM), stateless JWT tokens in `iq/tokens.py`. **Time-weighted:** the time taken is measured server-side (test-issuance → submit) and `iq_score = accuracy × (1 − speed_weight × time_used_fraction)` (`config.yaml: iq.speed_weight`, default 0.2) — accuracy is the ceiling, slower attempts score lower, wrong answers stay 0. Attached to the candidate at upload via the optional `iq_token` form field (`iq_score`, `iq_correct/total`, `iq_time_seconds`, `iq_attempted_at`) — **recorded, never gates the application**.
 - Candidates: `POST /upload` (accepts optional `iq_token`), `GET /jobs/{job_id}/candidates`, `GET /candidates/{id}`, `GET /candidates/{id}/resume`, `PATCH /candidates/{id}/status`, `POST /candidates/{id}/notes`, `PATCH /candidates/{id}/score-override`, `GET /candidates/{id}/timeline`
 - Live updates (SSE): `GET /jobs/{job_id}/events`, `GET /candidates/{id}/events`
 - Reprocess: `POST /candidates/{id}/reprocess`, `POST /jobs/{job_id}/reprocess` (bounded by `limit`, default 500; call again while `remaining > 0`)

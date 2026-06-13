@@ -18,7 +18,7 @@ The question bank lives in code for now; it is deliberately fronted by
 touching the endpoints.
 """
 
-from .bank import IqQuestion, get_bank, sample_questions, score_answers
+from .bank import IqQuestion, get_bank, sample_questions, score_answers, time_adjusted_score, build_detail
 from .tokens import (
     IqTokenError,
     IqTestClaims,
@@ -35,6 +35,8 @@ __all__ = [
     "get_bank",
     "sample_questions",
     "score_answers",
+    "time_adjusted_score",
+    "build_detail",
     "IqTokenError",
     "IqTestClaims",
     "IqResultClaims",

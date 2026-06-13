@@ -52,9 +52,12 @@ export interface Candidate {
   status_history: TimelineEntry[] | null;
 
   // Pre-application IQ screen (server-scored; recorded, never gates).
-  iq_score?: number | null;   // percentage 0–100
+  iq_score?: number | null;        // time-adjusted percentage 0–100
   iq_correct?: number | null;
   iq_total?: number | null;
+  iq_time_seconds?: number | null; // server-measured time taken
+  iq_attempted_at?: string | null; // ISO timestamp when submitted
+  iq_details?: string | null;      // JSON: IqQuestionDetail[]
 }
 
 export interface TimelineEntry {
@@ -96,10 +99,25 @@ export interface IqTestResponse {
   total: number;
 }
 
+export interface IqQuestionDetail {
+  id: string;
+  prompt: string;
+  options: string[];
+  chosen: number | null;
+  chosen_text: string | null;
+  correct: number;
+  correct_text: string;
+  is_correct: boolean;
+  time_seconds: number;
+}
+
 export interface IqSubmitResponse {
   correct: number;
   total: number;
-  score: number; // percentage 0–100
+  accuracy: number;      // raw correct/total percentage
+  score: number;         // time-adjusted percentage 0–100
+  time_seconds: number;  // server-measured time taken
+  detail: IqQuestionDetail[];
   result_token: string;
 }
 

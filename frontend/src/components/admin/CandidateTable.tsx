@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Candidate } from "@/types";
+import { formatDuration as fmtDuration } from "@/lib/utils";
 import { ScoreBar } from "./ScoreBar";
 import { StatusBadge } from "./StatusBadge";
 import { StatusBadge as HRStatusBadge } from "../candidates/StatusBadge";
@@ -100,7 +101,8 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
                       {cand.iq_score !== null && cand.iq_score !== undefined && (
                         <span className="mt-0.5 block text-[10px] text-muted-foreground">
                           IQ {Math.round(cand.iq_score)}%
-                          {cand.iq_total ? ` (${cand.iq_correct}/${cand.iq_total})` : ""}
+                          {cand.iq_total ? ` · ${cand.iq_correct}/${cand.iq_total}` : ""}
+                          {cand.iq_time_seconds != null ? ` · ${fmtDuration(cand.iq_time_seconds)}` : ""}
                         </span>
                       )}
                     </TableCell>

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import type { Candidate } from "@/types";
+import { formatDuration } from "@/lib/utils";
 import { ScoreBar } from "./ScoreBar";
 import { Button } from "@/components/ui/button";
 import { Eye, FileText, MessageSquare } from "lucide-react";
@@ -125,6 +126,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           {isOverridden && (
                             <p className="text-[9px] text-amber-500 font-medium">
                               Overridden (Original: {cand.total_score.toFixed(1)})
+                            </p>
+                          )}
+                          {cand.iq_score != null && (
+                            <p className="text-[9px] text-muted-foreground">
+                              IQ {Math.round(cand.iq_score)}%
+                              {cand.iq_total ? ` · ${cand.iq_correct}/${cand.iq_total}` : ""}
+                              {cand.iq_time_seconds != null ? ` · ${formatDuration(cand.iq_time_seconds)}` : ""}
                             </p>
                           )}
                         </div>

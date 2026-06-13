@@ -7,6 +7,7 @@ import { useJob } from "@/hooks/useJob";
 import { useUploadResume } from "@/hooks/useUploadResume";
 import { IqTest } from "@/components/applicant/IqTest";
 import { Button } from "@/components/ui/button";
+import { formatDuration } from "@/lib/utils";
 import type { IqSubmitResponse } from "@/types";
 
 type Step = "iq" | "upload";
@@ -64,7 +65,7 @@ export default function ApplyPage() {
           {iq && (
             <div className="flex items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-200">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
-              Aptitude screen complete — {iq.correct}/{iq.total} correct ({Math.round(iq.score)}%).
+              Aptitude screen complete — {iq.correct}/{iq.total} correct, scored {Math.round(iq.score)}% in {formatDuration(iq.time_seconds)}.
             </div>
           )}
 

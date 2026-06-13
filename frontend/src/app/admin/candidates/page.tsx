@@ -9,16 +9,17 @@ import { InterviewPanel } from "@/components/candidates/InterviewPanel";
 import { useCandidates } from "@/hooks/useCandidates";
 import { useJobEvaluationEvents } from "@/hooks/useJobEvaluationEvents";
 import { useJobs } from "@/hooks/useJobs";
-import type { Candidate, CandidateStatus } from "@/types";
+import type { Candidate, CandidateStatus, IqQuestionDetail } from "@/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ResumeViewer } from "@/components/admin/ResumeViewer";
 import { ScoringWeightsEditor } from "@/components/admin/ScoringWeightsEditor";
 import { QuestionBankEditor } from "@/components/admin/QuestionBankEditor";
-import { Mail, ClipboardCheck, FileText, LayoutGrid, List, ArrowUpDown, Brain } from "lucide-react";
+import { Mail, ClipboardCheck, FileText, LayoutGrid, List, ArrowUpDown, Brain, Check, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { downloadCSV } from "@/lib/csv";
+import { formatDuration } from "@/lib/utils";
 import { ScoreBar } from "@/components/admin/ScoreBar";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { StatusBadge as HRStatusBadge } from "@/components/candidates/StatusBadge";
@@ -95,6 +96,9 @@ export default function AdminCandidatesPage() {
       effective_score: (c.hr_score_override ?? c.total_score)?.toFixed(1) ?? "0",
       total_score: c.total_score?.toFixed(1) ?? "0",
       iq_score: c.iq_score != null ? Math.round(c.iq_score).toString() : "-",
+      iq_accuracy: c.iq_total ? Math.round((c.iq_correct! / c.iq_total) * 100).toString() : "-",
+      iq_time_seconds: c.iq_time_seconds != null ? c.iq_time_seconds.toString() : "-",
+      iq_attempted_at: c.iq_attempted_at ?? "-",
       status: c.status,
       submitted: c.created_at,
     }));
@@ -116,6 +120,16 @@ export default function AdminCandidatesPage() {
     try {
       const parsed = JSON.parse(value);
       return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const parseIqDetail = (value?: string | null): IqQuestionDetail[] => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? (parsed as IqQuestionDetail[]) : [];
     } catch {
       return [];
     }
@@ -526,18 +540,50 @@ export default function AdminCandidatesPage() {
               </div>
 
               {selected?.iq_score != null && (
-                <div className="flex items-center justify-between border-t border-white/5 pt-3">
-                  <span className="flex items-center gap-1.5 text-xs uppercase text-muted-foreground">
-                    <Brain className="h-3.5 w-3.5" /> Aptitude screen
-                  </span>
-                  <span className="text-sm font-semibold">
-                    {Math.round(selected.iq_score)}%
+                <div className="space-y-1.5 border-t border-white/5 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-xs uppercase text-muted-foreground">
+                      <Brain className="h-3.5 w-3.5" /> Aptitude screen
+                    </span>
+                    <span className="text-sm font-semibold">{Math.round(selected.iq_score)}%</span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-muted-foreground">
                     {selected.iq_total ? (
-                      <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-                        ({selected.iq_correct}/{selected.iq_total})
+                      <span>
+                        Accuracy {Math.round((selected.iq_correct! / selected.iq_total) * 100)}% ({selected.iq_correct}/{selected.iq_total})
                       </span>
                     ) : null}
-                  </span>
+                    {selected.iq_time_seconds != null ? <span>Time {formatDuration(selected.iq_time_seconds)}</span> : null}
+                    {selected.iq_attempted_at ? <span>Attempted {new Date(selected.iq_attempted_at).toLocaleString()}</span> : null}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70">Score is accuracy adjusted for time taken.</p>
+
+                  {/* Per-question breakdown: question, candidate answer vs correct, time */}
+                  {parseIqDetail(selected.iq_details).length > 0 && (
+                    <ol className="mt-2 space-y-2">
+                      {parseIqDetail(selected.iq_details).map((q, i) => (
+                        <li key={q.id ?? i} className="rounded-md border border-white/5 bg-background/40 p-2 text-[11px]">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-medium text-foreground/90">{i + 1}. {q.prompt}</span>
+                            <span className="flex items-center gap-1 shrink-0 text-[10px] text-muted-foreground">
+                              {q.is_correct
+                                ? <Check className="h-3 w-3 text-emerald-400" />
+                                : <X className="h-3 w-3 text-red-400" />}
+                              {q.time_seconds != null ? `${q.time_seconds}s` : ""}
+                            </span>
+                          </div>
+                          <div className="mt-1 space-y-0.5">
+                            <p className={q.is_correct ? "text-emerald-300" : "text-red-300"}>
+                              Answered: {q.chosen_text ?? "— (no answer)"}
+                            </p>
+                            {!q.is_correct && (
+                              <p className="text-emerald-300/80">Correct: {q.correct_text}</p>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </div>
               )}
 

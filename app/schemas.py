@@ -18,7 +18,8 @@ class IqTestResponse(BaseModel):
 
 class IqSubmitRequest(BaseModel):
     test_token: str = Field(..., max_length=4096)
-    answers: Dict[str, int]  # {question_id: chosen_option_index}
+    answers: Dict[str, int]              # {question_id: chosen_option_index}
+    times: Optional[Dict[str, int]] = None  # {question_id: seconds spent} (client-reported)
 
     @field_validator("answers")
     @classmethod
@@ -32,11 +33,21 @@ class IqSubmitRequest(BaseModel):
                 raise ValueError("option index out of range")
         return v
 
+    @field_validator("times")
+    @classmethod
+    def _bound_times(cls, v):
+        if v and len(v) > 100:
+            raise ValueError("too many time entries")
+        return v
+
 
 class IqSubmitResponse(BaseModel):
     correct: int
     total: int
-    score: float  # percentage 0–100
+    accuracy: float       # raw correct/total percentage
+    score: float          # time-adjusted percentage 0–100
+    time_seconds: int     # server-measured time taken
+    detail: List[dict]    # per-question breakdown
     result_token: str
 
 class StatusUpdateRequest(BaseModel):
@@ -113,5 +124,8 @@ class CandidateResponse(BaseModel):
     iq_score: Optional[float] = None
     iq_correct: Optional[int] = None
     iq_total: Optional[int] = None
+    iq_time_seconds: Optional[int] = None
+    iq_attempted_at: Optional[str] = None
+    iq_details: Optional[str] = None  # JSON: per-question breakdown
 
     model_config = {"from_attributes": True}

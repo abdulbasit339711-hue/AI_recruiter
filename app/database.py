@@ -98,6 +98,9 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN iq_score FLOAT",
         "ALTER TABLE candidates ADD COLUMN iq_correct INTEGER",
         "ALTER TABLE candidates ADD COLUMN iq_total INTEGER",
+        "ALTER TABLE candidates ADD COLUMN iq_time_seconds INTEGER",
+        "ALTER TABLE candidates ADD COLUMN iq_attempted_at VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN iq_details TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

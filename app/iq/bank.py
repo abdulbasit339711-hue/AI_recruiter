@@ -81,3 +81,52 @@ def score_answers(answers: dict[str, int], served_ids: list[str]) -> tuple[int, 
         if answers.get(qid) == q.answer:
             correct += 1
     return correct, total
+
+
+def build_detail(
+    served_ids: list[str], answers: dict[str, int], times: dict[str, int] | None = None
+) -> list[dict]:
+    """Per-question breakdown for HR review.
+
+    For each served question returns its prompt/options, the candidate's chosen
+    index + text, the correct index + text, whether it was right, and the
+    (client-reported) time spent on it. Unknown ids are skipped.
+    """
+    times = times or {}
+    out = []
+    for qid in served_ids:
+        q = _BANK_BY_ID.get(qid)
+        if q is None:
+            continue
+        chosen = answers.get(qid)
+        chosen_text = q.options[chosen] if isinstance(chosen, int) and 0 <= chosen < len(q.options) else None
+        out.append({
+            "id": q.id,
+            "prompt": q.prompt,
+            "options": list(q.options),
+            "chosen": chosen,
+            "chosen_text": chosen_text,
+            "correct": q.answer,
+            "correct_text": q.options[q.answer],
+            "is_correct": chosen == q.answer,
+            "time_seconds": int(times.get(qid, 0)),
+        })
+    return out
+
+
+def time_adjusted_score(
+    correct: int, total: int, time_seconds: int, time_limit_seconds: int, speed_weight: float
+) -> float:
+    """Blend accuracy with speed into a 0–100 score.
+
+    Accuracy (correct/total) is the ceiling; spending more of the allotted time
+    erodes the score by up to ``speed_weight`` (e.g. 0.2 -> at most -20%). A fast,
+    fully-correct attempt approaches 100; a slow one of the same accuracy scores
+    lower; a wrong answer scores 0 regardless of speed.
+    """
+    accuracy = (correct / total) if total else 0.0
+    if time_limit_seconds <= 0:
+        return round(accuracy * 100, 2)
+    time_ratio = min(max(time_seconds, 0) / time_limit_seconds, 1.0)
+    factor = 1.0 - speed_weight * time_ratio
+    return round(accuracy * 100 * factor, 2)
