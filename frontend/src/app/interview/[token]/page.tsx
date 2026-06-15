@@ -13,6 +13,8 @@ import {
   Loader2,
   Mic,
   MicOff,
+  Video,
+  VideoOff,
   AlertTriangle,
   CheckCircle2,
   PhoneOff,
@@ -39,6 +41,10 @@ export default function InterviewPage() {
 
   // Meet-style call UI state
   const [micEnabled, setMicEnabled] = useState(true);
+  // Camera is best-effort: the interview works without it (audio is what's scored),
+  // but when a device is present we publish it and show a local self-view so the
+  // candidate can frame themselves — and so the bot can later receive the stream.
+  const [cameraEnabled, setCameraEnabled] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState<Speaker>(null);
   const [showCaptions, setShowCaptions] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
@@ -57,6 +63,7 @@ export default function InterviewPage() {
   const [demoMode, setDemoMode] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
+  const selfVideoRef = useRef<HTMLVideoElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const startRef = useRef<number | null>(null);
   const spokenRef = useRef<Set<string>>(new Set());
@@ -131,6 +138,26 @@ export default function InterviewPage() {
     return () => clearInterval(id);
   }, [phase]);
 
+  // Attach (or detach) the local camera track to the self-view <video> whenever the
+  // camera is toggled or the stage mounts. The element only exists in the "live"
+  // phase, so we (re)attach here rather than inline in start()/toggleCamera().
+  useEffect(() => {
+    const room = roomRef.current;
+    const el = selfVideoRef.current;
+    if (phase !== "live" || !room || !el) return;
+    const track = room.localParticipant.getTrackPublication(Track.Source.Camera)?.videoTrack;
+    if (cameraEnabled && track) {
+      track.attach(el);
+      return () => {
+        try {
+          track.detach(el);
+        } catch {
+          /* element already gone */
+        }
+      };
+    }
+  }, [cameraEnabled, phase, activeSpeaker]);
+
   async function start() {
     if (!info?.livekit_url || !info.livekit_token) return;
     setError(null);
@@ -182,10 +209,30 @@ export default function InterviewPage() {
       setAudioBlocked(!room.canPlaybackAudio);
       await room.localParticipant.setMicrophoneEnabled(true);
       setMicEnabled(true);
+      // Camera is optional — a missing/denied device must NOT fail the interview,
+      // so enable it on a best-effort basis and just leave it off if unavailable.
+      try {
+        await room.localParticipant.setCameraEnabled(true);
+        setCameraEnabled(true);
+      } catch {
+        setCameraEnabled(false);
+      }
     } catch (e) {
       console.error(e);
       setError(describeMediaError(e));
       setPhase("ready");
+    }
+  }
+
+  async function toggleCamera() {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !cameraEnabled;
+    try {
+      await room.localParticipant.setCameraEnabled(next);
+      setCameraEnabled(next);
+    } catch (e) {
+      setError(describeMediaError(e));
     }
   }
 
@@ -263,7 +310,7 @@ export default function InterviewPage() {
           <div className="relative aspect-video w-full max-w-xl overflow-hidden rounded-2xl bg-zinc-900 ring-1 ring-zinc-800">
             <div className="flex h-full flex-col items-center justify-center gap-4">
               <Avatar kind="you" size="lg" speaking={false} />
-              <p className="text-sm text-zinc-400">Camera off · voice interview</p>
+              <p className="text-sm text-zinc-400">Camera starts when you join</p>
             </div>
             <div className="absolute bottom-3 left-3 rounded-md bg-black/50 px-2.5 py-1 text-sm text-zinc-100">
               {info?.candidate_name || "You"}
@@ -301,8 +348,8 @@ export default function InterviewPage() {
               )}
             </button>
             <p className="mt-4 text-xs text-zinc-500">
-              Find a quiet place and allow microphone access when prompted. The AI interviewer will
-              greet you as soon as you join.
+              Find a quiet place and allow camera &amp; microphone access when prompted. The AI
+              interviewer will greet you as soon as you join.
             </p>
           </div>
         </div>
@@ -426,6 +473,8 @@ export default function InterviewPage() {
               label={info?.candidate_name || "You"}
               speaking={activeSpeaker === "you" && micEnabled}
               muted={!micEnabled}
+              videoRef={selfVideoRef}
+              showVideo={cameraEnabled}
             />
           </div>
 
@@ -492,6 +541,14 @@ export default function InterviewPage() {
           label={micEnabled ? "Mute microphone" : "Unmute microphone"}
         >
           {micEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+        </ControlButton>
+
+        <ControlButton
+          onClick={toggleCamera}
+          active={!cameraEnabled}
+          label={cameraEnabled ? "Turn camera off" : "Turn camera on"}
+        >
+          {cameraEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
         </ControlButton>
 
         <ControlButton
@@ -582,11 +639,15 @@ function Tile({
   label,
   speaking,
   muted,
+  videoRef,
+  showVideo,
 }: {
   kind: "agent" | "you";
   label: string;
   speaking: boolean;
   muted: boolean;
+  videoRef?: React.Ref<HTMLVideoElement>;
+  showVideo?: boolean;
 }) {
   return (
     <div
@@ -594,7 +655,19 @@ function Tile({
         speaking ? "ring-2 ring-blue-400" : "ring-1 ring-zinc-800"
       }`}
     >
-      <div className="flex flex-col items-center gap-3">
+      {/* Local self-view. Kept mounted (hidden) when the camera is off so the
+          attach effect always has an element to bind the track to. Mirrored, like
+          every video-call self-view. */}
+      {kind === "you" && (
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className={`absolute inset-0 h-full w-full -scale-x-100 object-cover ${showVideo ? "" : "hidden"}`}
+        />
+      )}
+      <div className={`flex flex-col items-center gap-3 ${showVideo ? "hidden" : ""}`}>
         <Avatar kind={kind} speaking={speaking} />
         {speaking && (
           <div className="flex h-4 items-end gap-1">
