@@ -17,8 +17,6 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.processors.aggregators.llm_response import LLMFullResponseAggregator
 from core.metrics import MetricsTracker
-from pipecat.turns.user_turn_strategies import UserTurnStrategies
-from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import SpeechTimeoutUserTurnStopStrategy
 from pipecat.runner.types import (
     RunnerArguments,
     LiveKitRunnerArguments,
@@ -206,12 +204,13 @@ async def run_bot(transport: BaseTransport):
     )
 
     context = LLMContext()
+    # Deferred import: bot_manager imports from this module, so importing it at
+    # module scope would create a cycle. By call time both modules are loaded.
+    from bot_manager import build_user_turn_strategies
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            user_turn_strategies=UserTurnStrategies(
-                stop=[SpeechTimeoutUserTurnStopStrategy()]
-            )
+            user_turn_strategies=build_user_turn_strategies()
         ),
     )
 

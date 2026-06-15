@@ -24,8 +24,6 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.turns.user_turn_strategies import UserTurnStrategies
-from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import SpeechTimeoutUserTurnStopStrategy
 from pipecat.services.cartesia.tts import CartesiaHttpTTSService
 from processors.resilient_tts import ResilientCartesiaTTSService, ResilientDeepgramTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
@@ -40,7 +38,11 @@ from pipecat.workers.runner import WorkerRunner
 load_dotenv(override=True)
 
 # Import Recruiter-specific components
-from bot_manager import BotManager
+from bot_manager import (
+    BotManager,
+    DEEPGRAM_ENDPOINTING_MS,
+    build_user_turn_strategies,
+)
 from events.broadcaster import broadcaster
 
 try:
@@ -890,7 +892,13 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         url=url, token=token, room_name=room_name,
         params=LiveKitParams(audio_in_enabled=True, audio_out_enabled=True),
     )
-    stt = DeepgramSTTService(api_key=os.environ["DEEPGRAM_API_KEY"])
+    stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
+    if DEEPGRAM_ENDPOINTING_MS is not None:
+        # Server-side silence (ms) before Deepgram finalizes a transcript.
+        stt_kwargs["settings"] = DeepgramSTTService.Settings(
+            endpointing=DEEPGRAM_ENDPOINTING_MS
+        )
+    stt = DeepgramSTTService(**stt_kwargs)
     llm = GroqLLMService(
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
@@ -913,7 +921,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            user_turn_strategies=UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy()])),
+            user_turn_strategies=build_user_turn_strategies()),
     )
     manager = BotManager(transport, stt, llm, tts, context, user_aggregator, assistant_aggregator, mode=pipeline_mode)
     if is_default:

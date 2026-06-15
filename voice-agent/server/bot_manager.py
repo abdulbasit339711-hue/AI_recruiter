@@ -10,12 +10,72 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
+from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import (
+    SpeechTimeoutUserTurnStopStrategy,
+)
 from processors.transcript_metrics_processors import WorkingTranscriptProcessor, WorkingMetricsProcessor
 from processors.judge_processor import JudgeProcessor, DualLLMContextProcessor
 from bot import create_interview_session
 from services.goal_tracking_service import GoalTrackingService
 from processors.goal_tracking_processor import GoalTrackingProcessor, GoalAwareTranscriptProcessor
 from database import initialize_database
+
+
+# ---------------------------------------------------------------------------
+# Voice-activity / turn-taking configuration (single source of truth)
+# ---------------------------------------------------------------------------
+# In this stack the *transport* has no Silero VAD analyzer — Deepgram STT emits
+# the VAD start/stop events (server-side VAD), and the candidate's turn is
+# declared over by SpeechTimeoutUserTurnStopStrategy once the post-pause window
+# elapses. So there are two explicit knobs, both env-overridable:
+#
+#   VAD_USER_SPEECH_TIMEOUT_SECS  — how long to keep listening after the
+#       candidate pauses before we treat the turn as finished. Pipecat's
+#       default (0.6s) is tuned for casual chat and cuts off interviewees
+#       mid-thought. We default to 2.0s; raise toward 3.0s for very
+#       deliberate candidates (cf. the Gemini coach's SILENCE_DURATION_MS=3000,
+#       chosen precisely to "prevent constant interruption").
+#
+#   DEEPGRAM_ENDPOINTING_MS — silence (ms) Deepgram waits before finalizing a
+#       transcript. Left unset (None) keeps Deepgram's own default. This is the
+#       STT-side counterpart to the coach's prefix/endpoint padding; the bot's
+#       first-word capture is handled by Deepgram's internal audio buffering,
+#       so there is no separate PREFIX_PADDING knob to set here.
+#
+# Tuning the turn window here keeps both entrypoints (runner.py and bot.py)
+# consistent instead of constructing a bare SpeechTimeoutUserTurnStopStrategy()
+# in two places.
+
+VAD_USER_SPEECH_TIMEOUT_SECS: float = float(
+    os.getenv("VAD_USER_SPEECH_TIMEOUT_SECS", "2.0")
+)
+
+_DEEPGRAM_ENDPOINTING_MS_RAW = os.getenv("DEEPGRAM_ENDPOINTING_MS")
+DEEPGRAM_ENDPOINTING_MS: int | None = (
+    int(_DEEPGRAM_ENDPOINTING_MS_RAW) if _DEEPGRAM_ENDPOINTING_MS_RAW else None
+)
+
+
+def build_user_turn_strategies() -> UserTurnStrategies:
+    """Turn-taking strategy with an interview-appropriate silence window.
+
+    The single place that decides how long a pause is allowed before the
+    candidate's turn ends. Use this instead of instantiating
+    SpeechTimeoutUserTurnStopStrategy() directly so the window stays in sync
+    across entrypoints and is controlled by VAD_USER_SPEECH_TIMEOUT_SECS.
+    """
+    logger.info(
+        f"[VAD] user_speech_timeout={VAD_USER_SPEECH_TIMEOUT_SECS}s "
+        f"deepgram_endpointing_ms={DEEPGRAM_ENDPOINTING_MS}"
+    )
+    return UserTurnStrategies(
+        stop=[
+            SpeechTimeoutUserTurnStopStrategy(
+                user_speech_timeout=VAD_USER_SPEECH_TIMEOUT_SECS
+            )
+        ]
+    )
 
 
 # One lock per session_id, shared across all BotManager instances in this process.
