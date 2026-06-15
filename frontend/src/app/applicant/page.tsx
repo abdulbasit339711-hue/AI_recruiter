@@ -12,12 +12,9 @@ export default function ApplicantJobListing() {
   if (isLoading) {
     // Simple skeleton grid
     return (
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
+      <section className="mx-auto grid max-w-6xl grid-cols-1 gap-6 p-4 py-8 md:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <motion.div
-            key={i}
-            className="h-48 bg-card/30 rounded-lg animate-pulse"
-          />
+          <div key={i} className="h-48 animate-pulse glass rounded-2xl" />
         ))}
       </section>
     );
@@ -25,21 +22,22 @@ export default function ApplicantJobListing() {
 
   if (isError) {
     return (
-      <div className="p-4 text-center text-red-500">
+      <div className="p-4 text-center text-weak">
         Failed to load jobs: {error instanceof Error ? error.message : "Unknown error"}
       </div>
     );
   }
 
   return (
-    <section className="mx-auto max-w-6xl space-y-6 p-4 py-8">
+    <section className="mx-auto max-w-6xl space-y-7 p-4 py-8">
       <div>
-        <h1 className="text-3xl font-semibold">Available Job Openings</h1>
+        <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">Careers</p>
+        <h1 className="mt-2 font-display text-[34px] font-bold leading-tight tracking-tight text-heading">Open Roles</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Choose a role and submit a searchable PDF resume for review.
+          Choose a role and submit a searchable PDF résumé. Every application starts with a short aptitude screen.
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         <AnimatePresence>
           {jobs?.map((job) => (
             <motion.div
@@ -52,6 +50,9 @@ export default function ApplicantJobListing() {
               <JobCard job={job} />
             </motion.div>
           ))}
+          {jobs?.length === 0 && (
+            <p className="text-sm text-muted-foreground">No open roles right now — check back soon.</p>
+          )}
         </AnimatePresence>
       </div>
     </section>

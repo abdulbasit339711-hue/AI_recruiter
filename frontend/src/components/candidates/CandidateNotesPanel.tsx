@@ -83,7 +83,7 @@ export const CandidateNotesPanel: React.FC<CandidateNotesPanelProps> = ({
   return (
     <div className="space-y-4">
       {/* Title & Close */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-2">
+      <div className="flex items-center justify-between border-b border-border pb-2">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-semibold">HR Recruiter Notes</h3>
@@ -92,7 +92,7 @@ export const CandidateNotesPanel: React.FC<CandidateNotesPanelProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+            className="rounded p-1 text-muted-foreground hover:bg-foreground/10 hover:text-foreground transition-colors"
             title="Close notes panel"
           >
             <X className="h-4 w-4" />
@@ -108,12 +108,12 @@ export const CandidateNotesPanel: React.FC<CandidateNotesPanelProps> = ({
           parsedNotes.map((note, idx) => (
             <div
               key={idx}
-              className="rounded-lg border border-white/5 bg-white/[0.01] p-3 space-y-1.5 transition-all duration-200 hover:bg-white/[0.02]"
+              className="glass-tile rounded-lg p-3 space-y-1.5 transition-all duration-200"
             >
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
-                  <User className="h-3.5 w-3.5 text-gray-400" />
-                  <span className="font-medium text-gray-300">{note.author || "System"}</span>
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium text-foreground">{note.author || "System"}</span>
                 </div>
                 {note.timestamp && (
                   <div className="flex items-center gap-1">
@@ -139,7 +139,7 @@ export const CandidateNotesPanel: React.FC<CandidateNotesPanelProps> = ({
           <input
             id="author-input"
             type="text"
-            className="h-8 rounded border border-white/10 bg-background/50 px-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-primary"
+            className="h-8 rounded border border-border bg-foreground/[0.04] px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
             placeholder="hr@company.com"

@@ -63,7 +63,7 @@ export function ScoringWeightsEditor({ jobId }: { jobId: number }) {
         step={0.1}
         value={w[key]}
         onChange={(e) => setW({ ...w, [key]: Number(e.target.value) })}
-        className="h-9 w-20 rounded-md border border-white/10 bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+        className="h-9 w-20 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
       />
     </label>
   );
@@ -72,12 +72,12 @@ export function ScoringWeightsEditor({ jobId }: { jobId: number }) {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium hover:bg-white/5"
+        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-white/5"
       >
         <SlidersHorizontal className="h-4 w-4" /> Weights
       </button>
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-white/10 bg-popover p-4 shadow-xl">
+        <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-border bg-popover p-4 shadow-xl">
           <p className="mb-3 text-xs text-muted-foreground">
             Tier multipliers for the final score (1.0 = unchanged).
           </p>
@@ -96,14 +96,14 @@ export function ScoringWeightsEditor({ jobId }: { jobId: number }) {
                 <button
                   onClick={() => save(false)}
                   disabled={saving}
-                  className="rounded-md border border-white/10 px-3 py-1.5 text-xs hover:bg-white/5 disabled:opacity-60"
+                  className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-white/5 disabled:opacity-60"
                 >
                   Save
                 </button>
                 <button
                   onClick={() => save(true)}
                   disabled={saving}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Save & re-score

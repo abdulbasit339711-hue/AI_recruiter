@@ -19,18 +19,18 @@ export const JobCard: React.FC<JobCardProps> = ({ job }) => {
       className="cursor-pointer"
     >
       <Link href={`/applicant/${job.id}`}>
-        <Card className="h-full transition-colors hover:border-sky-400/30">
+        <Card className="glass-hover h-full">
           <CardHeader>
-            <CardTitle className="text-xl font-bold">{job.title}</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground">
+            <CardDescription className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">
               {job.department}
             </CardDescription>
+            <CardTitle className="font-display text-xl font-bold text-heading">{job.title}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="line-clamp-3 text-sm" title={job.job_description}>
+            <p className="line-clamp-3 text-sm text-muted-foreground" title={job.job_description}>
               {job.job_description}
             </p>
-            <span className="inline-flex items-center gap-2 text-sm font-medium text-sky-200">
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary-strong">
               View role <ArrowRight className="h-4 w-4" />
             </span>
           </CardContent>

@@ -4,6 +4,8 @@ import React from "react";
 import { useParams } from "next/navigation";
 import { useJob } from "../../../hooks/useJob";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { Reveal } from "@/components/ui/Reveal";
 
 export default function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -13,33 +15,40 @@ export default function JobDetailPage() {
   if (isLoading) {
     return (
       <section className="mx-auto max-w-3xl p-4 py-8">
-        <div className="h-64 animate-pulse rounded-md border border-white/10 bg-card/80" />
+        <div className="h-64 animate-pulse glass rounded-2xl" />
       </section>
     );
   }
 
   if (isError || !job) {
     return (
-      <div className="p-4 text-center text-red-300">
+      <div className="p-4 text-center text-weak">
         Failed to load job details: {error instanceof Error ? error.message : "Unknown error"}
       </div>
     );
   }
 
   return (
-    <section className="mx-auto max-w-3xl space-y-6 p-4 py-8">
-      <div className="rounded-md border border-white/10 bg-card/80 p-6">
-        <p className="text-sm text-muted-foreground">{job.department}</p>
-        <h1 className="mt-2 text-3xl font-semibold">{job.title}</h1>
-      </div>
-      <div className="whitespace-pre-wrap rounded-md border border-white/10 bg-card/80 p-6 text-sm leading-7 text-muted-foreground">
-        {job.job_description}
-      </div>
-      <Link href={`/applicant/${job.id}/apply`}>
-        <button className="w-full rounded-md bg-primary px-4 py-2 text-primary-foreground hover:opacity-90">
-          Apply Now
-        </button>
-      </Link>
+    <section className="mx-auto max-w-3xl space-y-5 p-4 py-8">
+      <Reveal>
+        <div className="glass rounded-2xl p-7">
+          <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">{job.department}</p>
+          <h1 className="mt-2 font-display text-[34px] font-bold leading-tight tracking-tight text-heading">{job.title}</h1>
+        </div>
+      </Reveal>
+      <Reveal index={1}>
+        <div className="glass whitespace-pre-wrap rounded-2xl p-7 text-sm leading-7 text-muted-foreground">
+          {job.job_description}
+        </div>
+      </Reveal>
+      <Reveal index={2}>
+        <Link
+          href={`/applicant/${job.id}/apply`}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 font-semibold text-primary-foreground shadow-[0_12px_28px_-10px_var(--primary)] transition hover:opacity-90"
+        >
+          Apply now <ArrowRight className="h-4 w-4" />
+        </Link>
+      </Reveal>
     </section>
   );
 }

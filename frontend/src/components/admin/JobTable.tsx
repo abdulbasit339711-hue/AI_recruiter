@@ -17,7 +17,7 @@ interface JobTableProps {
 
 export const JobTable: React.FC<JobTableProps> = ({ jobs, isLoading, onEdit, onArchive }) => {
   return (
-    <div className="overflow-x-auto rounded-md border border-white/10 bg-card/80">
+    <div className="glass overflow-x-auto rounded-2xl">
       <Table>
         <TableCaption>All job postings</TableCaption>
         <TableHeader>

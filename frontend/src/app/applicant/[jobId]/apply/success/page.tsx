@@ -13,17 +13,19 @@ function SuccessContent() {
   return (
     <section className="flex min-h-[80vh] items-center justify-center p-4">
       <motion.div
-        className="w-full max-w-lg rounded-2xl border border-white/10 bg-card/90 p-8 text-center shadow-xl"
+        className="glass w-full max-w-lg rounded-2xl p-8 text-center"
         initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
       >
-        <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
-        <h1 className="mt-4 text-2xl font-semibold">Application received</h1>
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl" style={{ background: "var(--strong-bg)" }}>
+          <CheckCircle2 className="h-8 w-8" style={{ color: "var(--strong)" }} />
+        </span>
+        <h1 className="mt-4 font-display text-2xl font-bold text-heading">Application received</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Thanks for applying! Your resume has been received and is being reviewed by our team.
+          Thanks for applying! Your résumé has been received and is being reviewed by our team.
         </p>
 
-        <div className="mt-6 flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-left">
+        <div className="mt-6 flex items-start gap-3 rounded-xl border border-border bg-foreground/[0.03] p-4 text-left">
           <Mail className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
           <p className="text-sm text-muted-foreground">
             If your profile matches the role, our recruiting team will email you an invitation to

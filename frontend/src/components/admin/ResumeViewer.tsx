@@ -57,7 +57,7 @@ export const ResumeViewer: React.FC<ResumeViewerProps> = ({ candidateId, open, o
             <X className="h-4 w-4" />
           </Button>
         </DialogHeader>
-        <div className="h-[80vh] overflow-auto rounded-md border border-white/10 bg-background p-4">
+        <div className="h-[80vh] overflow-auto rounded-xl border border-border bg-foreground/[0.03] p-4">
           {isLoading && <p className="text-sm text-muted-foreground">Loading resume...</p>}
           {error && <p className="text-sm text-red-500">{error}</p>}
           {!isLoading && !error && (

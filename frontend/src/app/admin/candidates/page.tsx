@@ -20,9 +20,11 @@ import { api } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { downloadCSV } from "@/lib/csv";
 import { formatDuration } from "@/lib/utils";
-import { ScoreBar } from "@/components/admin/ScoreBar";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { StatusBadge as HRStatusBadge } from "@/components/candidates/StatusBadge";
+import { ScoreChip } from "@/components/ui/ScoreChip";
+import { ScoreRing } from "@/components/ui/ScoreRing";
+import { avatarGradient, initials, scoreMeta, recommendationCopy } from "@/lib/score";
 
 const STATUS_OPTIONS: Array<CandidateStatus | ""> = [
   "",
@@ -142,35 +144,64 @@ export default function AdminCandidatesPage() {
   return (
     <div className="space-y-6">
       {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">Candidate Leaderboard</h1>
-          <p className="text-sm text-muted-foreground">Review ranked applicants, monitor queue status, and inspect evidence.</p>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">Candidates</p>
+          <h1 className="font-display text-[30px] font-bold leading-none tracking-tight text-heading">Candidate Leaderboard</h1>
+          <p className="text-sm text-muted-foreground">Ranked applicants, scored on résumé fit and aptitude. Every score links to a plain-language explainer.</p>
         </div>
 
         {/* View Mode Toggle */}
-        <div className="flex items-center gap-1 self-start rounded-lg border border-white/10 bg-card p-1">
-          <Button
-            variant={viewMode === "table" ? "default" : "ghost"}
-            size="sm"
+        <div className="glass-rail flex items-center gap-0.5 self-start rounded-xl p-1">
+          <button
             onClick={() => setViewMode("table")}
-            className="h-8 px-3 gap-1.5 text-xs font-semibold"
+            className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${
+              viewMode === "table" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
           >
             <List className="h-4 w-4" /> Table
-          </Button>
-          <Button
-            variant={viewMode === "kanban" ? "default" : "ghost"}
-            size="sm"
+          </button>
+          <button
             onClick={() => setViewMode("kanban")}
-            className="h-8 px-3 gap-1.5 text-xs font-semibold"
+            className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${
+              viewMode === "kanban" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
           >
             <LayoutGrid className="h-4 w-4" /> Kanban
-          </Button>
+          </button>
         </div>
       </div>
 
+      {/* Stat tiles */}
+      {activeJobId && data && (
+        <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+          {(() => {
+            const withIq = candidates.filter((c) => c.iq_score != null);
+            const avgIq = withIq.length
+              ? Math.round(withIq.reduce((s, c) => s + (c.iq_score ?? 0), 0) / withIq.length)
+              : null;
+            const shortlisted = candidates.filter((c) => c.status === "Shortlisted").length;
+            const interviews = candidates.filter((c) => c.hr_status === "Interview").length;
+            const tiles: Array<{ label: string; value: string; accent?: boolean }> = [
+              { label: "Total applicants", value: String(data.total) },
+              { label: "Shortlisted", value: String(shortlisted), accent: true },
+              { label: "Avg. aptitude", value: avgIq != null ? `${avgIq}%` : "—" },
+              { label: "In interview", value: String(interviews) },
+            ];
+            return tiles.map((t) => (
+              <div key={t.label} className="glass-tile rounded-2xl p-[18px]">
+                <div className="text-xs font-medium text-muted-foreground">{t.label}</div>
+                <div className={`mt-1.5 font-mono text-[28px] font-semibold ${t.accent ? "text-primary-strong" : "text-heading"}`}>
+                  {t.value}
+                </div>
+              </div>
+            ));
+          })()}
+        </div>
+      )}
+
       {/* Filters and Controls */}
-      <div className="flex flex-col gap-4 rounded-md border border-white/10 bg-card/70 p-4">
+      <div className="glass flex flex-col gap-4 rounded-2xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
           {/* Text search (name / email / filename) over the loaded candidates */}
           <div className="space-y-1.5">
@@ -179,7 +210,7 @@ export default function AdminCandidatesPage() {
               id="candidate-search"
               type="search"
               placeholder="Name, email, or file…"
-              className="h-10 w-full rounded-md border border-white/10 bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -190,7 +221,7 @@ export default function AdminCandidatesPage() {
             <label className="text-xs font-semibold text-muted-foreground" htmlFor="job-filter">Job Opening</label>
             <select
               id="job-filter"
-              className="h-10 w-full rounded-md border border-white/10 bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               value={activeJobId ?? ""}
               disabled={jobsLoading || (jobs?.length ?? 0) === 0}
               onChange={(event) => {
@@ -212,7 +243,7 @@ export default function AdminCandidatesPage() {
             <label className="text-xs font-semibold text-muted-foreground" htmlFor="status-filter">Evaluation Status</label>
             <select
               id="status-filter"
-              className="h-10 w-full rounded-md border border-white/10 bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               value={status ?? ""}
               onChange={(event) => {
                 setStatus((event.target.value || undefined) as CandidateStatus | undefined);
@@ -232,7 +263,7 @@ export default function AdminCandidatesPage() {
             <label className="text-xs font-semibold text-muted-foreground" htmlFor="hr-status-filter">HR Recruitment Status</label>
             <select
               id="hr-status-filter"
-              className="h-10 w-full rounded-md border border-white/10 bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               value={hrStatus ?? ""}
               onChange={(event) => {
                 setHrStatus(event.target.value || undefined);
@@ -253,7 +284,7 @@ export default function AdminCandidatesPage() {
             <div className="flex items-center gap-2">
               <select
                 id="sort-filter"
-                className="h-10 flex-1 rounded-md border border-white/10 bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                className="h-10 flex-1 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                 value={sortBy}
                 onChange={(event) => {
                   setSortBy(event.target.value);
@@ -266,24 +297,24 @@ export default function AdminCandidatesPage() {
               </select>
               <Button
                 variant="outline"
-                className="h-10 w-10 p-0 border-white/10"
+                className="h-10 w-10 p-0 border-border"
                 onClick={toggleSortOrder}
                 title={`Sort ${order === "desc" ? "Descending" : "Ascending"}`}
               >
-                <ArrowUpDown className="h-4 w-4 text-gray-400" />
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
           </div>
         </div>
 
         {/* Shortlist actions */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/5 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Shortlist Size:</span>
             <select
               value={topN}
               onChange={(e) => setTopN(Number(e.target.value))}
-              className="h-9 rounded-md border border-white/10 bg-background px-3 text-xs focus:outline-none"
+              className="h-9 rounded-md border border-border bg-background px-3 text-xs focus:outline-none"
             >
               {[5, 10, 15, 20, 25, 30].map((n) => (
                 <option key={n} value={n}>Top {n}</option>
@@ -384,24 +415,47 @@ export default function AdminCandidatesPage() {
 
       {/* Candidate detail modal */}
       <Dialog open={!!selected} onOpenChange={(open) => !open && closeModal()}>
-        <DialogContent className="max-w-4xl bg-gray-950 text-white border-white/10">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold">{selected?.name || selected?.filename || "Candidate Details"}</DialogTitle>
-            <DialogDescription className="text-gray-400">
-              {selected?.email || "No email captured"} {selected?.phone ? `• ${selected.phone}` : ""}
-            </DialogDescription>
+            <div className="flex items-center gap-3.5">
+              <span
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-base font-semibold text-white"
+                style={{ background: avatarGradient(selected?.name || selected?.filename || "?") }}
+                aria-hidden
+              >
+                {initials(selected?.name) === "··" ? (selected?.filename?.[0] ?? "?").toUpperCase() : initials(selected?.name)}
+              </span>
+              <div className="min-w-0">
+                <DialogTitle className="font-display text-xl font-bold text-heading">{selected?.name || selected?.filename || "Candidate Details"}</DialogTitle>
+                <DialogDescription>
+                  {selected?.email || "No email captured"} {selected?.phone ? `• ${selected.phone}` : ""}
+                </DialogDescription>
+              </div>
+              {selected && <ScoreChip score={selected.hr_score_override ?? selected.total_score} />}
+            </div>
           </DialogHeader>
 
+          {/* Plain-language recommendation */}
+          {selected && modalTab === "details" && (
+            <div className="mt-3 flex items-start gap-3 rounded-2xl border border-border bg-foreground/[0.03] p-3.5">
+              <ScoreRing value={selected.hr_score_override ?? selected.total_score} size={56} stroke={6} label="" animate={false} />
+              <p className="text-sm leading-relaxed text-foreground">
+                <strong className="text-heading">{scoreMeta(selected.hr_score_override ?? selected.total_score).label} match.</strong>{" "}
+                {recommendationCopy(selected.hr_score_override ?? selected.total_score)}
+              </p>
+            </div>
+          )}
+
           {/* Tabs */}
-          <div className="mt-2 flex items-center gap-1 border-b border-white/10">
+          <div className="mt-3 flex items-center gap-1 border-b border-border">
             {(["details", "interview"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setModalTab(t)}
                 className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium capitalize transition ${
                   modalTab === t
-                    ? "border-primary text-white"
-                    : "border-transparent text-gray-400 hover:text-gray-200"
+                    ? "border-primary text-heading"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {t === "interview" ? "Interview" : "Details"}
@@ -417,14 +471,14 @@ export default function AdminCandidatesPage() {
           <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_300px] overflow-y-auto max-h-[75vh] pr-2">
             <div className="space-y-4">
                {/* Recruiter Summary */}
-               <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
+               <div className="glass-tile rounded-xl p-4">
                  <h3 className="mb-2 text-sm font-semibold text-primary">Recruiter Summary</h3>
                  <p className="text-sm leading-6 text-muted-foreground">{selected?.summary || "No summary available yet."}</p>
                </div>
 
                {/* Job Description */}
                {currentJob && (
-                 <div className="rounded-md border border-white/10 bg-white/[0.03] p-4 mt-4 max-h-[250px] overflow-y-auto">
+                 <div className="glass-tile rounded-xl p-4 mt-4 max-h-[250px] overflow-y-auto">
                    <h4 className="mb-1 text-sm font-semibold text-primary">Job Description</h4>
                    <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{currentJob.job_description}</p>
                  </div>
@@ -432,30 +486,30 @@ export default function AdminCandidatesPage() {
 
               {/* Skills matched / missing */}
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-emerald-400">Matched Skills</h3>
+                <div className="glass-tile rounded-xl p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-strong">Matched Skills</h3>
                   <div className="flex flex-wrap gap-2">
                     {(parseList(selected?.skills_matched).length ? parseList(selected?.skills_matched) : ["No matched skills captured"]).map((skill) => (
-                      <span key={skill} className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-xs text-emerald-200">{skill}</span>
+                      <span key={skill} className="chip chip-strong">{skill}</span>
                     ))}
                   </div>
                 </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-amber-400">Missing Skills</h3>
+                <div className="glass-tile rounded-xl p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-promising">Missing Skills</h3>
                   <div className="flex flex-wrap gap-2">
                     {(parseList(selected?.skills_missing).length ? parseList(selected?.skills_missing) : ["No missing skills captured"]).map((skill) => (
-                      <span key={skill} className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-xs text-amber-200">{skill}</span>
+                      <span key={skill} className="chip chip-promising">{skill}</span>
                     ))}
                   </div>
                 </div>
               </div>
 
               {/* Evidence */}
-              <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
-                <h3 className="mb-3 text-sm font-semibold text-gray-300">Evidence</h3>
+              <div className="glass-tile rounded-xl p-4">
+                <h3 className="mb-3 text-sm font-semibold text-heading">Evidence</h3>
                 <ul className="space-y-2">
                   {(selected?.evidence ? parseEvidence(selected.evidence) : []).map((e: string, idx: number) => (
-                    <li key={idx} className="rounded-md border border-white/10 bg-background/60 px-3 py-2 text-sm text-muted-foreground">
+                    <li key={idx} className="rounded-md border border-border bg-foreground/[0.04] px-3 py-2 text-sm text-muted-foreground">
                       {e}
                     </li>
                   ))}
@@ -464,7 +518,7 @@ export default function AdminCandidatesPage() {
               </div>
 
               {/* Résumé-tailored interview questions (generated at scoring time) */}
-              <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
+              <div className="glass-tile rounded-xl p-4">
                 <h3 className="mb-3 text-sm font-semibold text-primary">Suggested interview questions</h3>
                 <ol className="list-decimal space-y-2 pl-5">
                   {parseList(selected?.interview_questions).map((q: string, idx: number) => (
@@ -483,7 +537,7 @@ export default function AdminCandidatesPage() {
 
               {/* Recruitment Notes Panel */}
               {selected && (
-                <div className="rounded-md border border-white/10 bg-white/[0.03] p-4">
+                <div className="glass-tile rounded-xl p-4">
                   <CandidateNotesPanel
                     candidateId={selected.id}
                     hrNotes={selected.hr_notes}
@@ -502,7 +556,7 @@ export default function AdminCandidatesPage() {
             </div>
 
             {/* Sidebar metadata panel */}
-            <aside className="space-y-4 rounded-md border border-white/10 bg-white/[0.03] p-4 h-fit">
+            <aside className="space-y-4 glass-tile rounded-xl p-4 h-fit">
               <div className="space-y-2">
                 <p className="text-xs uppercase text-muted-foreground">Evaluation status</p>
                 <div className="flex flex-wrap gap-2">
@@ -511,36 +565,33 @@ export default function AdminCandidatesPage() {
                 </div>
               </div>
 
-              <div className="border-t border-white/5 pt-3">
-                <p className="mb-2 text-xs uppercase text-muted-foreground">Effective score</p>
-                {selected?.hr_score_override !== null && selected?.hr_score_override !== undefined ? (
-                  <div className="space-y-1">
-                    <ScoreBar value={selected.hr_score_override} />
-                    <p className="text-xs text-amber-400 font-semibold">Overridden</p>
+              <div className="flex flex-col items-center gap-2 border-t border-border pt-4">
+                <ScoreRing value={selected?.hr_score_override ?? selected?.total_score} size={120} stroke={10} label="effective score" />
+                {selected?.hr_score_override !== null && selected?.hr_score_override !== undefined && (
+                  <div className="text-center">
+                    <p className="text-xs font-semibold text-promising">Overridden by HR</p>
                     <p className="text-[10px] text-muted-foreground line-through">Original: {selected.total_score.toFixed(1)}</p>
                   </div>
-                ) : (
-                  <ScoreBar value={selected?.total_score} />
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-center border-t border-white/5 pt-3">
-                <div className="rounded-md bg-background/60 p-2">
+              <div className="grid grid-cols-3 gap-2 text-center border-t border-border pt-3">
+                <div className="rounded-md bg-foreground/[0.04] p-2">
                   <p className="text-[10px] text-muted-foreground">Tier 1</p>
                   <p className="text-sm font-semibold">{selected?.tier1?.toFixed(1) ?? "0.0"}</p>
                 </div>
-                <div className="rounded-md bg-background/60 p-2">
+                <div className="rounded-md bg-foreground/[0.04] p-2">
                   <p className="text-[10px] text-muted-foreground">Tier 2</p>
                   <p className="text-sm font-semibold">{selected?.tier2?.toFixed(1) ?? "0.0"}</p>
                 </div>
-                <div className="rounded-md bg-background/60 p-2">
+                <div className="rounded-md bg-foreground/[0.04] p-2">
                   <p className="text-[10px] text-muted-foreground">Tier 3</p>
                   <p className="text-sm font-semibold">{selected?.tier3?.toFixed(1) ?? "0.0"}</p>
                 </div>
               </div>
 
               {selected?.iq_score != null && (
-                <div className="space-y-1.5 border-t border-white/5 pt-3">
+                <div className="space-y-1.5 border-t border-border pt-3">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-xs uppercase text-muted-foreground">
                       <Brain className="h-3.5 w-3.5" /> Aptitude screen
@@ -562,22 +613,22 @@ export default function AdminCandidatesPage() {
                   {parseIqDetail(selected.iq_details).length > 0 && (
                     <ol className="mt-2 space-y-2">
                       {parseIqDetail(selected.iq_details).map((q, i) => (
-                        <li key={q.id ?? i} className="rounded-md border border-white/5 bg-background/40 p-2 text-[11px]">
+                        <li key={q.id ?? i} className="rounded-md border border-border bg-foreground/[0.03] p-2 text-[11px]">
                           <div className="flex items-start justify-between gap-2">
                             <span className="font-medium text-foreground/90">{i + 1}. {q.prompt}</span>
                             <span className="flex items-center gap-1 shrink-0 text-[10px] text-muted-foreground">
                               {q.is_correct
-                                ? <Check className="h-3 w-3 text-emerald-400" />
-                                : <X className="h-3 w-3 text-red-400" />}
+                                ? <Check className="h-3 w-3 text-strong" />
+                                : <X className="h-3 w-3 text-weak" />}
                               {q.time_seconds != null ? `${q.time_seconds}s` : ""}
                             </span>
                           </div>
                           <div className="mt-1 space-y-0.5">
-                            <p className={q.is_correct ? "text-emerald-300" : "text-red-300"}>
+                            <p className={q.is_correct ? "text-strong" : "text-weak"}>
                               Answered: {q.chosen_text ?? "— (no answer)"}
                             </p>
                             {!q.is_correct && (
-                              <p className="text-emerald-300/80">Correct: {q.correct_text}</p>
+                              <p className="text-strong/80">Correct: {q.correct_text}</p>
                             )}
                           </div>
                         </li>
@@ -587,14 +638,14 @@ export default function AdminCandidatesPage() {
                 </div>
               )}
 
-              <div className="space-y-2 text-sm border-t border-white/5 pt-3">
+              <div className="space-y-2 text-sm border-t border-border pt-3">
                 <p><span className="text-muted-foreground text-xs block">Role:</span> {selected?.current_role || "-"}</p>
                 <p><span className="text-muted-foreground text-xs block">Experience:</span> {selected?.years_experience != null ? `${selected.years_experience} yrs` : "-"}</p>
                 <p><span className="text-muted-foreground text-xs block">Companies:</span> {parseList(selected?.companies).join(", ") || "-"}</p>
                 <p><span className="text-muted-foreground text-xs block">Submitted:</span> {selected ? new Date(selected.created_at).toLocaleString() : "-"}</p>
               </div>
 
-              <div className="space-y-2 border-t border-white/5 pt-3">
+              <div className="space-y-2 border-t border-border pt-3">
                 {selected && (
                   <Button className="w-full gap-2 text-xs" variant="outline" onClick={() => handleViewResume(selected)}>
                     <FileText className="h-4 w-4" /> View Resume Text

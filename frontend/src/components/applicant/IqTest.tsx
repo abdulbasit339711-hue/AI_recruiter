@@ -102,7 +102,7 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
 
   if (phase === "loading") {
     return (
-      <div className="flex items-center justify-center gap-3 rounded-md border border-white/10 bg-card/80 p-10 text-sm text-muted-foreground">
+      <div className="flex items-center justify-center gap-3 glass rounded-2xl p-10 text-sm text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin text-primary" /> Preparing your aptitude screen…
       </div>
     );
@@ -110,7 +110,7 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
 
   if (phase === "error" || !test) {
     return (
-      <div className="space-y-4 rounded-md border border-white/10 bg-card/80 p-6 text-center">
+      <div className="space-y-4 glass rounded-2xl p-6 text-center">
         <p className="text-sm text-muted-foreground">
           The aptitude screen is unavailable right now. You can continue with your application.
         </p>
@@ -123,7 +123,7 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
 
   if (phase === "submitting") {
     return (
-      <div className="flex items-center justify-center gap-3 rounded-md border border-white/10 bg-card/80 p-10 text-sm text-muted-foreground">
+      <div className="flex items-center justify-center gap-3 glass rounded-2xl p-10 text-sm text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin text-primary" /> Scoring your answers…
       </div>
     );
@@ -133,13 +133,13 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
   const lowTime = secondsLeft <= 5;
 
   return (
-    <div className="space-y-5 rounded-md border border-white/10 bg-card/80 p-5">
+    <div className="space-y-5 glass rounded-2xl p-5">
       <div className="flex items-center justify-between text-sm">
         <span className="flex items-center gap-2 font-medium text-primary">
           <Brain className="h-4 w-4" /> Aptitude screen
         </span>
         <span
-          className={`flex items-center gap-1 tabular-nums ${lowTime ? "text-red-400" : "text-muted-foreground"}`}
+          className={`flex items-center gap-1 tabular-nums ${lowTime ? "text-weak" : "text-muted-foreground"}`}
           aria-live="polite"
         >
           <Timer className="h-4 w-4" /> {secondsLeft}s
@@ -148,7 +148,7 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
 
       {/* Progress */}
       <div className="flex items-center gap-3">
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-foreground/10">
           <div
             className="h-full rounded-full bg-primary transition-all"
             style={{ width: `${(index / test.total) * 100}%` }}
@@ -159,17 +159,20 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
         </span>
       </div>
 
-      <p className="text-base font-medium">{q.prompt}</p>
+      <p className="font-display text-lg font-semibold text-heading">{q.prompt}</p>
 
-      <div className="grid gap-2">
+      <div className="grid gap-2.5">
         {q.options.map((opt, i) => (
           <button
             key={i}
             type="button"
             onClick={() => choose(q.id, i)}
-            className="rounded-md border border-white/10 bg-background px-4 py-3 text-left text-sm transition hover:border-primary/60 hover:bg-primary/10 focus:outline-none focus:ring-1 focus:ring-primary"
+            className="group flex items-center gap-3 rounded-xl border border-border bg-foreground/[0.03] px-4 py-3 text-left text-sm transition hover:border-primary/60 hover:bg-primary/[0.07] focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            {opt}
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border font-mono text-xs font-semibold text-muted-foreground transition-colors group-hover:border-primary/60 group-hover:bg-primary group-hover:text-primary-foreground">
+              {String.fromCharCode(65 + i)}
+            </span>
+            <span className="text-foreground">{opt}</span>
           </button>
         ))}
       </div>

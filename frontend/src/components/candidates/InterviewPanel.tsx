@@ -71,7 +71,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 p-8 text-slate-400">
+      <div className="flex items-center gap-2 p-8 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" /> Loading interview…
       </div>
     );
@@ -93,7 +93,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
           <button
             onClick={() => resumeInputRef.current?.click()}
             disabled={uploading}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/5 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-white/5 disabled:opacity-60"
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Replace résumé
@@ -104,7 +104,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
               href={getCandidateReportUrl(candidateId, "pdf")}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/5"
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-white/5"
             >
               <FileText className="h-4 w-4" /> Report
             </a>
@@ -112,7 +112,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
           <button
             onClick={sendInvite}
             disabled={sending}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             {result?.has_interview ? "Resend invite" : "Send invite"}
@@ -121,7 +121,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
       </div>
 
       {!result?.has_interview ? (
-        <div className="rounded-xl border border-dashed border-white/15 p-10 text-center text-sm text-slate-400">
+        <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
           No interview yet. Send the invite — the candidate receives a time-limited link by email.
         </div>
       ) : (
@@ -144,9 +144,9 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
           )}
 
           {result.metrics && (
-            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <section className="rounded-xl glass-tile p-4">
               <h4 className="mb-3 text-sm font-semibold">Usage &amp; cost (tokens)</h4>
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-400">Interview</div>
+              <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Interview</div>
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
                 <Stat label="STT (est.)" value={result.metrics.interview.stt_tokens.toLocaleString()} />
                 <Stat label="LLM in" value={result.metrics.interview.llm_input_tokens.toLocaleString()} />
@@ -154,13 +154,13 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
                 <Stat label="TTS (est.)" value={result.metrics.interview.tts_tokens.toLocaleString()} />
                 <Stat label="Total" value={result.metrics.interview.total_tokens.toLocaleString()} />
               </div>
-              <div className="mt-3 mb-1 text-[11px] uppercase tracking-wide text-slate-400">Resume scoring</div>
+              <div className="mt-3 mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Resume scoring</div>
               <div className="grid grid-cols-3 gap-3">
                 <Stat label="LLM in" value={result.metrics.scoring.prompt_tokens.toLocaleString()} />
                 <Stat label="LLM out" value={result.metrics.scoring.completion_tokens.toLocaleString()} />
                 <Stat label="Scoring cost" value={`$${result.metrics.scoring.cost_usd.toFixed(4)}`} />
               </div>
-              <p className="mt-3 text-xs text-slate-400">
+              <p className="mt-3 text-xs text-muted-foreground">
                 Interview LLM cost: ${result.metrics.interview.cost_usd.toFixed(4)} · STT/TTS token
                 counts are character-based estimates.
               </p>
@@ -168,7 +168,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
           )}
 
           {result.has_audio && (
-            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <section className="rounded-xl glass-tile p-4">
               <h4 className="mb-3 text-sm font-semibold">Interview recording</h4>
               <audio controls preload="none" className="w-full" src={getInterviewAudioUrl(candidateId)}>
                 Your browser does not support audio playback.
@@ -176,26 +176,26 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
             </section>
           )}
 
-          <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <section className="rounded-xl glass-tile p-4">
             <h4 className="mb-3 text-sm font-semibold">Goals · questions &amp; answers</h4>
             <ul className="space-y-3">
               {(result.goals ?? []).map((g) => (
                 <GoalRow key={g.title} goal={g} />
               ))}
               {(result.goals ?? []).length === 0 && (
-                <li className="text-xs text-slate-400">No goals recorded.</li>
+                <li className="text-xs text-muted-foreground">No goals recorded.</li>
               )}
             </ul>
           </section>
 
-          <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <section className="rounded-xl glass-tile p-4">
             <h4 className="mb-3 text-sm font-semibold">Transcript</h4>
             <div className="max-h-[420px] space-y-3 overflow-y-auto pr-2">
               {(result.transcript ?? []).map((t, i) => (
                 <div key={i} className={`flex flex-col ${t.speaker === "agent" ? "items-start" : "items-end"}`}>
                   <div
                     className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                      t.speaker === "agent" ? "bg-slate-800 text-slate-200" : "bg-blue-600 text-white"
+                      t.speaker === "agent" ? "bg-foreground/10 text-foreground" : "bg-primary text-white"
                     }`}
                   >
                     {t.text}
@@ -206,7 +206,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
                 </div>
               ))}
               {(result.transcript ?? []).length === 0 && (
-                <p className="text-xs text-slate-400">No transcript recorded.</p>
+                <p className="text-xs text-muted-foreground">No transcript recorded.</p>
               )}
             </div>
           </section>
@@ -218,8 +218,8 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">{label}</div>
+    <div className="min-w-0 rounded-xl glass-tile p-3">
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold" title={value}>{value}</div>
     </div>
   );
@@ -235,32 +235,32 @@ function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number]
     <li>
       <div className="mb-1 flex justify-between gap-2 text-xs">
         <span className="min-w-0 truncate" title={goal.title}>{goal.title}</span>
-        <span className="shrink-0 text-slate-400">
+        <span className="shrink-0 text-muted-foreground">
           {goal.completion_status} · {pct}%
         </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-        <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+      <div className="h-1.5 overflow-hidden rounded-full bg-foreground/10">
+        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
       </div>
       {hasDetail && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-[11px] text-slate-400">Questions &amp; answers</summary>
+          <summary className="cursor-pointer text-[11px] text-muted-foreground">Questions &amp; answers</summary>
           {questions.length > 0 && (
             <div className="mt-2">
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Questions</div>
-              <ul className="ml-4 mt-1 list-disc text-xs text-slate-300">
+              <div className="text-[11px] uppercase tracking-wide text-faint">Questions</div>
+              <ul className="ml-4 mt-1 list-disc text-xs text-foreground">
                 {questions.map((q, i) => <li key={i}>{q}</li>)}
               </ul>
             </div>
           )}
           {evidence.length > 0 && (
             <div className="mt-2">
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Candidate answers</div>
+              <div className="text-[11px] uppercase tracking-wide text-faint">Candidate answers</div>
               <ul className="mt-1 space-y-1">
                 {evidence.map((e, i) => (
                   <li
                     key={i}
-                    className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-xs italic text-slate-300"
+                    className="rounded-md glass-tile px-2 py-1 text-xs italic text-foreground"
                   >
                     “{e.text}”
                   </li>
@@ -278,11 +278,11 @@ function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number]
 function TurnEvalBadge({ ev }: { ev: TurnEvaluation }) {
   const score = typeof ev.score === "number" ? ev.score : null;
   const color =
-    score == null ? "text-slate-400" : score >= 7 ? "text-emerald-400" : score >= 4 ? "text-amber-400" : "text-rose-400";
+    score == null ? "text-muted-foreground" : score >= 7 ? "text-strong" : score >= 4 ? "text-promising" : "text-weak";
   const strength = ev.strengths?.[0];
   const weakness = ev.weaknesses?.[0];
   return (
-    <div className="mt-1 max-w-[80%] text-right text-[11px] text-slate-400">
+    <div className="mt-1 max-w-[80%] text-right text-[11px] text-muted-foreground">
       {score != null && <span className={`font-semibold ${color}`}>{score}/10</span>}
       {ev.depth && <span> · {ev.depth}</span>}
       {strength && <span> · 👍 {strength}</span>}
@@ -303,7 +303,7 @@ function FinalAssessment({ raw }: { raw: string }) {
   }
 
   const Section = ({ children }: { children: ReactNode }) => (
-    <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <section className="rounded-xl glass-tile p-4">
       <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
         <ClipboardCheck className="h-4 w-4" /> Final evaluation
       </h4>
@@ -314,7 +314,7 @@ function FinalAssessment({ raw }: { raw: string }) {
   if (!parsed) {
     return (
       <Section>
-        <p className="text-sm text-slate-300">{raw}</p>
+        <p className="text-sm text-foreground">{raw}</p>
       </Section>
     );
   }
@@ -341,42 +341,42 @@ function FinalAssessment({ raw }: { raw: string }) {
           </span>
         )}
         {!Number.isNaN(perf) && (
-          <span className="text-xs text-slate-300">Performance: {Math.round(perf * 100)}%</span>
+          <span className="text-xs text-foreground">Performance: {Math.round(perf * 100)}%</span>
         )}
         {!Number.isNaN(coverage) && (
-          <span className="text-xs text-slate-300">Goal coverage: {Math.round(coverage * 100)}%</span>
+          <span className="text-xs text-foreground">Goal coverage: {Math.round(coverage * 100)}%</span>
         )}
       </div>
       {strengths.length > 0 && (
         <div className="mb-2">
-          <div className="text-[11px] uppercase tracking-wide text-emerald-400">Strengths</div>
-          <ul className="ml-4 list-disc text-sm text-slate-300">
+          <div className="text-[11px] uppercase tracking-wide text-strong">Strengths</div>
+          <ul className="ml-4 list-disc text-sm text-foreground">
             {strengths.map((s, i) => <li key={i}>{s}</li>)}
           </ul>
         </div>
       )}
       {improvements.length > 0 && (
         <div className="mb-2">
-          <div className="text-[11px] uppercase tracking-wide text-amber-400">Areas for improvement</div>
-          <ul className="ml-4 list-disc text-sm text-slate-300">
+          <div className="text-[11px] uppercase tracking-wide text-promising">Areas for improvement</div>
+          <ul className="ml-4 list-disc text-sm text-foreground">
             {improvements.map((s, i) => <li key={i}>{s}</li>)}
           </ul>
         </div>
       )}
       {goals.length > 0 && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-xs text-slate-400">Per-goal assessment ({goals.length})</summary>
+          <summary className="cursor-pointer text-xs text-muted-foreground">Per-goal assessment ({goals.length})</summary>
           <ul className="mt-2 space-y-2">
             {goals.map((g, i) => (
-              <li key={i} className="rounded-lg border border-white/10 p-2 text-sm">
+              <li key={i} className="rounded-lg border border-border p-2 text-sm">
                 <div className="flex justify-between">
                   <span className="font-medium">{String(g.goal_title ?? "Goal")}</span>
-                  <span className="text-slate-400">
+                  <span className="text-muted-foreground">
                     {Math.round(Number(g.final_score ?? 0) * 100)}% · {String(g.completion_status ?? "")}
                   </span>
                 </div>
                 {Array.isArray(g.key_quotes) && (g.key_quotes as string[]).length > 0 && (
-                  <p className="mt-1 text-xs italic text-slate-400">“{(g.key_quotes as string[])[0]}”</p>
+                  <p className="mt-1 text-xs italic text-muted-foreground">“{(g.key_quotes as string[])[0]}”</p>
                 )}
               </li>
             ))}

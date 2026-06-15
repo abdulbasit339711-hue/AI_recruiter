@@ -91,7 +91,7 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
           value={candidate.hr_status || "Applied"}
           onChange={handleStatusChange}
           disabled={statusLoading}
-          className="h-8 rounded-md border border-white/10 bg-background pl-2 pr-8 text-xs font-medium text-white focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 appearance-none"
+          className="h-8 rounded-md border border-border bg-foreground/[0.04] pl-2 pr-8 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 appearance-none"
         >
           {HR_STATUSES.map((status) => (
             <option key={status} value={status}>
@@ -99,7 +99,7 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
             </option>
           ))}
         </select>
-        <ChevronDown className="absolute right-2 h-3.5 w-3.5 pointer-events-none text-gray-400" />
+        <ChevronDown className="absolute right-2 h-3.5 w-3.5 pointer-events-none text-muted-foreground" />
       </div>
 
       {/* Add Note Button */}
@@ -134,16 +134,16 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
 
       {/* Score Override Dialog */}
       <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
-        <DialogContent className="max-w-md bg-gray-950 text-white border-white/10">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Override Candidate Score</DialogTitle>
-            <DialogDescription className="text-gray-400">
+            <DialogDescription className="text-muted-foreground">
               Override the machine-evaluated score for {candidate.name || candidate.filename}. This override will take precedence in leaderboard sorting.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleOverrideSubmit} className="space-y-4 py-2">
             <div className="space-y-1">
-              <label htmlFor="score-input" className="text-xs font-semibold text-gray-300">
+              <label htmlFor="score-input" className="text-xs font-semibold text-foreground">
                 Override Score (0.0 - 100.0)
               </label>
               <Input
@@ -156,11 +156,11 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
                 onChange={(e) => setOverrideScore(e.target.value)}
                 placeholder="e.g. 85.5"
                 required
-                className="bg-background border-white/10 text-white text-sm"
+                className="bg-foreground/[0.04] border-border text-foreground text-sm"
               />
             </div>
             <div className="space-y-1">
-              <label htmlFor="reason-input" className="text-xs font-semibold text-gray-300">
+              <label htmlFor="reason-input" className="text-xs font-semibold text-foreground">
                 Reason for Override
               </label>
               <Input
@@ -170,7 +170,7 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
                 onChange={(e) => setOverrideReason(e.target.value)}
                 placeholder="e.g. Verified project links and deep backend experience"
                 required
-                className="bg-background border-white/10 text-white text-sm"
+                className="bg-foreground/[0.04] border-border text-foreground text-sm"
               />
             </div>
             <DialogFooter className="pt-2">

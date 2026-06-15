@@ -1,115 +1,281 @@
 @import "tailwindcss";
 
+/* Drive `dark:` utilities from the `.dark` class (next-themes), not the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ============================================================
+   AI-Recruiter — "Liquid Glass" design system
+   Light is the DEFAULT base; dark is an opt-in toggle (.dark).
+   Fonts: Bricolage Grotesque (display) · Geist (body) · Geist Mono (numbers)
+   ============================================================ */
+
 @layer base {
+  /* ---------- LIGHT (default) ---------- */
   :root {
-    --background: 222 28% 8%;
-    --foreground: 210 24% 92%;
-    
-    --card: 220 22% 11%;
-    --card-foreground: 210 24% 92%;
-    
-    --popover: 220 22% 11%;
-    --popover-foreground: 210 24% 92%;
-    
-    --primary: 199 89% 48%;
-    --primary-foreground: 210 20% 98%;
-    
-    --secondary: 216 18% 17%;
-    --secondary-foreground: 210 20% 98%;
-    
-    --muted: 216 18% 17%;
-    --muted-foreground: 215 15% 67%;
-    
-    --accent: 43 96% 56%;
-    --accent-foreground: 210 20% 98%;
-    
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 20% 98%;
-    
-    --border: 216 16% 22%;
-    --input: 216 16% 22%;
-    --ring: 199 89% 48%;
-    
-    --radius: 0.75rem;
+    /* surfaces */
+    --background: #f3f2ee;        /* paper */
+    --foreground: #16181f;        /* body ink */
+    --heading: #0e1017;           /* display ink */
+    --surface-solid: #faf9f6;     /* opaque fallback for glass */
+
+    --card: #faf9f6;
+    --card-foreground: #16181f;
+    --popover: #fbfaf8;
+    --popover-foreground: #16181f;
+
+    /* brand */
+    --primary: #2f5bff;           /* cobalt */
+    --primary-foreground: #ffffff;
+    --primary-strong: #2447d6;    /* darker cobalt for text-on-light */
+
+    --secondary: #eceae4;
+    --secondary-foreground: #2a2e3a;
+    --muted: #eceae4;
+    --muted-foreground: #6b7080;
+    --faint: #8a8f9e;
+    --accent: #e9eaf7;
+    --accent-foreground: #2447d6;
+    --destructive: #e5544b;
+    --destructive-foreground: #ffffff;
+
+    --border: rgba(20, 30, 60, 0.10);
+    --input: rgba(20, 30, 60, 0.12);
+    --ring: #2f5bff;
+    --radius: 0.875rem;
+
+    /* glass surface */
+    --glass-top: rgba(255, 255, 255, 0.72);
+    --glass-bottom: rgba(255, 255, 255, 0.52);
+    --glass-border: rgba(255, 255, 255, 0.65);
+    --glass-inset: rgba(255, 255, 255, 0.85);
+    --glass-shadow: 0 24px 50px -26px rgba(20, 30, 60, 0.30), 0 4px 12px -6px rgba(20, 30, 60, 0.12);
+
+    /* score semantics — color-blind safe (paired with icon/label) */
+    --strong: #0e9f6e;   --strong-text: #0a7a54;  --strong-bg: rgba(14, 159, 110, 0.12);
+    --promising: #e0a500; --promising-text: #9a7100; --promising-bg: rgba(224, 165, 0, 0.14);
+    --weak: #e5544b;     --weak-text: #c23b33;    --weak-bg: rgba(229, 84, 75, 0.12);
+
+    /* atmosphere — radial color mesh behind the glass */
+    --atmo:
+      radial-gradient(1100px 700px at 12% -5%, rgba(47, 91, 255, 0.10), transparent 60%),
+      radial-gradient(900px 600px at 95% 8%, rgba(34, 211, 238, 0.10), transparent 55%),
+      radial-gradient(800px 700px at 60% 110%, rgba(251, 124, 208, 0.07), transparent 60%);
+    --grain-opacity: 0.40;
+    --grain-blend: multiply;
+  }
+
+  /* ---------- DARK (toggle) ---------- */
+  .dark {
+    --background: #090b10;
+    --foreground: #ecedf1;
+    --heading: #f4f5f8;
+    --surface-solid: #14171d;
+
+    --card: #14171d;
+    --card-foreground: #ecedf1;
+    --popover: #14171d;
+    --popover-foreground: #ecedf1;
+
+    --primary: #2f5bff;
+    --primary-foreground: #ffffff;
+    --primary-strong: #9cb4ff;
+
+    --secondary: #1a1e26;
+    --secondary-foreground: #ecedf1;
+    --muted: #1a1e26;
+    --muted-foreground: #9aa0ae;
+    --faint: #6f7787;
+    --accent: #1e2433;
+    --accent-foreground: #9cb4ff;
+    --destructive: #e5544b;
+    --destructive-foreground: #ffffff;
+
+    --border: rgba(255, 255, 255, 0.09);
+    --input: rgba(255, 255, 255, 0.12);
+    --ring: #6e92ff;
+
+    --glass-top: rgba(255, 255, 255, 0.055);
+    --glass-bottom: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.09);
+    --glass-inset: rgba(255, 255, 255, 0.06);
+    --glass-shadow: 0 24px 50px -28px rgba(0, 0, 0, 0.60);
+
+    --strong: #0e9f6e;   --strong-text: #4fd3a0;  --strong-bg: rgba(14, 159, 110, 0.18);
+    --promising: #e0a500; --promising-text: #f4ce5e; --promising-bg: rgba(224, 165, 0, 0.20);
+    --weak: #e5544b;     --weak-text: #ff8a82;    --weak-bg: rgba(229, 84, 75, 0.20);
+
+    --atmo:
+      radial-gradient(720px 480px at 6% -8%, rgba(47, 91, 255, 0.28), transparent 56%),
+      radial-gradient(640px 420px at 100% 4%, rgba(34, 211, 238, 0.18), transparent 55%),
+      radial-gradient(600px 520px at 72% 120%, rgba(139, 92, 246, 0.16), transparent 60%);
+    --grain-opacity: 0.30;
+    --grain-blend: screen;
   }
 }
 
+/* ---------- Tailwind token mapping (runtime-themed via var indirection) ---------- */
 @theme {
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-heading: var(--heading);
+  --color-strong: var(--strong);
+  --color-promising: var(--promising);
+  --color-weak: var(--weak);
+  --color-faint: var(--faint);
+  --color-glass-border: var(--glass-border);
+
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), var(--font-sans), sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 1.75rem;
 }
 
-/* Custom premium scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(14, 165, 233, 0.24);
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(14, 165, 233, 0.42);
-}
-
-/* Dynamic background mesh */
-.bg-mesh {
-  background-color: #0b111c;
-  background-image: 
-    linear-gradient(180deg, rgba(14, 165, 233, 0.06), transparent 36%),
-    linear-gradient(90deg, rgba(16, 185, 129, 0.04), transparent 55%);
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display), var(--font-sans), sans-serif;
+    color: var(--heading);
+    letter-spacing: -0.02em;
+  }
 }
 
-/* Noise overlay */
-.bg-noise {
-  position: relative;
+/* ============================================================
+   Atmosphere — full-screen mesh + grain behind everything.
+   Used by <AppBackground/>; theme-aware via vars.
+   ============================================================ */
+.app-atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--background);
+  background-image: var(--atmo);
 }
-.bg-noise::after {
+.app-atmosphere::after {
   content: "";
   position: absolute;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  opacity: 0.02;
-  pointer-events: none;
-  z-index: 1;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/></svg>");
 }
 
-/* Card glassmorphism styling */
+/* Floating blobs (optional decorative depth) */
+@keyframes blobFloat  { 0%,100% { transform: translate(0,0) scale(1); } 33% { transform: translate(40px,-30px) scale(1.08); } 66% { transform: translate(-30px,20px) scale(0.96); } }
+@keyframes blobFloat2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-50px,30px) scale(1.12); } }
+
+/* ============================================================
+   Glass surfaces
+   ============================================================ */
+.glass {
+  position: relative;
+  background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 1px 0 var(--glass-inset) inset, var(--glass-shadow);
+}
+/* lighter, cheaper glass for small tiles (fewer stacked blurs) */
+.glass-tile {
+  background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+  backdrop-filter: blur(16px) saturate(135%);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 1px 0 var(--glass-inset) inset, 0 14px 30px -18px rgba(20, 30, 60, 0.28);
+}
+/* navigation rail / top bar — translucent but no heavy shadow */
+.glass-rail {
+  background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border-color: var(--glass-border);
+}
+.glass-hover {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+  will-change: transform;
+}
+.glass-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 1px 0 var(--glass-inset) inset, 0 34px 60px -28px rgba(20, 30, 60, 0.38);
+}
+
+/* Back-compat alias for legacy .glass-card usages */
 .glass-card {
-  background: rgba(17, 24, 39, 0.4);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(180deg, var(--glass-top), var(--glass-bottom));
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 1px 0 var(--glass-inset) inset, var(--glass-shadow);
 }
 
-.glass-card:hover {
-  border-color: rgba(14, 165, 233, 0.28);
-  box-shadow: 0 12px 34px rgba(14, 165, 233, 0.08);
-}
+/* ============================================================
+   Score chips — color-blind safe (use with an icon + label)
+   ============================================================ */
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; font-weight: 600; font-size: 0.75rem; line-height: 1; }
+.chip-strong    { background: var(--strong-bg);    color: var(--strong-text); }
+.chip-promising { background: var(--promising-bg); color: var(--promising-text); }
+.chip-weak      { background: var(--weak-bg);      color: var(--weak-text); }
+
+/* ============================================================
+   Motion — staggered page-load reveals
+   ============================================================ */
+@keyframes reveal-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.reveal { animation: reveal-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
 /* Indeterminate progress bar (resume upload loader) */
-@keyframes loading {
-  0%   { transform: translateX(-120%); }
-  100% { transform: translateX(420%); }
+@keyframes loading { 0% { transform: translateX(-120%); } 100% { transform: translateX(420%); } }
+
+/* ============================================================
+   Accessibility — honor user motion / transparency preferences
+   ============================================================ */
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .glass-tile, .glass-rail, .glass-card {
+    background: var(--surface-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .glass-hover:hover { transform: none; }
+}
+
+/* ============================================================
+   Premium scrollbar (theme-aware)
+   ============================================================ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--primary) 45%, transparent); background-clip: padding-box; }

@@ -30,12 +30,12 @@ const COLUMN_COLORS: Record<HRStatus, string> = {
 };
 
 const COLUMN_BG_BADGES: Record<HRStatus, string> = {
-  Applied: "bg-gray-500/10 text-gray-400 border-gray-500/20",
-  Screened: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  Interview: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-  Offer: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-  Hired: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  Rejected: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  Applied: "bg-foreground/5 text-muted-foreground border-border",
+  Screened: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20",
+  Interview: "bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20",
+  Offer: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20",
+  Hired: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20",
+  Rejected: "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20",
 };
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -72,11 +72,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         return (
           <div
             key={col}
-            className={`flex flex-col rounded-lg border border-white/10 bg-card/40 p-3 min-w-[240px] border-t-4 ${COLUMN_COLORS[col]}`}
+            className={`glass-tile flex flex-col rounded-2xl p-3 min-w-[240px] border-t-4 ${COLUMN_COLORS[col]}`}
           >
             {/* Column Header */}
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/5">
-              <span className="text-sm font-bold text-white">{col}</span>
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
+              <span className="text-sm font-bold text-heading">{col}</span>
               <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${COLUMN_BG_BADGES[col]}`}>
                 {list.length}
               </span>
@@ -86,7 +86,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <div className="flex-1 space-y-3 min-h-[500px] overflow-y-auto max-h-[70vh] pr-1">
               <AnimatePresence>
                 {list.length === 0 ? (
-                  <div className="flex h-32 items-center justify-center rounded-md border border-dashed border-white/5 text-xs text-muted-foreground italic">
+                  <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted-foreground italic">
                     No candidates
                   </div>
                 ) : (
@@ -102,11 +102,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.2 }}
-                        className="rounded-lg border border-white/5 bg-white/[0.02] p-3 space-y-3 hover:border-white/15 hover:bg-white/[0.04] transition-all duration-200"
+                        className="rounded-xl border border-border bg-foreground/[0.02] p-3 space-y-3 hover:bg-foreground/[0.05] transition-all duration-200"
                       >
                         {/* Name and Email */}
                         <div className="space-y-0.5">
-                          <h4 className="text-xs font-bold text-white truncate" title={cand.name || cand.filename}>
+                          <h4 className="text-xs font-bold text-heading truncate" title={cand.name || cand.filename}>
                             {cand.name || cand.filename}
                           </h4>
                           <p className="text-[10px] text-muted-foreground truncate" title={cand.email || ""}>
@@ -118,13 +118,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-[10px]">
                             <span className="text-muted-foreground">Effective Score</span>
-                            <span className={`font-semibold ${isOverridden ? "text-amber-400" : "text-emerald-400"}`}>
+                            <span className={`font-mono font-semibold ${isOverridden ? "text-promising" : "text-strong"}`}>
                               {displayScore?.toFixed(1)}
                             </span>
                           </div>
                           <ScoreBar value={displayScore} />
                           {isOverridden && (
-                            <p className="text-[9px] text-amber-500 font-medium">
+                            <p className="text-[9px] text-promising font-medium">
                               Overridden (Original: {cand.total_score.toFixed(1)})
                             </p>
                           )}
@@ -144,7 +144,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         </div>
 
                         {/* Actions wrapper */}
-                        <div className="border-t border-white/5 pt-2 flex flex-col gap-2">
+                        <div className="border-t border-border pt-2 flex flex-col gap-2">
                           <div className="flex items-center justify-between gap-1">
                             <CandidateActions
                               candidate={cand}
@@ -164,7 +164,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
                           {/* Expanded Notes Section inside Kanban card */}
                           {expandedCardId === cand.id && (
-                            <div className="mt-2 rounded border border-white/10 bg-black/60 p-2.5">
+                            <div className="glass-tile mt-2 rounded-lg p-2.5">
                               <CandidateNotesPanel
                                 candidateId={cand.id}
                                 hrNotes={cand.hr_notes}

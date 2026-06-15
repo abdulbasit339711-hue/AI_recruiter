@@ -77,12 +77,12 @@ export const ScoreVisualization: React.FC = () => {
           <CardContent className="p-0 text-lg font-semibold">{metrics.failedCount}</CardContent>
         </Card>
       </div>
-      <div className="space-y-4 rounded-md border border-white/10 bg-card/80 p-4">
-        <h3 className="text-sm font-semibold">Status Distribution</h3>
+      <div className="glass space-y-4 rounded-2xl p-5">
+        <h3 className="text-sm font-semibold text-heading">Status Distribution</h3>
         {distribution.map((entry) => (
           <div key={entry.name} className="grid grid-cols-[88px_1fr_48px] items-center gap-3 text-sm">
             <span className="text-muted-foreground">{entry.name}</span>
-            <div className="h-3 overflow-hidden rounded-full bg-white/10">
+            <div className="h-3 overflow-hidden rounded-full bg-foreground/10">
               <div
                 className="h-full rounded-full bg-primary"
                 style={{ width: `${(entry.value / maxDistribution) * 100}%` }}

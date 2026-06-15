@@ -50,7 +50,7 @@ export default function AdminJobsPage() {
   }
 
   if (isLoading) {
-    return <div className="rounded-md border border-white/10 bg-card/80 p-6 text-sm text-muted-foreground">Loading jobs...</div>
+    return <div className="glass rounded-2xl p-6 text-sm text-muted-foreground">Loading jobs...</div>
   }
   if (isError) {
     return (
@@ -63,9 +63,10 @@ export default function AdminJobsPage() {
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Job Management</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Create roles, tune prompts, and archive closed openings.</p>
+        <div className="flex flex-col gap-1.5">
+          <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">Jobs</p>
+          <h1 className="font-display text-[30px] font-bold leading-none tracking-tight text-heading">Job Management</h1>
+          <p className="text-sm text-muted-foreground">Create roles, tune prompts, and archive closed openings.</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={openCreate} variant="default" size="sm">
