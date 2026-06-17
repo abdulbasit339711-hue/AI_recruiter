@@ -56,6 +56,19 @@ DEEPGRAM_ENDPOINTING_MS: int | None = (
     int(_DEEPGRAM_ENDPOINTING_MS_RAW) if _DEEPGRAM_ENDPOINTING_MS_RAW else None
 )
 
+# Record the candidate's camera (when they publish it) to a local MP4 alongside
+# the audio WAV, so HR can replay the interview with picture. Requires the
+# transport's video_in_enabled (runner.py reads this flag too). Best-effort:
+# a missing camera, PyAV, or any encode error leaves the audio recording intact.
+RECORD_VIDEO: bool = os.getenv("RECORD_VIDEO", "true").lower() in ("1", "true", "yes", "on")
+
+# Analyze the candidate's video with a Groq vision model (~1 fps sampled, analyzed
+# every VISION_ANALYZE_INTERVAL_SECS) for presence/engagement, integrity, a neutral
+# per-interval summary, and advisory delivery notes. Best-effort and off the critical
+# path; results are broadcast over SSE and written to a {session}.vision.json sidecar.
+# ADVISORY ONLY — never auto-scored into the candidate result (see processor docstring).
+ANALYZE_VIDEO: bool = os.getenv("ANALYZE_VIDEO", "true").lower() in ("1", "true", "yes", "on")
+
 
 def build_user_turn_strategies() -> UserTurnStrategies:
     """Turn-taking strategy with an interview-appropriate silence window.
@@ -160,6 +173,25 @@ class BotManager:
             self._recorded_audio = audio
             self._audio_sample_rate = sample_rate
 
+        # Optional video recording: taps the candidate's incoming camera frames and
+        # writes a video-only MP4 next to the WAV; muxed together at finalize.
+        self.video_recorder = None
+        if RECORD_VIDEO:
+            from processors.video_recorder import VideoRecorderProcessor
+            self.video_recorder = VideoRecorderProcessor(self._video_tmp_path)
+
+        # Optional video analysis: samples the same camera frames and asks a vision
+        # model for advisory presence/integrity/delivery observations (SSE + sidecar).
+        self.vision_processor = None
+        if ANALYZE_VIDEO:
+            from processors.vision_analysis_processor import VisionAnalysisProcessor
+            self.vision_processor = VisionAnalysisProcessor(self.broadcaster)
+
+        # Silence nudge: if the candidate goes quiet, the bot checks in and then wraps
+        # up instead of sitting in dead air. Sits upstream of the TTS so it can speak.
+        from processors.silence_nudge_processor import SilenceNudgeProcessor
+        self.silence_processor = SilenceNudgeProcessor(self.broadcaster)
+
         # Create pipeline based on mode
         if mode == "dual":
             logger.info("[BotManager] Initializing DUAL LLM pipeline (Judge + Responder)")
@@ -185,11 +217,17 @@ class BotManager:
 
     def _create_single_pipeline(self):
         """Create traditional single LLM pipeline"""
-        pipeline_processors = [
-            self.transport.input(),
+        pipeline_processors = [self.transport.input()]
+        if self.video_recorder:
+            pipeline_processors.append(self.video_recorder)
+        if self.vision_processor:
+            pipeline_processors.append(self.vision_processor)
+        pipeline_processors += [
             self.stt,
             self.transcript_processor,
         ]
+        if self.silence_processor:
+            pipeline_processors.append(self.silence_processor)
 
         # Add goal tracking if enabled
         if self.goal_processor:
@@ -217,13 +255,19 @@ class BotManager:
         # Create context enrichment processor
         self.context_processor = DualLLMContextProcessor(self.session, self.context)
 
-        pipeline_processors = [
-            self.transport.input(),
+        pipeline_processors = [self.transport.input()]
+        if self.video_recorder:
+            pipeline_processors.append(self.video_recorder)
+        if self.vision_processor:
+            pipeline_processors.append(self.vision_processor)
+        pipeline_processors += [
             self.stt,
             self.transcript_processor,
             # Judge evaluates in parallel (non-blocking)
             self.judge_processor,
         ]
+        if self.silence_processor:
+            pipeline_processors.append(self.silence_processor)
 
         # Add goal tracking if enabled (after judge for context)
         if self.goal_processor:
@@ -266,6 +310,10 @@ class BotManager:
     def _session_processors(self):
         """All pipeline processors that need the per-interview session."""
         procs = [self.transcript_processor, self.metrics_processor]
+        if self.vision_processor:
+            procs.append(self.vision_processor)
+        if self.silence_processor:
+            procs.append(self.silence_processor)
         if self.goal_processor:
             procs.append(self.goal_processor)
         for attr in ("judge_processor", "context_processor"):
@@ -414,20 +462,42 @@ class BotManager:
         )
 
     async def inject_text(self, text: str):
-        """Inject text manually from dashboard"""
+        """Inject typed text (from /chat) as if the candidate had spoken it.
+
+        Must enter the pipeline at the SOURCE via the worker's queue (not
+        transport.input().push_frame, which does not propagate into the running
+        pipeline's processor tasks — frames pushed that way are dropped, so the
+        transcript processor never broadcasts the line, the silence-nudge timer
+        never resets, and the user aggregator never commits a turn for the LLM).
+
+        We queue a COMPLETE user turn — UserStartedSpeaking → Transcription →
+        UserStoppedSpeaking — so the LLM user aggregator commits the turn on the
+        stop boundary and the LLM actually replies (a bare TranscriptionFrame
+        only buffers without triggering a response).
+        """
         logger.info(f"[BotManager] Injecting manual text: {text}")
 
-        # Send as transcription frame to mimic STT output
-        # This will go through the transcript processor and aggregator
-        from pipecat.frames.frames import TranscriptionFrame
+        from pipecat.frames.frames import (
+            TranscriptionFrame,
+            UserStartedSpeakingFrame,
+            UserStoppedSpeakingFrame,
+        )
         import time
+
+        if not getattr(self, "worker", None):
+            logger.warning("[BotManager] inject_text called before worker exists; dropping")
+            return
+
         frame = TranscriptionFrame(
             text=text,
             user_id="manual-input",
-            timestamp=str(time.time())
+            timestamp=str(time.time()),
         )
-        # Push to transport input so it flows through the pipeline properly
-        await self.transport.input().push_frame(frame)
+        await self.worker.queue_frames([
+            UserStartedSpeakingFrame(),
+            frame,
+            UserStoppedSpeakingFrame(),
+        ])
 
     def get_pipeline_info(self):
         """Get current pipeline configuration"""
@@ -462,13 +532,17 @@ class BotManager:
             logger.error(f"[BotManager] Failed to get question suggestion: {e}")
             return None
 
-    async def finalize_session(self, graceful: bool = True):
+    async def finalize_session(self, graceful: bool = True, terminal: bool = False):
         """Finalize this interview, serialized per session_id (see _FINALIZE_LOCKS).
 
         ``graceful`` is True when the interview reached its natural end (all questions
-        covered); False when the candidate dropped mid-interview. A graceful interview
-        is marked 'completed' (the link is then single-use); an interrupted one is
-        marked 'interrupted' so the candidate can resume the SAME session.
+        covered); it drives the goal/score wrap-up analysis.
+
+        ``terminal`` marks the LINK as spent regardless of graceful: when either party
+        leaves the call the interview is OVER — the session is stamped 'completed' so
+        re-opening the link cannot resume it. (Without terminal, a non-graceful end was
+        stamped 'interrupted' and stayed resumable.) The recording, transcript, and
+        analysis are still persisted for HR review either way.
 
         Called once when the bot's worker ends (see runner._make_and_run_bot).
         Note: the DB pool is a process-global shared by every concurrent bot and the
@@ -477,15 +551,21 @@ class BotManager:
         """
         sid = self.session.session_id if self.session else None
         if sid is None:
-            await self._finalize_unlocked(graceful)
+            await self._finalize_unlocked(graceful, terminal)
             return
         async with _finalize_lock_for(sid):
-            await self._finalize_unlocked(graceful)
+            await self._finalize_unlocked(graceful, terminal)
 
-    async def _finalize_unlocked(self, graceful: bool = True):
+    async def _finalize_unlocked(self, graceful: bool = True, terminal: bool = False):
         if getattr(self, "_finalized", False):
             return  # this bot already finalized; don't double-write
         self._finalized = True
+        # Stop the silence monitor so it can't speak into a finalizing pipeline.
+        if getattr(self, "silence_processor", None):
+            try:
+                await self.silence_processor.stop()
+            except Exception as e:
+                logger.debug(f"[BotManager] silence stop skipped: {e}")
         if self.goal_processor:
             try:
                 await self.goal_processor.finalize_session_goals(graceful=graceful)
@@ -501,7 +581,8 @@ class BotManager:
             try:
                 from database import db_manager
                 await db_manager.mark_session_status(
-                    self.session.session_id, "completed" if graceful else "interrupted"
+                    self.session.session_id,
+                    "completed" if (graceful or terminal) else "interrupted"
                 )
             except Exception as e:
                 logger.error(f"[BotManager] Failed to stamp session status: {e}")
@@ -515,6 +596,10 @@ class BotManager:
 
         # Flush + persist the interview audio recording.
         await self._save_recording()
+        # Mux the captured candidate video (if any) with the merged audio.
+        await self._save_video()
+        # Persist the advisory video-analysis observations.
+        await self._save_vision()
 
         sid = self.session.session_id if self.session else "?"
         logger.info(f"[BotManager] Session finalized: {sid}")
@@ -548,3 +633,122 @@ class BotManager:
             logger.info(f"[BotManager] Saved interview audio: {path} ({len(self._recorded_audio)} bytes)")
         except Exception as e:
             logger.error(f"[BotManager] Failed to save interview audio: {e}")
+
+    def _video_tmp_path(self) -> str | None:
+        """Path for the intermediate video-only MP4 (the recorder writes here).
+
+        Returns None until a session is attached — the recorder retries on the
+        next frame, by which point the candidate has connected.
+        """
+        if not self.session:
+            return None
+        recordings_dir = os.getenv("RECORDINGS_DIR", "/mnt/muaaz/AI_recruiter/data/recordings")
+        return os.path.join(recordings_dir, f"{self.session.session_id}.video.mp4")
+
+    async def _save_video(self) -> None:
+        """Mux the captured candidate video with the merged audio into {session}.mp4.
+
+        Best-effort: if no video was captured (candidate kept camera off, PyAV
+        missing, etc.) this is a no-op and the audio WAV stands on its own.
+        """
+        if not self.session or not self.video_recorder:
+            return
+        # Ensure the encoder is flushed/closed even if no EndFrame reached it.
+        try:
+            self.video_recorder.close()
+        except Exception as e:
+            logger.warning(f"[BotManager] video recorder close failed: {e}")
+
+        video_only = self.video_recorder.video_path
+        if not video_only or not os.path.exists(video_only):
+            logger.info("[BotManager] No candidate video captured; skipping video save")
+            return
+
+        recordings_dir = os.getenv("RECORDINGS_DIR", "/mnt/muaaz/AI_recruiter/data/recordings")
+        wav_path = os.path.join(recordings_dir, f"{self.session.session_id}.wav")
+        final_path = os.path.join(recordings_dir, f"{self.session.session_id}.mp4")
+
+        # If audio exists, mux it in; otherwise just promote the video-only file.
+        if os.path.exists(wav_path):
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_only,
+                "-i", wav_path,
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-movflags", "+faststart",
+                final_path,
+            ]
+        else:
+            cmd = ["ffmpeg", "-y", "-i", video_only, "-c", "copy",
+                   "-movflags", "+faststart", final_path]
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                logger.error(
+                    f"[BotManager] ffmpeg mux failed (rc={proc.returncode}): "
+                    f"{stderr.decode(errors='ignore')[-500:]}"
+                )
+                return
+            try:
+                os.remove(video_only)  # keep only the final muxed MP4
+            except OSError:
+                pass
+            size = os.path.getsize(final_path)
+            logger.info(f"[BotManager] Saved interview video: {final_path} ({size} bytes)")
+        except FileNotFoundError:
+            logger.error("[BotManager] ffmpeg not found on PATH; left video-only MP4 in place")
+        except Exception as e:
+            logger.error(f"[BotManager] Failed to mux interview video: {e}")
+
+    async def _save_vision(self) -> None:
+        """Stop the analyzer and write the advisory observations to a JSON sidecar.
+
+        Best-effort and advisory-only: these observations are for human review and
+        are deliberately NOT folded into the candidate's numeric score.
+        """
+        if not self.session or not self.vision_processor:
+            return
+        try:
+            await self.vision_processor.stop()
+        except Exception as e:
+            logger.warning(f"[BotManager] vision stop failed: {e}")
+
+        observations = self.vision_processor.observations
+        detections = self.vision_processor.detections
+        if not observations and not detections:
+            logger.info("[BotManager] No video analysis captured; skipping vision save")
+            return
+
+        recordings_dir = os.getenv("RECORDINGS_DIR", "/mnt/muaaz/AI_recruiter/data/recordings")
+        path = os.path.join(recordings_dir, f"{self.session.session_id}.vision.json")
+        try:
+            os.makedirs(recordings_dir, exist_ok=True)
+            payload = {
+                "session_id": self.session.session_id,
+                "semantic_backend": self.vision_processor._backend,
+                "advisory_only": True,
+                "aggregate": self.vision_processor.aggregate(),
+                "observations": observations,   # semantic VLM stream
+                "detections": detections,        # local proctoring stream
+            }
+            import json as _json
+            with open(path, "w") as f:
+                _json.dump(payload, f, indent=2)
+            logger.info(
+                f"[BotManager] Saved video analysis: {path} "
+                f"({len(observations)} semantic, {len(detections)} proctoring)"
+            )
+            # Broadcast the aggregate so the dashboard can show a summary at end.
+            await self.broadcaster.broadcast("vision_summary", {
+                "session_id": self.session.session_id,
+                **payload["aggregate"],
+            })
+        except Exception as e:
+            logger.error(f"[BotManager] Failed to save video analysis: {e}")

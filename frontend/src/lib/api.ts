@@ -55,13 +55,81 @@ export function getInterviewAudioUrl(candidateId: number): string {
   return `${API_BASE_URL}/candidates/${candidateId}/interview-audio`;
 }
 
+export function getInterviewVideoUrl(candidateId: number, annotated = false): string {
+  return `${API_BASE_URL}/candidates/${candidateId}/interview-video${annotated ? "?annotated=true" : ""}`;
+}
+
 export function getCandidateReportUrl(candidateId: number, format: "md" | "pdf" = "pdf"): string {
   return `${API_BASE_URL}/candidates/${candidateId}/report?format=${format}`;
+}
+
+export interface VisionReport {
+  backend?: string | null;
+  advisory_only?: boolean;
+  overall_summary?: string;
+  aggregate?: {
+    frames_analyzed?: number;
+    frames_detected?: number;
+    avg_engagement?: number;
+    present_ratio?: number;
+    max_people_count?: number;
+    phone_seen?: boolean;
+    candidate_absent_ticks?: number;
+    integrity_flags?: string[];
+  };
+  observations?: {
+    present?: boolean;
+    facing_screen?: boolean;
+    engagement?: number;
+    looking_away?: boolean;
+    posture?: string;
+    gestures?: string;
+    facial_expression?: string;
+    eye_contact?: string;
+    delivery_notes?: string;
+    summary?: string;
+    t?: number;
+    backend?: string;
+  }[];
+  detections?: {
+    people_count?: number;
+    phone_visible?: boolean;
+    integrity_flags?: string[];
+    objects?: Record<string, number>;
+    max_confidence?: number;
+    t?: number;
+  }[];
+}
+
+export interface CommunicationAnalysis {
+  session_id?: string;
+  candidate_turns?: number;
+  fillers?: {
+    total_words: number;
+    filler_count: number;
+    filler_rate_pct: number;
+    by_filler: Record<string, number>;
+  };
+  analysis?: {
+    talking_style?: string;
+    fluency?: string;
+    pace?: string;
+    clarity?: string;
+    confidence?: string;
+    conciseness?: string;
+    language_phrasing?: string;
+    accent_note?: string;
+    error?: string;
+  } | null;
 }
 
 export interface InterviewResult {
   has_interview: boolean;
   has_audio?: boolean;
+  has_video?: boolean;
+  has_annotated_video?: boolean;
+  has_communication?: boolean;
+  vision?: VisionReport | null;
   session?: {
     session_id: string;
     role_type: string;
@@ -196,6 +264,23 @@ export const api = {
   async getInterviewResult(candidateId: number): Promise<InterviewResult> {
     const response = await client.get<InterviewResult>(
       `/candidates/${candidateId}/interview`
+    );
+    return response.data;
+  },
+
+  async annotateInterviewVideo(
+    candidateId: number
+  ): Promise<{ status: string; session_id: string; already?: boolean }> {
+    const response = await client.post(`/candidates/${candidateId}/annotate-video`);
+    return response.data;
+  },
+
+  async getCommunicationAnalysis(
+    candidateId: number,
+    refresh = false
+  ): Promise<CommunicationAnalysis> {
+    const response = await client.get<CommunicationAnalysis>(
+      `/candidates/${candidateId}/communication-analysis${refresh ? "?refresh=true" : ""}`
     );
     return response.data;
   },

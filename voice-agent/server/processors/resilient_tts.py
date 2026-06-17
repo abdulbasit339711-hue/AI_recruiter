@@ -21,7 +21,7 @@ from typing import AsyncGenerator
 from loguru import logger
 from pipecat.frames.frames import ErrorFrame, Frame
 from pipecat.services.cartesia.tts import CartesiaTTSService
-from pipecat.services.deepgram.tts import DeepgramTTSService
+from pipecat.services.deepgram.tts import DeepgramTTSService, DeepgramHttpTTSService
 
 _QUOTA_MARKERS = ("quota_exceeded", "Insufficient credits", "status 402", "HTTP 402", "402")
 
@@ -66,3 +66,7 @@ def _make_resilient(base_cls):
 # Graceful-degradation variants of each supported provider.
 ResilientCartesiaTTSService = _make_resilient(CartesiaTTSService)
 ResilientDeepgramTTSService = _make_resilient(DeepgramTTSService)
+# HTTP variant: one request per utterance instead of a persistent websocket, so it
+# survives flaky networks / a resource-starved process that would otherwise drop the
+# ws connection and stall ("reconnecting" loops). This is the more reliable default.
+ResilientDeepgramHttpTTSService = _make_resilient(DeepgramHttpTTSService)

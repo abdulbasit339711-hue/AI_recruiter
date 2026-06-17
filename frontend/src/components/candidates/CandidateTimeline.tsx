@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { X, Calendar, User, FileText, CheckCircle2, ShieldAlert } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
+import { Stagger, StaggerItem } from "@/components/ui/motion";
 import type { TimelineEntry } from "@/types";
 
 interface CandidateTimelineProps {
@@ -84,35 +85,39 @@ export const CandidateTimeline: React.FC<CandidateTimelineProps> = ({
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 </div>
               ) : error ? (
-                <div className="flex h-full items-center justify-center text-rose-400 text-sm">
+                <div className="flex h-full items-center justify-center text-sm text-weak">
                   {error}
                 </div>
               ) : timeline.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center text-gray-500">
-                  <Calendar className="h-10 w-10 mb-2 opacity-50" />
+                <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
+                  <Calendar className="mb-2 h-10 w-10 opacity-50" />
                   <p className="text-sm">No activity recorded yet.</p>
                 </div>
               ) : (
-                <div className="relative border-l-2 border-border pl-6 ml-4 space-y-8">
+                <Stagger gap={0.07} className="relative ml-4 space-y-8 border-l-2 border-border pl-6">
                   {timeline.map((entry, idx) => {
                     const isScoreOverride = entry.type === "score_override";
                     const Icon = isScoreOverride ? ShieldAlert : CheckCircle2;
                     const dateStr = new Date(entry.changed_at).toLocaleString();
+                    const accent = isScoreOverride ? "var(--promising)" : "var(--strong)";
 
                     return (
-                      <div key={idx} className="relative">
+                      <StaggerItem key={idx} className="relative">
                         {/* Timeline point */}
-                        <div className={`absolute -left-[35px] top-1.5 flex h-6 w-6 items-center justify-center rounded-full border bg-card ${isScoreOverride ? "border-amber-500 text-amber-400" : "border-emerald-500 text-emerald-400"}`}>
+                        <div
+                          className="absolute -left-[35px] top-1.5 flex h-6 w-6 items-center justify-center rounded-full border bg-card"
+                          style={{ borderColor: accent, color: accent }}
+                        >
                           <Icon className="h-3.5 w-3.5" />
                         </div>
 
                         {/* Card Content */}
-                        <div className="rounded-lg glass-tile p-4 space-y-2">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                            <span className={`text-sm font-semibold ${isScoreOverride ? "text-amber-300" : "text-emerald-300"}`}>
-                              {isScoreOverride ? "Score Override" : `Status: ${entry.status}`}
+                        <div className="space-y-2 rounded-lg glass-tile p-4">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <span className="text-sm font-semibold" style={{ color: accent }}>
+                              {isScoreOverride ? "Score override" : `Status: ${entry.status}`}
                             </span>
-                            <span className="text-xs text-muted-foreground">{dateStr}</span>
+                            <span className="font-mono text-xs tabular-nums text-muted-foreground">{dateStr}</span>
                           </div>
 
                           <div className="flex items-center gap-1.5 text-xs text-foreground">
@@ -121,16 +126,16 @@ export const CandidateTimeline: React.FC<CandidateTimelineProps> = ({
                           </div>
 
                           {entry.note && (
-                            <div className="rounded border border-border bg-black/40 p-2.5 text-sm text-foreground flex items-start gap-2">
-                              <FileText className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                            <div className="flex items-start gap-2 rounded border border-border bg-foreground/[0.04] p-2.5 text-sm text-foreground">
+                              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                               <p className="whitespace-pre-wrap leading-relaxed">{entry.note}</p>
                             </div>
                           )}
                         </div>
-                      </div>
+                      </StaggerItem>
                     );
                   })}
-                </div>
+                </Stagger>
               )}
             </div>
           </motion.div>

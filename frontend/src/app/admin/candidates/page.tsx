@@ -25,6 +25,8 @@ import { StatusBadge as HRStatusBadge } from "@/components/candidates/StatusBadg
 import { ScoreChip } from "@/components/ui/ScoreChip";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { avatarGradient, initials, scoreMeta, recommendationCopy } from "@/lib/score";
+import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
+import { CountUp } from "@/components/ui/charts";
 
 const STATUS_OPTIONS: Array<CandidateStatus | ""> = [
   "",
@@ -144,7 +146,7 @@ export default function AdminCandidatesPage() {
   return (
     <div className="space-y-6">
       {/* Title */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <FadeIn className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="flex flex-col gap-1.5">
           <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">Candidates</p>
           <h1 className="font-display text-[30px] font-bold leading-none tracking-tight text-heading">Candidate Leaderboard</h1>
@@ -170,35 +172,37 @@ export default function AdminCandidatesPage() {
             <LayoutGrid className="h-4 w-4" /> Kanban
           </button>
         </div>
-      </div>
+      </FadeIn>
 
       {/* Stat tiles */}
-      {activeJobId && data && (
-        <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-          {(() => {
-            const withIq = candidates.filter((c) => c.iq_score != null);
-            const avgIq = withIq.length
-              ? Math.round(withIq.reduce((s, c) => s + (c.iq_score ?? 0), 0) / withIq.length)
-              : null;
-            const shortlisted = candidates.filter((c) => c.status === "Shortlisted").length;
-            const interviews = candidates.filter((c) => c.hr_status === "Interview").length;
-            const tiles: Array<{ label: string; value: string; accent?: boolean }> = [
-              { label: "Total applicants", value: String(data.total) },
-              { label: "Shortlisted", value: String(shortlisted), accent: true },
-              { label: "Avg. aptitude", value: avgIq != null ? `${avgIq}%` : "—" },
-              { label: "In interview", value: String(interviews) },
-            ];
-            return tiles.map((t) => (
-              <div key={t.label} className="glass-tile rounded-2xl p-[18px]">
-                <div className="text-xs font-medium text-muted-foreground">{t.label}</div>
-                <div className={`mt-1.5 font-mono text-[28px] font-semibold ${t.accent ? "text-primary-strong" : "text-heading"}`}>
-                  {t.value}
+      {activeJobId && data && (() => {
+        const withIq = candidates.filter((c) => c.iq_score != null);
+        const avgIq = withIq.length
+          ? Math.round(withIq.reduce((s, c) => s + (c.iq_score ?? 0), 0) / withIq.length)
+          : null;
+        const shortlisted = candidates.filter((c) => c.status === "Shortlisted").length;
+        const interviews = candidates.filter((c) => c.hr_status === "Interview").length;
+        const tiles: Array<{ label: string; value: number; suffix?: string; placeholder?: string; accent?: boolean }> = [
+          { label: "Total applicants", value: data.total },
+          { label: "Shortlisted", value: shortlisted, accent: true },
+          { label: "Avg. aptitude", value: avgIq ?? 0, suffix: "%", placeholder: avgIq == null ? "—" : undefined },
+          { label: "In interview", value: interviews },
+        ];
+        return (
+          <Stagger className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" gap={0.06}>
+            {tiles.map((t) => (
+              <StaggerItem key={t.label}>
+                <div className="glass-tile glass-hover h-full rounded-2xl p-[18px]">
+                  <div className="text-xs font-medium text-muted-foreground">{t.label}</div>
+                  <div className={`mt-1.5 font-mono text-[28px] font-semibold tabular-nums ${t.accent ? "text-primary-strong" : "text-heading"}`}>
+                    {t.placeholder ?? <CountUp value={t.value} suffix={t.suffix ?? ""} />}
+                  </div>
                 </div>
-              </div>
-            ));
-          })()}
-        </div>
-      )}
+              </StaggerItem>
+            ))}
+          </Stagger>
+        );
+      })()}
 
       {/* Filters and Controls */}
       <div className="glass flex flex-col gap-4 rounded-2xl p-4">
@@ -354,10 +358,19 @@ export default function AdminCandidatesPage() {
 
       {/* Main content display */}
       {error && (
-        <p className="text-sm text-red-500 mb-2">Failed to load candidates: {error.message}</p>
+        <FadeIn className="glass-tile flex items-center gap-3 rounded-2xl border border-weak/40 p-4" y={8}>
+          <X className="h-5 w-5 shrink-0 text-weak" />
+          <p className="text-sm text-weak">Failed to load candidates: {error.message}</p>
+        </FadeIn>
       )}
       {!activeJobId && !jobsLoading && (
-        <p className="text-sm text-muted-foreground text-center py-12">Create a job opening before viewing candidates.</p>
+        <FadeIn className="glass-tile flex flex-col items-center gap-2 rounded-2xl px-6 py-16 text-center" y={8}>
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <FileText className="h-6 w-6" />
+          </span>
+          <p className="font-display text-base font-semibold text-heading">No job openings yet</p>
+          <p className="max-w-sm text-sm text-muted-foreground">Create a job opening before viewing candidates — applicants are ranked per role.</p>
+        </FadeIn>
       )}
 
       {activeJobId && (

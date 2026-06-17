@@ -2,11 +2,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Users } from "lucide-react";
 import type { Candidate } from "@/types";
 import { formatDuration as fmtDuration, cn } from "@/lib/utils";
-import { avatarGradient, initials } from "@/lib/score";
+import { avatarGradient, initials, scoreMeta } from "@/lib/score";
 import { ScoreChip } from "@/components/ui/ScoreChip";
+import { CountUp } from "@/components/ui/charts";
 import { Reveal } from "@/components/ui/Reveal";
 import { StatusBadge } from "./StatusBadge";
 import { StatusBadge as HRStatusBadge } from "../candidates/StatusBadge";
@@ -41,6 +42,32 @@ function timeAgo(iso: string): string {
 // System (pipeline) states worth surfacing under the name; "Reviewed" is the steady state.
 const NOTABLE_SYSTEM = new Set(["Queued", "Processing", "Ungraded", "Error"]);
 
+/** Tiny stacked bar: Tier 1 (/30) + Tier 2 (/40) + Tier 3 (/30) → share of 100. */
+function TierBar({ cand }: { cand: Candidate }) {
+  const segments = [
+    { key: "t1", value: cand.tier1 ?? 0, color: "var(--primary)" },
+    { key: "t2", value: cand.tier2 ?? 0, color: "var(--strong)" },
+    { key: "t3", value: cand.tier3 ?? 0, color: "var(--promising)" },
+  ];
+  const total = segments.reduce((s, seg) => s + seg.value, 0);
+  return (
+    <div
+      className="mt-1.5 flex h-1.5 w-16 overflow-hidden rounded-full bg-foreground/[0.07]"
+      title={`Tier 1 ${(cand.tier1 ?? 0).toFixed(1)} · Tier 2 ${(cand.tier2 ?? 0).toFixed(1)} · Tier 3 ${(cand.tier3 ?? 0).toFixed(1)}`}
+      aria-hidden
+    >
+      {total > 0 &&
+        segments.map((seg) => (
+          <span
+            key={seg.key}
+            className="h-full transition-[width] duration-500"
+            style={{ width: `${(seg.value / 100) * 100}%`, background: seg.color }}
+          />
+        ))}
+    </div>
+  );
+}
+
 export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLoading, onView, onUpdate }) => {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const toggleNotes = (id: number) => setExpandedId((prev) => (prev === id ? null : id));
@@ -70,22 +97,39 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
 
           {/* Body */}
           {isLoading ? (
-            <div className="space-y-px">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className={cn("grid gap-3 px-[22px] py-4", GRID)}>
-                  <div className="loading h-10 rounded-lg" />
-                  <div className="loading h-6 rounded-lg" />
-                  <div className="loading h-6 rounded-lg" />
-                  <div className="loading h-6 rounded-lg" />
-                  <div className="loading h-6 rounded-lg" />
-                  <div className="loading h-6 rounded-lg" />
+            <div>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={cn("grid items-center gap-3 border-b border-border/60 px-[22px] py-4", GRID)}
+                  style={{ opacity: 1 - i * 0.06 }}
+                >
+                  {/* Candidate */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-[38px] w-[38px] shrink-0 animate-pulse rounded-[11px] bg-foreground/[0.07]" />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="h-3.5 w-3/5 animate-pulse rounded bg-foreground/[0.07]" />
+                      <div className="h-2.5 w-2/5 animate-pulse rounded bg-foreground/[0.05]" />
+                    </div>
+                  </div>
+                  <div className="h-6 w-20 animate-pulse rounded-full bg-foreground/[0.07]" />
+                  <div className="h-4 w-8 animate-pulse rounded bg-foreground/[0.07]" />
+                  <div className="h-4 w-14 animate-pulse rounded bg-foreground/[0.07]" />
+                  <div className="h-5 w-16 animate-pulse rounded-full bg-foreground/[0.07]" />
+                  <div className="h-3.5 w-12 animate-pulse rounded bg-foreground/[0.05]" />
                   <div />
                 </div>
               ))}
             </div>
           ) : candidates.length === 0 ? (
-            <div className="px-6 py-16 text-center text-sm text-muted-foreground">
-              No candidates match the selected filters.
+            <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Users className="h-6 w-6" />
+              </span>
+              <p className="font-display text-base font-semibold text-heading">No candidates yet</p>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                No candidates match the selected filters. Try clearing the search or status filters, or invite applicants to this role.
+              </p>
             </div>
           ) : (
             candidates.map((cand, idx) => {
@@ -112,10 +156,17 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
                       }
                     }}
                     className={cn(
-                      "group grid cursor-pointer items-center gap-3 border-b border-border/60 px-[22px] py-4 transition-colors hover:bg-foreground/[0.03] focus:outline-none focus-visible:bg-foreground/[0.05]",
+                      "group relative grid cursor-pointer items-center gap-3 border-b border-border/60 px-[22px] py-4 transition-[background-color,box-shadow] duration-200 hover:z-10 hover:bg-foreground/[0.04] hover:shadow-[0_18px_40px_-28px_rgba(20,30,60,0.45)] focus:outline-none focus-visible:bg-foreground/[0.05]",
                       GRID
                     )}
                   >
+                    {/* Tier-colored accent rail on hover */}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-y-2 left-0 w-[3px] origin-center scale-y-0 rounded-full opacity-0 transition-all duration-200 group-hover:scale-y-100 group-hover:opacity-100"
+                      style={{ background: scoreMeta(effective).colorVar }}
+                    />
+
                     {/* Candidate */}
                     <div className="flex min-w-0 items-center gap-3">
                       <span
@@ -140,9 +191,10 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
 
                     {/* Match */}
                     <div className="flex items-center gap-2.5">
-                      <span className="font-mono text-xl font-semibold leading-none text-heading">
-                        {Math.round(effective ?? 0)}
-                      </span>
+                      <CountUp
+                        value={Math.round(effective ?? 0)}
+                        className="font-mono text-xl font-semibold leading-none text-heading"
+                      />
                       <div className="flex flex-col items-start gap-0.5">
                         <ScoreChip score={effective} size="sm" />
                         {overridden && (
@@ -153,12 +205,10 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
                       </div>
                     </div>
 
-                    {/* Résumé */}
-                    <div
-                      className="font-mono text-[15px] text-foreground"
-                      title="Profile + semantic résumé match"
-                    >
-                      {resumeMatch(cand)}
+                    {/* Résumé — number + tier breakdown bar */}
+                    <div title="Profile (Tier 1) + semantic (Tier 2) + LLM (Tier 3)">
+                      <span className="font-mono text-[15px] text-foreground tabular-nums">{resumeMatch(cand)}</span>
+                      <TierBar cand={cand} />
                     </div>
 
                     {/* Aptitude (IQ) */}

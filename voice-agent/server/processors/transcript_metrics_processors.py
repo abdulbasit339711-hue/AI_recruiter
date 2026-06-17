@@ -89,6 +89,8 @@ class WorkingMetricsProcessor(FrameProcessor):
         self._current_response = []
         self._collecting = False
         self._aggregating_response = False
+        # LLM reply latency (TTFB seconds) per turn, captured from Pipecat MetricsFrames.
+        self._llm_reply_times: list[float] = []
 
         # Detailed token tracking
         self._session_metrics = {
@@ -127,7 +129,27 @@ class WorkingMetricsProcessor(FrameProcessor):
             TTSStartedFrame,
             TTSStoppedFrame,
             TranscriptionFrame,
+            MetricsFrame,
         )
+
+        # Capture the LLM reply latency (TTFB) per turn from Pipecat's metrics so the
+        # bot's "thinking time" is recorded/visible, not just printed to the log. Duck
+        # -typed: any metric whose class name mentions TTFB and whose processor is the
+        # LLM service counts as a reply time.
+        if isinstance(frame, MetricsFrame):
+            for m in (frame.data or []):
+                proc = str(getattr(m, "processor", "") or "")
+                val = getattr(m, "value", None)
+                if "TTFB" in type(m).__name__ and val is not None and "LLM" in proc:
+                    secs = round(float(val), 3)
+                    self._llm_reply_times.append(secs)
+                    logger.info(f"[LLM Latency] reply TTFB {secs}s ({proc})")
+                    if self._broadcaster:
+                        await self._broadcaster.broadcast("llm_latency", {
+                            "session_id": self._session.session_id if self._session else None,
+                            "ttfb_seconds": secs,
+                            "processor": proc,
+                        })
 
         # Count candidate speech (STT) — char + estimated token tally for the breakdown.
         if isinstance(frame, TranscriptionFrame):
@@ -271,6 +293,16 @@ class WorkingMetricsProcessor(FrameProcessor):
             {"metric_type": "tts_tokens", "service_name": "cartesia", "model_name": None,
              "token_count": int(tts["estimated_tokens"]), "cost_usd": 0.0, "analysis_type": "estimated"},
         ]
+        # LLM reply latency: store avg + max (in ms) so HR can see how snappy the bot was.
+        rt = self._llm_reply_times
+        if rt:
+            avg_ms = int(sum(rt) / len(rt) * 1000)
+            max_ms = int(max(rt) * 1000)
+            rows.append({"metric_type": "llm_reply_time_avg_ms", "service_name": "groq", "model_name": model,
+                         "token_count": avg_ms, "cost_usd": 0.0, "analysis_type": "latency"})
+            rows.append({"metric_type": "llm_reply_time_max_ms", "service_name": "groq", "model_name": model,
+                         "token_count": max_ms, "cost_usd": 0.0, "analysis_type": "latency"})
+            logger.info(f"[Metrics] LLM reply time: avg={avg_ms}ms max={max_ms}ms over {len(rt)} turns")
         for r in rows:
             try:
                 await db_manager.add_session_metrics(self._session.session_id, r)

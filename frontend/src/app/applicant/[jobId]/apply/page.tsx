@@ -7,6 +7,7 @@ import { useJob } from "@/hooks/useJob";
 import { useUploadResume } from "@/hooks/useUploadResume";
 import { IqTest } from "@/components/applicant/IqTest";
 import { Button } from "@/components/ui/button";
+import { Swap } from "@/components/ui/motion";
 import { formatDuration } from "@/lib/utils";
 import type { IqSubmitResponse } from "@/types";
 
@@ -78,6 +79,7 @@ export default function ApplyPage() {
         </div>
       </div>
 
+      <Swap k={step === "iq" ? "iq" : upload.isPending ? "loading" : "upload"}>
       {step === "iq" ? (
         <IqTest jobId={numericId} onComplete={onIqComplete} />
       ) : upload.isPending ? (
@@ -117,6 +119,7 @@ export default function ApplyPage() {
           </Button>
         </form>
       )}
+      </Swap>
     </section>
   );
 }

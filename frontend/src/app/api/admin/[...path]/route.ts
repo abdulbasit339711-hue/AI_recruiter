@@ -47,6 +47,10 @@ async function handle(
   if (ct) headers.set("content-type", ct);
   const accept = req.headers.get("accept");
   if (accept) headers.set("accept", accept);
+  // Forward Range so the browser can seek/scrub audio & video (the backend serves
+  // 206 Partial Content via FileResponse; without this the player can't skip).
+  const range = req.headers.get("range");
+  if (range) headers.set("range", range);
   if (ADMIN_API_TOKEN) headers.set("authorization", `Bearer ${ADMIN_API_TOKEN}`);
 
   const init: RequestInit & { duplex?: "half" } = { method, headers, redirect: "manual" };

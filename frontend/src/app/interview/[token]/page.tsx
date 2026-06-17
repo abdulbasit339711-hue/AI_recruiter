@@ -28,6 +28,7 @@ import {
 
 import { validateInterview, sendInterviewChat, type InterviewValidation } from "@/lib/voice";
 import { useInterviewLive } from "@/hooks/useInterviewLive";
+import { SpeakingBars } from "@/components/ui/motion";
 
 type Phase = "validating" | "ready" | "connecting" | "live" | "ended" | "invalid";
 type Speaker = "agent" | "you" | null;
@@ -37,6 +38,10 @@ export default function InterviewPage() {
   const [phase, setPhase] = useState<Phase>("validating");
   const [info, setInfo] = useState<InterviewValidation | null>(null);
   const [chat, setChat] = useState("");
+  // Optimistic chat: show the candidate's typed line immediately (as "sending…")
+  // instead of waiting for the SSE round-trip — that lag is what felt unsmooth.
+  const [sending, setSending] = useState(false);
+  const [pending, setPending] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Meet-style call UI state
@@ -47,7 +52,9 @@ export default function InterviewPage() {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState<Speaker>(null);
   const [showCaptions, setShowCaptions] = useState(true);
-  const [showPanel, setShowPanel] = useState(false);
+  // Open by default: candidates with no working mic answer via this chat panel,
+  // so it must be visible without hunting for the toggle (esp. on mobile).
+  const [showPanel, setShowPanel] = useState(true);
   const [elapsed, setElapsed] = useState(0);
   // Browser autoplay policy can block the bot's remote audio when it subscribes
   // asynchronously (after connect, outside the click gesture). Track that so we can
@@ -123,9 +130,18 @@ export default function InterviewPage() {
   // Stop any candidate speech when leaving.
   useEffect(() => () => window.speechSynthesis?.cancel(), []);
 
+  // Once a typed line arrives back as a real candidate turn over SSE, drop its
+  // optimistic placeholder so it isn't shown twice.
+  useEffect(() => {
+    if (!pending.length) return;
+    setPending((p) =>
+      p.filter((t) => !transcript.some((turn) => turn.speaker === "candidate" && turn.text.trim() === t)),
+    );
+  }, [transcript]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [transcript, showPanel]);
+  }, [transcript, pending, showPanel]);
 
   // Call timer — ticks once the room connects.
   useEffect(() => {
@@ -207,8 +223,16 @@ export default function InterviewPage() {
         /* fall back to the "enable sound" prompt below */
       }
       setAudioBlocked(!room.canPlaybackAudio);
-      await room.localParticipant.setMicrophoneEnabled(true);
-      setMicEnabled(true);
+      // Mic is best-effort: a broken/denied microphone must NOT abort the join —
+      // otherwise start() throws here, never reaches "live", and the candidate
+      // can't even see the "tap to enable sound" prompt (so the bot is silent).
+      // Candidates with no working mic can still answer via the text chat box.
+      try {
+        await room.localParticipant.setMicrophoneEnabled(true);
+        setMicEnabled(true);
+      } catch {
+        setMicEnabled(false);
+      }
       // Camera is optional — a missing/denied device must NOT fail the interview,
       // so enable it on a best-effort basis and just leave it off if unavailable.
       try {
@@ -267,9 +291,22 @@ export default function InterviewPage() {
   async function submitChat(e: React.FormEvent) {
     e.preventDefault();
     const text = chat.trim();
-    if (!text) return;
+    if (!text || sending) return;
     setChat("");
-    await sendInterviewChat(text, info?.session_id);
+    setSending(true);
+    setPending((p) => [...p, text]);   // show immediately
+    try {
+      await sendInterviewChat(text, info?.session_id);
+      // Safety net: if the server never echoes it back over SSE, clear the
+      // optimistic bubble after a bit so it doesn't hang as "sending…" forever.
+      setTimeout(() => setPending((p) => p.filter((t) => t !== text)), 15000);
+    } catch {
+      setPending((p) => p.filter((t) => t !== text));  // roll back
+      setChat(text);                                   // let them retry
+      setError("Couldn't send your message. Check your connection and try again.");
+    } finally {
+      setSending(false);
+    }
   }
 
   // ---- Validating / invalid: simple centered states -------------------------
@@ -458,8 +495,11 @@ export default function InterviewPage() {
         </button>
       )}
 
-      {/* Stage + side panel */}
-      <div className="flex min-h-0 flex-1 gap-3 px-3 pb-2">
+      {/* Stage + side panel. Stack vertically on phones (tiles on top, the
+          transcript + chat box below) so the chat box is reachable; switch to a
+          side-by-side row on sm+ screens. Without flex-col on mobile the panel
+          got squeezed off-screen — candidates saw audio but no usable UI. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-2 sm:flex-row">
         <main className="relative flex min-w-0 flex-1 items-center justify-center">
           <div className="grid w-full max-w-5xl gap-3 sm:grid-cols-2">
             <Tile
@@ -508,10 +548,14 @@ export default function InterviewPage() {
             </div>
 
             <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-              {transcript.length === 0 ? (
+              {transcript.length === 0 && pending.length === 0 ? (
                 <p className="text-xs text-zinc-600">The conversation will appear here.</p>
               ) : (
-                transcript.map((t, i) => <Bubble key={i} speaker={t.speaker} text={t.text} />)
+                <>
+                  {transcript.map((t, i) => <Bubble key={i} speaker={t.speaker} text={t.text} />)}
+                  {/* Optimistic, not-yet-confirmed candidate lines */}
+                  {pending.map((t, i) => <Bubble key={`p${i}`} speaker="candidate" text={t} pending />)}
+                </>
               )}
             </div>
 
@@ -520,13 +564,16 @@ export default function InterviewPage() {
                 value={chat}
                 onChange={(e) => setChat(e.target.value)}
                 placeholder="Type instead of speaking…"
-                className="flex-1 rounded-full border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm outline-none focus:border-blue-500"
+                disabled={sending}
+                className="flex-1 rounded-full border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm outline-none focus:border-blue-500 disabled:opacity-60"
               />
               <button
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-500"
+                type="submit"
+                disabled={sending || !chat.trim()}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500 disabled:opacity-50"
                 aria-label="Send"
               >
-                <Send className="h-4 w-4" />
+                <Send className={`h-4 w-4 ${sending ? "animate-pulse" : ""}`} />
               </button>
             </form>
           </aside>
@@ -668,22 +715,12 @@ function Tile({
         />
       )}
       <div className={`flex flex-col items-center gap-3 ${showVideo ? "hidden" : ""}`}>
-        <Avatar kind={kind} speaking={speaking} />
-        {speaking && (
-          <div className="flex h-4 items-end gap-1">
-            {[0, 1, 2, 3].map((i) => (
-              <span
-                key={i}
-                className="w-1 animate-pulse rounded-full bg-blue-400"
-                style={{ height: `${6 + ((i % 2) + 1) * 5}px`, animationDelay: `${i * 120}ms` }}
-              />
-            ))}
-          </div>
-        )}
+        <SpeakingBars active={speaking} color="#60a5fa" bars={5} className="text-blue-400" />
       </div>
 
-      <div className="absolute bottom-3 left-3 max-w-[70%] truncate rounded-md bg-black/50 px-2.5 py-1 text-sm text-zinc-100">
-        {label}
+      <div className="absolute bottom-3 left-3 flex max-w-[70%] items-center gap-2 truncate rounded-md bg-black/50 px-2.5 py-1 text-sm text-zinc-100">
+        {speaking && <SpeakingBars active color="#7dd3fc" bars={3} />}
+        <span className="truncate">{label}</span>
       </div>
       <div
         className={`absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full ${
@@ -727,7 +764,7 @@ function ControlButton({
   );
 }
 
-function Bubble({ speaker, text }: { speaker: string; text: string }) {
+function Bubble({ speaker, text, pending }: { speaker: string; text: string; pending?: boolean }) {
   const isAgent = speaker === "agent";
   return (
     <div className={`flex ${isAgent ? "justify-start" : "justify-end"}`}>

@@ -6,6 +6,7 @@
 import asyncio
 import logging
 import os
+import re
 import sys
 import json
 
@@ -25,7 +26,11 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
 )
 from pipecat.services.cartesia.tts import CartesiaHttpTTSService
-from processors.resilient_tts import ResilientCartesiaTTSService, ResilientDeepgramTTSService
+from processors.resilient_tts import (
+    ResilientCartesiaTTSService,
+    ResilientDeepgramTTSService,
+    ResilientDeepgramHttpTTSService,
+)
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.services.groq.llm import GroqLLMService
@@ -41,6 +46,7 @@ load_dotenv(override=True)
 from bot_manager import (
     BotManager,
     DEEPGRAM_ENDPOINTING_MS,
+    RECORD_VIDEO,
     build_user_turn_strategies,
 )
 from events.broadcaster import broadcaster
@@ -90,6 +96,19 @@ logging.getLogger("websockets").setLevel(logging.CRITICAL)
 bot_manager = None
 bot_ready = asyncio.Event()
 pipeline_mode = os.getenv("PIPELINE_MODE", "dual")  # Default to dual (judge + responder); set "single" to disable
+
+# Shared aiohttp session for the HTTP TTS service (one request per utterance — far
+# more robust than a persistent websocket on a flaky / resource-starved host). Lazily
+# created inside the event loop; reused across interviews.
+_aiohttp_session = None
+
+
+async def _get_aiohttp_session():
+    global _aiohttp_session
+    import aiohttp
+    if _aiohttp_session is None or _aiohttp_session.closed:
+        _aiohttp_session = aiohttp.ClientSession()
+    return _aiohttp_session
 
 # The (candidate_id, job_id) for the NEXT interview to configure on connect.
 # Set via POST /interview/configure (Phase 3 will set it from a validated token),
@@ -333,6 +352,15 @@ async def validate_interview(token: str):
     secret = os.getenv("INTERVIEW_LINK_SECRET")
     if not secret:
         return {"valid": False, "error": "interview links not configured on server"}
+
+    # Defensive sanitize: a base64url JWT is strictly [A-Za-z0-9_-] plus two dots and
+    # can never contain whitespace or '%'. Long links copied on a phone pick up
+    # line-wrap whitespace, which arrives URL-encoded ('%20', or double-encoded
+    # '%2520' through the same-origin proxy). Strip those spurious bytes so the token
+    # verifies instead of failing signature check on copy/wrap corruption.
+    token = re.sub(r"%(?:25)*20", "", token)  # encoded spaces (any encode depth)
+    token = re.sub(r"\s+", "", token)          # literal whitespace
+
     try:
         claims = verify_invite_token(token, secret)
     except InviteTokenError as e:
@@ -401,7 +429,10 @@ async def validate_interview(token: str):
         "candidate_name": (candidate or {}).get("name"),
         "job_title": (job or {}).get("title"),
         "room_name": room,
-        "session_id": bot.session_id,  # lets the client filter the live event stream
+        # Use the canonical {candidate_id}-{jti} session_id (the value the bot persists
+        # under) rather than bot.session_id, which is still None at validate time before
+        # the bot configures — a null here breaks the client's live-transcript scoping.
+        "session_id": session_id,  # lets the client filter the live event stream
         "livekit_token": lk_token,
         "livekit_url": os.getenv("LIVEKIT_URL"),
         "prior_transcript": prior_transcript,  # conversation so far, for resume redisplay
@@ -890,33 +921,48 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     )
     transport = LiveKitTransport(
         url=url, token=token, room_name=room_name,
-        params=LiveKitParams(audio_in_enabled=True, audio_out_enabled=True),
+        params=LiveKitParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            # Ingest the candidate's camera so BotManager can record video.
+            video_in_enabled=RECORD_VIDEO,
+        ),
     )
     stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
+    # filler_words=true makes Deepgram transcribe hesitation fillers ("um", "uh",
+    # "hmm", etc.) instead of dropping them — useful signal for delivery/assessment.
+    stt_settings = {"extra": {"filler_words": True}}
     if DEEPGRAM_ENDPOINTING_MS is not None:
         # Server-side silence (ms) before Deepgram finalizes a transcript.
-        stt_kwargs["settings"] = DeepgramSTTService.Settings(
-            endpointing=DEEPGRAM_ENDPOINTING_MS
-        )
+        stt_settings["endpointing"] = DEEPGRAM_ENDPOINTING_MS
+    stt_kwargs["settings"] = DeepgramSTTService.Settings(**stt_settings)
     stt = DeepgramSTTService(**stt_kwargs)
     llm = GroqLLMService(
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
     )
-    # TTS provider. Cartesia returned HTTP 402 (account out of credits), so the bot
-    # was silent. Default to Deepgram Aura (uses the same working DEEPGRAM_API_KEY as
-    # STT); set TTS_PROVIDER=cartesia to switch back once Cartesia billing is restored.
-    if os.getenv("TTS_PROVIDER", "deepgram").lower() == "cartesia":
+    # TTS provider. Default to Deepgram Aura over HTTP: a persistent websocket (the old
+    # default) dropped under load and looped on "reconnecting", so speech failed often.
+    # The HTTP service does one request per utterance — no socket to drop — which is the
+    # reliable default here. TTS_PROVIDER overrides: 'deepgram' (websocket), 'cartesia'.
+    tts_provider = os.getenv("TTS_PROVIDER", "deepgram_http").lower()
+    deepgram_voice = os.getenv("DEEPGRAM_VOICE", "aura-2-thalia-en")
+    if tts_provider == "cartesia":
         tts = ResilientCartesiaTTSService(
             api_key=os.environ["CARTESIA_API_KEY"],
             settings=ResilientCartesiaTTSService.Settings(
                 voice=os.getenv("CARTESIA_VOICE_ID", "71a7ad14-091c-4e8e-a314-022ece01c121")),
         )
-    else:
+    elif tts_provider == "deepgram":  # persistent websocket (legacy)
         tts = ResilientDeepgramTTSService(
-            api_key=os.environ["DEEPGRAM_API_KEY"],
-            voice=os.getenv("DEEPGRAM_VOICE", "aura-2-thalia-en"),
+            api_key=os.environ["DEEPGRAM_API_KEY"], voice=deepgram_voice,
         )
+    else:  # deepgram_http (default) — robust request/response TTS
+        tts = ResilientDeepgramHttpTTSService(
+            api_key=os.environ["DEEPGRAM_API_KEY"], voice=deepgram_voice,
+            aiohttp_session=await _get_aiohttp_session(),
+        )
+    logger.info(f"[TTS] provider={tts_provider}")
     context = LLMContext()
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
@@ -1094,12 +1140,14 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         # analysis and persist the assessment exactly once, for REAL interviews
         # only — the always-on default bot has no candidate/session to finalize.
         if not is_default:
-            # Graceful = the interview reached its natural end (all questions covered).
-            # An interrupted run (candidate dropped early) stays resumable so the same
-            # link can continue the SAME session rather than being spent.
+            # Graceful = the interview reached its natural end (all questions covered);
+            # it drives the goal/score wrap-up. terminal=True ALWAYS spends the link:
+            # once the worker ends (a party left the call, idle timeout, or cancel) the
+            # interview is over and the link must NOT resume the session. Recording /
+            # transcript / analysis are still saved for HR.
             graceful = bool(manager.session and manager.session.is_complete)
             try:
-                await manager.finalize_session(graceful=graceful)
+                await manager.finalize_session(graceful=graceful, terminal=True)
             except Exception as e:
                 logger.error(f"[Bot] finalize_session failed for {room_name}: {e}")
 

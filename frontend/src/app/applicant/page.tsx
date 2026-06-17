@@ -4,7 +4,8 @@
 import React from "react";
 import { useJobs } from "@/hooks/useJobs";
 import { JobCard } from "@/components/job/JobCard";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
+import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
 
 export default function ApplicantJobListing() {
   const { data: jobs, isLoading, isError, error } = useJobs();
@@ -30,31 +31,25 @@ export default function ApplicantJobListing() {
 
   return (
     <section className="mx-auto max-w-6xl space-y-7 p-4 py-8">
-      <div>
+      <FadeIn y={18}>
         <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">Careers</p>
-        <h1 className="mt-2 font-display text-[34px] font-bold leading-tight tracking-tight text-heading">Open Roles</h1>
+        <h1 className="mt-2 font-display text-[34px] font-bold leading-tight tracking-tight text-heading">Open roles</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           Choose a role and submit a searchable PDF résumé. Every application starts with a short aptitude screen.
         </p>
-      </div>
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      </FadeIn>
+      <Stagger className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3" gap={0.06} delay={0.1}>
         <AnimatePresence>
           {jobs?.map((job) => (
-            <motion.div
-              key={job.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
+            <StaggerItem key={job.id}>
               <JobCard job={job} />
-            </motion.div>
+            </StaggerItem>
           ))}
           {jobs?.length === 0 && (
             <p className="text-sm text-muted-foreground">No open roles right now — check back soon.</p>
           )}
         </AnimatePresence>
-      </div>
+      </Stagger>
     </section>
   );
 }

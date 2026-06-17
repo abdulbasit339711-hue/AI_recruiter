@@ -3,6 +3,11 @@
 export const VOICE_BASE_URL =
   process.env.NEXT_PUBLIC_VOICE_URL || "http://127.0.0.1:7860";
 
+// When the voice service is reached through an ngrok-free tunnel (phone access),
+// ngrok serves an interstitial HTML warning page instead of the JSON response
+// unless this header is present. Harmless when not behind ngrok.
+const VOICE_HEADERS = { "ngrok-skip-browser-warning": "true" } as const;
+
 export interface QuestionGoal {
   id: string;
   title: string;
@@ -16,7 +21,9 @@ export interface QuestionGoal {
 export async function getJobQuestions(
   jobId: number
 ): Promise<{ job_id: number; role_type: string; goals: QuestionGoal[] }> {
-  const res = await fetch(`${VOICE_BASE_URL}/jobs/${jobId}/questions`);
+  const res = await fetch(`${VOICE_BASE_URL}/jobs/${jobId}/questions`, {
+    headers: VOICE_HEADERS,
+  });
   if (!res.ok) throw new Error(`Failed to load questions (${res.status})`);
   return res.json();
 }
@@ -24,7 +31,7 @@ export async function getJobQuestions(
 export async function updateJobGoal(goal: QuestionGoal): Promise<void> {
   const res = await fetch(`${VOICE_BASE_URL}/goals/templates/${goal.id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...VOICE_HEADERS },
     body: JSON.stringify({
       title: goal.title,
       description: goal.description,
@@ -53,7 +60,7 @@ export interface InterviewValidation {
 export async function validateInterview(token: string): Promise<InterviewValidation> {
   const res = await fetch(
     `${VOICE_BASE_URL}/interview/validate?token=${encodeURIComponent(token)}`,
-    { cache: "no-store" }
+    { cache: "no-store", headers: VOICE_HEADERS }
   );
   if (!res.ok) return { valid: false, error: `server error (${res.status})` };
   return res.json();
@@ -72,7 +79,7 @@ export async function sendInterviewChat(text: string, sessionId?: string | null)
   // (not the shared default bot).
   await fetch(`${VOICE_BASE_URL}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...VOICE_HEADERS },
     body: JSON.stringify({ text, session: sessionId ?? undefined }),
   });
 }

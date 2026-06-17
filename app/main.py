@@ -911,6 +911,95 @@ def reprocess_all_for_job(
     return {"message": msg, "count": queued, "total": total, "remaining": remaining}
 
 
+def _recordings_dir() -> str:
+    return os.getenv("RECORDINGS_DIR", "/mnt/muaaz/AI_recruiter/data/recordings")
+
+
+def _session_media(session_id: str) -> dict:
+    """Resolve a session's on-disk media by the ``{session_id}.{ext}`` naming
+    convention the voice agent uses. We deliberately do NOT rely on the
+    interview_sessions.audio_path column — it is frequently empty even when the
+    files exist on disk, which previously hid the recording from HR."""
+    d = _recordings_dir()
+    paths = {
+        "audio": os.path.join(d, f"{session_id}.wav"),
+        "video": os.path.join(d, f"{session_id}.mp4"),
+        "annotated": os.path.join(d, f"{session_id}.annotated.mp4"),
+        "vision": os.path.join(d, f"{session_id}.vision.json"),
+        "comm": os.path.join(d, f"{session_id}.comm.json"),
+    }
+    return {k: (v if os.path.isfile(v) else None) for k, v in paths.items()}
+
+
+def _vision_overall_summary(aggregate: dict, observations: list) -> str:
+    """Synthesize a video-LEVEL narrative from the per-frame observations.
+
+    The VLM emits one caption per sampled frame ("a person at a desk…"); on their
+    own those are just image descriptions. This rolls them up into a few sentences
+    describing the candidate's on-camera presentation across the whole interview."""
+    agg = aggregate or {}
+    obs = observations or []
+    n = agg.get("frames_analyzed") or len(obs)
+    if not n:
+        return ""
+    parts: list[str] = []
+
+    present = agg.get("present_ratio")
+    if present is not None:
+        pct = round(present * 100)
+        if pct >= 90:
+            parts.append("The candidate was on camera for essentially the entire interview")
+        elif pct >= 60:
+            parts.append(f"The candidate was visible for about {pct}% of the interview")
+        else:
+            parts.append(f"The candidate was visible for only about {pct}% of the interview (frequently off-camera)")
+
+    eng = agg.get("avg_engagement")
+    if eng is not None:
+        # engagement is reported 0–5 by the VLM
+        if eng >= 3.5:
+            desc = "high, sustained attentiveness"
+        elif eng >= 2:
+            desc = "moderate attentiveness"
+        else:
+            desc = "low or inconsistent attentiveness"
+        parts.append(f"showing {desc} (avg {eng}/5)")
+
+    looking_away = sum(1 for o in obs if o.get("looking_away"))
+    if obs and looking_away:
+        parts.append(f"appeared to look off-screen in {looking_away} of {len(obs)} sampled moments")
+
+    # Distinct delivery notes, de-duplicated, as a flavour of how they presented.
+    notes = []
+    seen = set()
+    for o in obs:
+        dn = (o.get("delivery_notes") or "").strip().rstrip(".")
+        key = dn.lower()
+        if dn and key not in seen:
+            seen.add(key)
+            notes.append(dn)
+    summary = ". ".join(p for p in [", ".join(parts[:1] + parts[1:])] if p)
+    if summary:
+        summary += "."
+    if notes:
+        summary += " Delivery cues observed: " + "; ".join(notes[:5]) + "."
+
+    flags = agg.get("integrity_flags") or []
+    if flags:
+        labels = {"candidate_absent": "candidate absent at times",
+                  "phone_visible": "a phone was visible", "multiple_people": "more than one person seen"}
+        summary += " Integrity notes: " + ", ".join(labels.get(f, f) for f in flags) + "."
+    return summary.strip()
+
+
+def _latest_session_id(db: Session, candidate_id: int):
+    from sqlalchemy import text
+    return db.execute(text(
+        "SELECT session_id FROM interview_sessions WHERE candidate_id = :cid "
+        "ORDER BY created_at DESC LIMIT 1"
+    ), {"cid": candidate_id}).scalar()
+
+
 @app.get("/candidates/{candidate_id}/interview")
 def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
     """Return the candidate's AI interview results (transcript + goals + assessment).
@@ -990,7 +1079,31 @@ def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
     }
 
     session_dict = dict(sess)
-    has_audio = bool(session_dict.pop("audio_path", None))
+    db_audio = session_dict.pop("audio_path", None)
+    # Resolve media from disk by session_id (audio_path is often empty).
+    media = _session_media(sid)
+    has_audio = bool(db_audio) or media["audio"] is not None
+
+    # Advisory video-evaluation report (semantic VLM observations + local YOLO
+    # proctoring detections), written as a sidecar JSON by the voice agent.
+    vision_report = None
+    if media["vision"]:
+        try:
+            import json as _json
+            with open(media["vision"]) as _vf:
+                _vj = _json.load(_vf)
+            _agg = _vj.get("aggregate", {})
+            _obs = _vj.get("observations", [])
+            vision_report = {
+                "backend": _vj.get("semantic_backend"),
+                "advisory_only": _vj.get("advisory_only", True),
+                "aggregate": _agg,
+                "overall_summary": _vision_overall_summary(_agg, _obs),
+                "observations": _obs,
+                "detections": _vj.get("detections", []),
+            }
+        except Exception:
+            vision_report = None
 
     def _norm_goal(g) -> dict:
         """Flatten a goal row into {title, status, scores, questions[], evidence[{text}]}.
@@ -1014,6 +1127,10 @@ def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
     return {
         "has_interview": True,
         "has_audio": has_audio,
+        "has_video": media["video"] is not None,
+        "has_annotated_video": media["annotated"] is not None,
+        "has_communication": media["comm"] is not None,
+        "vision": vision_report,
         "session": session_dict,
         "transcript": [dict(t) for t in transcript],
         "goals": [_norm_goal(g) for g in goals],
@@ -1038,10 +1155,185 @@ def get_candidate_interview_audio(candidate_id: int, db: Session = Depends(get_d
         "ORDER BY created_at DESC LIMIT 1"
     ), {"cid": candidate_id}).scalar()
 
+    # Fall back to the session_id-derived path on disk (audio_path is often empty).
+    if not audio_path or not os.path.isfile(audio_path):
+        sid = _latest_session_id(db, candidate_id)
+        audio_path = _session_media(sid)["audio"] if sid else None
+
     if not audio_path or not os.path.isfile(audio_path):
         raise HTTPException(status_code=404, detail="Interview audio not found.")
 
     return FileResponse(audio_path, media_type="audio/wav", filename=os.path.basename(audio_path))
+
+
+@app.get("/candidates/{candidate_id}/interview-video")
+def get_candidate_interview_video(
+    candidate_id: int, annotated: bool = False, db: Session = Depends(get_db)
+):
+    """Stream the recorded interview video for HR playback.
+
+    ``annotated=true`` serves the YOLO-annotated copy (bounding boxes over the
+    candidate / detected objects) if it has been generated; otherwise the raw
+    muxed MP4. Files are resolved by session_id from RECORDINGS_DIR.
+    """
+    sid = _latest_session_id(db, candidate_id)
+    if not sid:
+        raise HTTPException(status_code=404, detail="No interview for this candidate.")
+    media = _session_media(sid)
+    path = media["annotated"] if annotated else media["video"]
+    if not path:
+        raise HTTPException(
+            status_code=404,
+            detail="Annotated video not generated yet." if annotated else "Interview video not found.",
+        )
+    return FileResponse(path, media_type="video/mp4", filename=os.path.basename(path))
+
+
+@app.post("/candidates/{candidate_id}/annotate-video")
+def annotate_candidate_video(candidate_id: int, db: Session = Depends(get_db)):
+    """Kick off offline YOLO annotation of the recorded interview video.
+
+    Runs the annotator under the conda python that has ultralytics/supervision/cv2
+    (the voice uv venv does not). Returns immediately; the annotated MP4 appears as
+    ``{session_id}.annotated.mp4`` and is then served via interview-video?annotated=true.
+    """
+    import subprocess
+
+    sid = _latest_session_id(db, candidate_id)
+    if not sid:
+        raise HTTPException(status_code=404, detail="No interview for this candidate.")
+    media = _session_media(sid)
+    if not media["video"]:
+        raise HTTPException(status_code=404, detail="No interview video to annotate.")
+    if media["annotated"]:
+        return {"status": "ready", "session_id": sid, "already": True}
+
+    script = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "voice-agent", "server", "scripts", "annotate_video.py",
+    )
+    py = os.getenv("DETECTOR_PYTHON", "/home/aoi/miniconda3/bin/python")
+    if not os.path.isfile(script):
+        raise HTTPException(status_code=500, detail="Annotator script missing.")
+    try:
+        # Detached background job; annotation of a few-minute clip is CPU-heavy.
+        subprocess.Popen(
+            [py, script, "--session", sid, "--recordings-dir", _recordings_dir()],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start annotator: {e}")
+    return {"status": "started", "session_id": sid}
+
+
+_FILLER_WORDS = ("um", "uh", "uhh", "umm", "hmm", "erm", "er", "ah", "like", "you know")
+
+
+def _count_fillers(turns) -> dict:
+    """Deterministic filler-word tally over the candidate's transcript turns
+    (Deepgram filler_words=true surfaces um/uh/hmm in the text)."""
+    import re as _re
+    total_words = 0
+    counts = {f: 0 for f in _FILLER_WORDS}
+    for t in turns:
+        if t.get("speaker") != "candidate":
+            continue
+        words = _re.findall(r"[a-zA-Z']+", (t.get("text") or "").lower())
+        total_words += len(words)
+        for w in words:
+            if w in counts:
+                counts[w] += 1
+    used = {k: v for k, v in counts.items() if v}
+    n_fillers = sum(used.values())
+    return {
+        "total_words": total_words,
+        "filler_count": n_fillers,
+        "filler_rate_pct": round(100 * n_fillers / total_words, 1) if total_words else 0.0,
+        "by_filler": used,
+    }
+
+
+@app.get("/candidates/{candidate_id}/communication-analysis")
+def get_communication_analysis(candidate_id: int, refresh: bool = False, db: Session = Depends(get_db)):
+    """Detailed delivery/communication assessment over the interview transcript:
+    talking style, fluency, pace, clarity, confidence, and a language/phrasing note.
+
+    Cached to a ``{session}.comm.json`` sidecar. NOTE: this is a TEXT analysis — it
+    reads the transcript, so it characterises talking style and phrasing, not audio
+    accent (true accent classification needs an audio model and is flagged as such).
+    """
+    from sqlalchemy import text
+    import json as _json
+
+    sid = _latest_session_id(db, candidate_id)
+    if not sid:
+        raise HTTPException(status_code=404, detail="No interview for this candidate.")
+
+    cache = os.path.join(_recordings_dir(), f"{sid}.comm.json")
+    if os.path.isfile(cache) and not refresh:
+        try:
+            with open(cache) as f:
+                return _json.load(f)
+        except Exception:
+            pass
+
+    turns = db.execute(text(
+        "SELECT speaker, text FROM session_transcripts WHERE session_id = :sid "
+        "ORDER BY sequence_number"
+    ), {"sid": sid}).mappings().all()
+    turns = [dict(t) for t in turns]
+    cand_turns = [t for t in turns if t.get("speaker") == "candidate"]
+    if not cand_turns:
+        raise HTTPException(status_code=404, detail="No candidate speech to analyze.")
+
+    fillers = _count_fillers(turns)
+
+    # Build the transcript text for the LLM (candidate turns carry the delivery signal).
+    convo = "\n".join(
+        f"{'Interviewer' if t['speaker'] == 'agent' else 'Candidate'}: {t['text']}"
+        for t in turns
+    )[:8000]
+
+    from app.llm.groq_client import get_groq_client, _call_groq_api
+    client = get_groq_client()
+    analysis = None
+    if client is not None:
+        system_prompt = (
+            "You are an interview-delivery analyst. From the transcript, assess HOW the "
+            "candidate communicates (not what role they fit). Be factual and concise. "
+            "Return STRICT minified JSON with keys: talking_style, fluency, pace, clarity, "
+            "confidence, conciseness, language_phrasing, accent_note. "
+            "For accent_note: you only have TEXT, so DO NOT guess a regional/national accent; "
+            "instead comment on vocabulary, idiom, and phrasing, and state that audio is "
+            "required for true accent assessment. Each value is one short sentence."
+        )
+        user_prompt = (
+            f"Filler-word stats (from speech-to-text): {fillers['filler_count']} fillers across "
+            f"{fillers['total_words']} words ({fillers['filler_rate_pct']}%), breakdown {fillers['by_filler']}.\n\n"
+            f"Transcript:\n{convo}\n\nReturn the JSON now."
+        )
+        try:
+            content, _usage = _call_groq_api(client, "llama-3.3-70b-versatile", system_prompt, user_prompt)
+            content = content.strip()
+            if content.startswith("```"):
+                content = content.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
+            analysis = _json.loads(content)
+        except Exception as e:
+            analysis = {"error": f"LLM analysis unavailable: {e}"}
+
+    result = {
+        "session_id": sid,
+        "fillers": fillers,
+        "analysis": analysis,
+        "candidate_turns": len(cand_turns),
+    }
+    try:
+        with open(cache, "w") as f:
+            _json.dump(result, f, indent=2)
+    except Exception:
+        pass
+    return result
 
 
 def _build_candidate_report_md(candidate: Candidate, job_title: str, interview: dict) -> str:

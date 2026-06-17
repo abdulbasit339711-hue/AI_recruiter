@@ -498,9 +498,12 @@ class DatabaseManager:
         Used to resume an interrupted interview: when the same link is re-opened, the
         prior turns are replayed into the LLM context so the bot continues with full
         memory instead of restarting. ``speaker`` is 'agent' or 'candidate'."""
+        # Tiebreak on created_at (insertion order) so any duplicate sequence_numbers
+        # from older rows still replay in the true order they were written. NOTE: id
+        # is a random UUID here, so it must NOT be used for ordering.
         rows = await self.fetch_all(
             "SELECT speaker, text FROM session_transcripts "
-            "WHERE session_id = $1 ORDER BY sequence_number",
+            "WHERE session_id = $1 ORDER BY sequence_number, created_at",
             session_id,
         )
         return [{"speaker": r["speaker"], "text": r["text"]} for r in rows]
@@ -550,16 +553,26 @@ class DatabaseManager:
 
     async def add_transcript_entry(self, session_id: str, transcript_data: Dict[str, Any]) -> str:
         """Add transcript entry to database"""
+        # Compute the sequence number INSIDE the insert so it's atomic. Candidate
+        # turns (goal_tracking_processor) and agent turns (transcript_metrics_processor)
+        # are persisted from different processors; the old read-then-write
+        # (SELECT MAX+1; INSERT) let two near-simultaneous turns grab the SAME number,
+        # which then scrambled ORDER BY sequence_number on resume → the LLM replayed
+        # the prior conversation out of order and "lost" the context.
+        # $1 is used both as the INSERT value (column type character varying) and
+        # in the subquery comparison; asyncpg otherwise deduces conflicting types
+        # for it ("text versus character varying") and aborts the insert — which
+        # then swallowed the candidate transcript broadcast. Cast both uses to
+        # varchar so the parameter type is unambiguous.
         query = """
         INSERT INTO session_transcripts
         (session_id, speaker, text, timestamp, sequence_number, tokens_estimated)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1::varchar, $2, $3, $4,
+            (SELECT COALESCE(MAX(sequence_number), 0) + 1
+             FROM session_transcripts WHERE session_id = $1::varchar),
+            $5)
         RETURNING id
         """
-
-        # Get next sequence number
-        seq_query = "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM session_transcripts WHERE session_id = $1"
-        sequence_number = await self.execute_query(seq_query, session_id)
 
         transcript_id = await self.execute_query(
             query,
@@ -567,7 +580,6 @@ class DatabaseManager:
             transcript_data["speaker"],
             transcript_data["text"],
             _coerce_timestamp(transcript_data.get("timestamp")),
-            sequence_number,
             transcript_data.get("tokens_estimated", 0)
         )
 

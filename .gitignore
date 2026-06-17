@@ -46,3 +46,9 @@ Thumbs.db
 # Generated artifacts (regenerable via scripts/) — not source
 /project_code_summary.txt
 /recruitment_report.md
+
+# Dev interview short-link helper (contains a signed JWT) — not source
+/frontend/interview-links.json
+
+# YOLO model weights (binary; ultralytics auto-downloads on first run)
+*.pt
