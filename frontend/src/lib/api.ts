@@ -63,10 +63,27 @@ export function getCandidateReportUrl(candidateId: number, format: "md" | "pdf" 
   return `${API_BASE_URL}/candidates/${candidateId}/report?format=${format}`;
 }
 
+export interface SpeakingMetrics {
+  candidate_words: number;
+  interviewer_words: number;
+  candidate_talk_ratio_pct: number;
+  candidate_turns: number;
+  interviewer_turns: number;
+  avg_words_per_answer: number;
+  duration_seconds: number | null;
+  approx_words_per_min: number | null;
+}
+
 export interface VisionReport {
   backend?: string | null;
   advisory_only?: boolean;
   overall_summary?: string;
+  data_quality?: {
+    level: "good" | "limited" | "insufficient";
+    note: string;
+    frames_analyzed: number;
+    present_ratio: number;
+  };
   aggregate?: {
     frames_analyzed?: number;
     frames_detected?: number;
@@ -121,6 +138,14 @@ export interface CommunicationAnalysis {
     accent_note?: string;
     error?: string;
   } | null;
+  content?: {
+    star_usage?: string;
+    specificity?: string;
+    ownership?: string;
+    relevance?: string;
+    red_flags?: string[];
+    strengths?: string[];
+  } | null;
 }
 
 export interface InterviewResult {
@@ -130,6 +155,7 @@ export interface InterviewResult {
   has_annotated_video?: boolean;
   has_communication?: boolean;
   vision?: VisionReport | null;
+  speaking?: SpeakingMetrics;
   session?: {
     session_id: string;
     role_type: string;

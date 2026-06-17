@@ -27,6 +27,16 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Seek the interview video to a timestamp (evidence-linked vision observations).
+  const seekTo = useCallback((seconds: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.scrollIntoView({ behavior: "smooth", block: "center" });
+    v.currentTime = Math.max(0, seconds);
+    v.play?.().catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -215,7 +225,14 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
                 candidateId={candidateId}
                 hasAnnotated={!!result.has_annotated_video}
                 onRefresh={load}
+                videoRef={videoRef}
               />
+            </StaggerItem>
+          )}
+
+          {result.speaking && (result.speaking.candidate_words ?? 0) > 0 && (
+            <StaggerItem>
+              <SpeakingSection s={result.speaking} />
             </StaggerItem>
           )}
 
@@ -239,7 +256,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
 
           {result.vision && (
             <StaggerItem>
-              <VisionSection vision={result.vision} />
+              <VisionSection vision={result.vision} onSeek={result.has_video ? seekTo : undefined} />
             </StaggerItem>
           )}
 
@@ -298,9 +315,10 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
 
 /** Interview video playback with a raw / annotated (YOLO boxes) toggle. */
 function VideoSection({
-  candidateId, hasAnnotated, onRefresh,
+  candidateId, hasAnnotated, onRefresh, videoRef,
 }: {
   candidateId: number; hasAnnotated: boolean; onRefresh: () => void;
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
 }) {
   const [annotated, setAnnotated] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -357,6 +375,7 @@ function VideoSection({
         </div>
       </div>
       <video
+        ref={videoRef}
         key={annotated ? "annotated" : "raw"}
         controls
         playsInline
@@ -391,13 +410,22 @@ const FLAG_LABELS: Record<string, string> = {
 };
 
 /** Advisory video-evaluation report: presence, engagement, integrity, delivery. */
-function VisionSection({ vision }: { vision: VisionReport }) {
+function VisionSection({ vision, onSeek }: { vision: VisionReport; onSeek?: (t: number) => void }) {
   const agg = vision.aggregate ?? {};
   const flags = agg.integrity_flags ?? [];
   const present = Math.round((agg.present_ratio ?? 0) * 100);
   const engagement = agg.avg_engagement ?? 0; // 0–3 scale
   const engagementPct = Math.round((engagement / 3) * 100);
   const obs = (vision.observations ?? []).filter((o) => o.summary || o.delivery_notes);
+  const quality = vision.data_quality;
+  const insufficient = quality?.level === "insufficient";
+
+  const qualityStyle =
+    quality?.level === "good"
+      ? { borderColor: "var(--strong)", background: "var(--strong-bg)", color: "var(--strong-text)" }
+      : quality?.level === "limited"
+      ? { borderColor: "var(--promising)", background: "var(--promising-bg)", color: "var(--promising-text)" }
+      : { borderColor: "var(--weak)", background: "var(--weak-bg)", color: "var(--weak-text)" };
 
   return (
     <section className="rounded-xl glass-tile p-4">
@@ -408,8 +436,16 @@ function VisionSection({ vision }: { vision: VisionReport }) {
         </span>
       </div>
 
+      {/* Data-quality gate: how much usable footage backs this read */}
+      {quality && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border p-2.5 text-xs" style={qualityStyle}>
+          <span className="font-semibold uppercase tracking-wide">{quality.level}</span>
+          <span>· {quality.note}</span>
+        </div>
+      )}
+
       {/* Video-level narrative summary (synthesized across all frames) */}
-      {vision.overall_summary && (
+      {vision.overall_summary && !insufficient && (
         <p className="mb-3 rounded-lg bg-foreground/[0.04] p-3 text-sm leading-relaxed text-foreground">
           {vision.overall_summary}
         </p>
@@ -451,7 +487,17 @@ function VisionSection({ vision }: { vision: VisionReport }) {
             {obs.map((o, i) => (
               <li key={i} className="rounded-lg bg-foreground/[0.03] p-2.5 text-xs">
                 <div className="mb-0.5 flex items-center gap-2 text-muted-foreground">
-                  <span className="font-mono tabular-nums">{Math.round(o.t ?? 0)}s</span>
+                  {onSeek ? (
+                    <button
+                      onClick={() => onSeek(o.t ?? 0)}
+                      title="Jump to this moment in the video"
+                      className="rounded bg-primary/10 px-1.5 py-0.5 font-mono tabular-nums text-primary hover:bg-primary/20"
+                    >
+                      ▶ {fmtTime(o.t ?? 0)}
+                    </button>
+                  ) : (
+                    <span className="font-mono tabular-nums">{fmtTime(o.t ?? 0)}</span>
+                  )}
                   {typeof o.engagement === "number" && <span>· engagement {o.engagement}/3</span>}
                   {o.looking_away && <span className="text-promising">· looking away</span>}
                   {o.present === false && <span className="text-weak">· absent</span>}
@@ -498,6 +544,7 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
   }, [autoLoad, run]);
 
   const a = data?.analysis ?? null;
+  const c = data?.content ?? null;
   const f = data?.fillers;
   const rows: [string, string | undefined][] = a
     ? [
@@ -511,11 +558,19 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
         ["Accent", a.accent_note],
       ]
     : [];
+  const contentRows: [string, string | undefined][] = c
+    ? [
+        ["STAR structure", c.star_usage],
+        ["Specificity", c.specificity],
+        ["Ownership", c.ownership],
+        ["Relevance", c.relevance],
+      ]
+    : [];
 
   return (
     <section className="rounded-xl glass-tile p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-heading">Communication &amp; delivery</h4>
+        <h4 className="text-sm font-semibold text-heading">Answer content &amp; communication</h4>
         <button
           onClick={() => run(true)}
           disabled={busy}
@@ -528,7 +583,8 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
 
       {!data && !busy && (
         <p className="text-xs text-muted-foreground">
-          Analyze talking style, fluency, pace, clarity, filler usage, and phrasing from the transcript.
+          Analyze answer content (STAR structure, specificity, ownership, relevance, red flags) plus
+          delivery (talking style, fluency, pace, fillers) from the transcript.
         </p>
       )}
       {busy && !data && (
@@ -557,20 +613,102 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
 
       {a?.error && <p className="text-xs text-weak">{a.error}</p>}
 
-      {rows.filter(([, v]) => v).length > 0 && (
-        <dl className="space-y-2">
-          {rows.filter(([, v]) => v).map(([label, v]) => (
-            <div key={label} className="grid grid-cols-[120px_1fr] gap-2 text-sm">
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-              <dd className="text-foreground">{v}</dd>
+      {/* Content / answer quality — the primary, most job-relevant signal (WORDS) */}
+      {(contentRows.some(([, v]) => v) || (c?.red_flags?.length ?? 0) > 0 || (c?.strengths?.length ?? 0) > 0) && (
+        <div className="mb-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-heading">Content &amp; answer quality</p>
+          <dl className="space-y-2">
+            {contentRows.filter(([, v]) => v).map(([label, v]) => (
+              <div key={label} className="grid grid-cols-[120px_1fr] gap-2 text-sm">
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+                <dd className="text-foreground">{v}</dd>
+              </div>
+            ))}
+          </dl>
+          {(c?.strengths?.length ?? 0) > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {c!.strengths!.map((s, i) => (
+                <span key={i} className="inline-flex items-center rounded-full bg-strong/15 px-2.5 py-1 text-xs text-strong">
+                  ✓ {s}
+                </span>
+              ))}
             </div>
-          ))}
-        </dl>
+          )}
+          {(c?.red_flags?.length ?? 0) > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {c!.red_flags!.map((s, i) => (
+                <span key={i} className="inline-flex items-center rounded-full bg-weak/15 px-2.5 py-1 text-xs text-weak">
+                  ⚑ {s}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {rows.filter(([, v]) => v).length > 0 && (
+        <>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-heading">Delivery &amp; communication</p>
+          <dl className="space-y-2">
+            {rows.filter(([, v]) => v).map(([label, v]) => (
+              <div key={label} className="grid grid-cols-[120px_1fr] gap-2 text-sm">
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+                <dd className="text-foreground">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </>
       )}
 
       {a?.accent_note && (
         <p className="mt-3 text-[11px] text-faint">
           Note: this is a text analysis of the transcript — true accent classification requires audio modelling.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function fmtTime(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/** Objective speaking metrics: talk-time balance, pace, answer length. */
+function SpeakingSection({ s }: { s: NonNullable<InterviewResult["speaking"]> }) {
+  const candPct = Math.round(s.candidate_talk_ratio_pct);
+  return (
+    <section className="rounded-xl glass-tile p-4">
+      <h4 className="mb-3 text-sm font-semibold text-heading">Speaking balance &amp; pace</h4>
+
+      {/* Talk-time split bar (candidate vs interviewer) */}
+      <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
+        <span>Candidate {candPct}%</span>
+        <span>Interviewer {100 - candPct}%</span>
+      </div>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-foreground/10">
+        <div className="h-full bg-primary" style={{ width: `${candPct}%` }} />
+        <div className="h-full bg-foreground/25" style={{ width: `${100 - candPct}%` }} />
+      </div>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        Talk-time is word-share, a rough proxy for who spoke more.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label="Candidate words" value={String(s.candidate_words)} mono />
+        <Stat label="Avg / answer" value={String(s.avg_words_per_answer)} mono />
+        <Stat label="Answers" value={String(s.candidate_turns)} mono />
+        <Stat
+          label="Pace (approx)"
+          value={s.approx_words_per_min != null ? `${s.approx_words_per_min} wpm` : "—"}
+          mono
+        />
+      </div>
+      {s.approx_words_per_min != null && (
+        <p className="mt-2 text-[11px] text-faint">
+          Pace is words ÷ total interview time (includes pauses &amp; the interviewer&apos;s turns), so it
+          reads lower than true speaking rate — use it for relative comparison, not an absolute.
         </p>
       )}
     </section>

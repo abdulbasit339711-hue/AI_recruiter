@@ -992,6 +992,59 @@ def _vision_overall_summary(aggregate: dict, observations: list) -> str:
     return summary.strip()
 
 
+def _vision_data_quality(aggregate: dict) -> dict:
+    """Gate the subjective video read on how much usable footage we actually had.
+    Prevents a confident-sounding summary built on 2 frames of an off-camera candidate."""
+    agg = aggregate or {}
+    frames = agg.get("frames_analyzed") or 0
+    present = agg.get("present_ratio")
+    present = present if present is not None else 0.0
+    if frames < 2 or present < 0.25:
+        level, note = "insufficient", "Too little on-camera footage to assess delivery reliably."
+    elif frames < 4 or present < 0.6:
+        level, note = "limited", "Limited on-camera footage — read delivery cues with caution."
+    else:
+        level, note = "good", "Sufficient on-camera footage for an advisory read."
+    return {"level": level, "note": note, "frames_analyzed": frames,
+            "present_ratio": round(present, 2)}
+
+
+def _speaking_metrics(transcript, session: dict) -> dict:
+    """Objective communication signals from the transcript + session duration:
+    talk-time balance (candidate vs interviewer) and an approximate speaking pace."""
+    import re as _re
+
+    def _words(s: str) -> int:
+        return len(_re.findall(r"[A-Za-z0-9']+", s or ""))
+
+    cand_turns = [t for t in transcript if t.get("speaker") == "candidate"]
+    agent_turns = [t for t in transcript if t.get("speaker") == "agent"]
+    cand_words = sum(_words(t.get("text", "")) for t in cand_turns)
+    agent_words = sum(_words(t.get("text", "")) for t in agent_turns)
+    total = cand_words + agent_words
+
+    duration_s = None
+    started, ended = session.get("started_at"), session.get("ended_at")
+    if started and ended:
+        try:
+            duration_s = max(0.0, (ended - started).total_seconds())
+        except Exception:
+            duration_s = None
+
+    # Approximate pace over the whole interview (not just speaking time), clearly labelled.
+    wpm = round(cand_words / (duration_s / 60), 1) if duration_s and duration_s > 0 else None
+    return {
+        "candidate_words": cand_words,
+        "interviewer_words": agent_words,
+        "candidate_talk_ratio_pct": round(100 * cand_words / total, 1) if total else 0.0,
+        "candidate_turns": len(cand_turns),
+        "interviewer_turns": len(agent_turns),
+        "avg_words_per_answer": round(cand_words / len(cand_turns), 1) if cand_turns else 0.0,
+        "duration_seconds": round(duration_s) if duration_s is not None else None,
+        "approx_words_per_min": wpm,
+    }
+
+
 def _latest_session_id(db: Session, candidate_id: int):
     from sqlalchemy import text
     return db.execute(text(
@@ -1094,11 +1147,15 @@ def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
                 _vj = _json.load(_vf)
             _agg = _vj.get("aggregate", {})
             _obs = _vj.get("observations", [])
+            _quality = _vision_data_quality(_agg)
             vision_report = {
                 "backend": _vj.get("semantic_backend"),
                 "advisory_only": _vj.get("advisory_only", True),
+                "data_quality": _quality,
                 "aggregate": _agg,
-                "overall_summary": _vision_overall_summary(_agg, _obs),
+                # Suppress the subjective narrative when there isn't enough footage to back it.
+                "overall_summary": (_vision_overall_summary(_agg, _obs)
+                                    if _quality["level"] != "insufficient" else ""),
                 "observations": _obs,
                 "detections": _vj.get("detections", []),
             }
@@ -1131,6 +1188,7 @@ def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
         "has_annotated_video": media["annotated"] is not None,
         "has_communication": media["comm"] is not None,
         "vision": vision_report,
+        "speaking": _speaking_metrics([dict(t) for t in transcript], session_dict),
         "session": session_dict,
         "transcript": [dict(t) for t in transcript],
         "goals": [_norm_goal(g) for g in goals],
@@ -1274,7 +1332,10 @@ def get_communication_analysis(candidate_id: int, refresh: bool = False, db: Ses
     if os.path.isfile(cache) and not refresh:
         try:
             with open(cache) as f:
-                return _json.load(f)
+                cached = _json.load(f)
+            # Regenerate stale caches written before the content-analysis was added.
+            if "content" in cached:
+                return cached
         except Exception:
             pass
 
@@ -1298,15 +1359,24 @@ def get_communication_analysis(candidate_id: int, refresh: bool = False, db: Ses
     from app.llm.groq_client import get_groq_client, _call_groq_api
     client = get_groq_client()
     analysis = None
+    content_eval = None
     if client is not None:
         system_prompt = (
-            "You are an interview-delivery analyst. From the transcript, assess HOW the "
-            "candidate communicates (not what role they fit). Be factual and concise. "
-            "Return STRICT minified JSON with keys: talking_style, fluency, pace, clarity, "
-            "confidence, conciseness, language_phrasing, accent_note. "
+            "You are an interview analyst. From the transcript, produce TWO assessments and "
+            "return STRICT minified JSON with exactly two top-level keys: \"delivery\" and \"content\".\n\n"
+            "\"delivery\" (HOW the candidate communicates) — object with keys: talking_style, "
+            "fluency, pace, clarity, confidence, conciseness, language_phrasing, accent_note. "
             "For accent_note: you only have TEXT, so DO NOT guess a regional/national accent; "
-            "instead comment on vocabulary, idiom, and phrasing, and state that audio is "
-            "required for true accent assessment. Each value is one short sentence."
+            "comment on vocabulary/idiom/phrasing and state that audio is required for true accent "
+            "assessment. Each value is one short sentence.\n\n"
+            "\"content\" (WHAT the candidate said — the primary, most job-relevant signal) — object "
+            "with keys: star_usage (do answers follow Situation-Task-Action-Result with a concrete, "
+            "measurable result? one sentence), specificity (concrete examples vs vague generalities? "
+            "one sentence), ownership (does the candidate say what THEY did, 'I' vs 'we' — note this "
+            "can be cultural, don't over-penalise; one sentence), relevance (do answers address the "
+            "questions asked? one sentence), red_flags (array of short strings: vagueness, evasiveness, "
+            "contradictions, rambling, off-topic, negativity — empty array if none), strengths (array "
+            "of short strings). Judge job-relevant substance, not accent or personality."
         )
         user_prompt = (
             f"Filler-word stats (from speech-to-text): {fillers['filler_count']} fillers across "
@@ -1314,11 +1384,13 @@ def get_communication_analysis(candidate_id: int, refresh: bool = False, db: Ses
             f"Transcript:\n{convo}\n\nReturn the JSON now."
         )
         try:
-            content, _usage = _call_groq_api(client, "llama-3.3-70b-versatile", system_prompt, user_prompt)
-            content = content.strip()
-            if content.startswith("```"):
-                content = content.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
-            analysis = _json.loads(content)
+            raw, _usage = _call_groq_api(client, "llama-3.3-70b-versatile", system_prompt, user_prompt)
+            raw = raw.strip()
+            if raw.startswith("```"):
+                raw = raw.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
+            parsed = _json.loads(raw)
+            analysis = parsed.get("delivery", parsed)   # tolerate flat output
+            content_eval = parsed.get("content")
         except Exception as e:
             analysis = {"error": f"LLM analysis unavailable: {e}"}
 
@@ -1326,6 +1398,7 @@ def get_communication_analysis(candidate_id: int, refresh: bool = False, db: Ses
         "session_id": sid,
         "fillers": fillers,
         "analysis": analysis,
+        "content": content_eval,
         "candidate_turns": len(cand_turns),
     }
     try:
