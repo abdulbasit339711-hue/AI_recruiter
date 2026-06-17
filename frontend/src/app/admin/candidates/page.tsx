@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ResumeViewer } from "@/components/admin/ResumeViewer";
 import { ScoringWeightsEditor } from "@/components/admin/ScoringWeightsEditor";
 import { QuestionBankEditor } from "@/components/admin/QuestionBankEditor";
-import { Mail, ClipboardCheck, FileText, LayoutGrid, List, ArrowUpDown, Brain, Check, X } from "lucide-react";
+import { Mail, ClipboardCheck, FileText, LayoutGrid, List, ArrowUpDown, Brain, Check, X, ExternalLink } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { downloadCSV } from "@/lib/csv";
@@ -460,20 +460,31 @@ export default function AdminCandidatesPage() {
           )}
 
           {/* Tabs */}
-          <div className="mt-3 flex items-center gap-1 border-b border-border">
-            {(["details", "interview"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setModalTab(t)}
-                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium capitalize transition ${
-                  modalTab === t
-                    ? "border-primary text-heading"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
+          <div className="mt-3 flex items-center justify-between gap-1 border-b border-border">
+            <div className="flex items-center gap-1">
+              {(["details", "interview"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setModalTab(t)}
+                  className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium capitalize transition ${
+                    modalTab === t
+                      ? "border-primary text-heading"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t === "interview" ? "Interview" : "Details"}
+                </button>
+              ))}
+            </div>
+            {modalTab === "interview" && selected && (
+              <a
+                href={`/admin/candidates/${selected.id}/interview`}
+                className="mb-1 inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-foreground/5"
+                title="Open the full interview evaluation page"
               >
-                {t === "interview" ? "Interview" : "Details"}
-              </button>
-            ))}
+                Open full page <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
           </div>
 
           {modalTab === "interview" ? (
