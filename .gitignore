@@ -52,3 +52,6 @@ Thumbs.db
 
 # YOLO model weights (binary; ultralytics auto-downloads on first run)
 *.pt
+
+# TS incremental build cache (regenerated on build)
+*.tsbuildinfo
