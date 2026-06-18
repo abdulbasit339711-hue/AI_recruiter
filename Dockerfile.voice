@@ -37,8 +37,13 @@ RUN uv sync --locked --no-dev
 
 EXPOSE 7860
 
-# Apply the voice schema (alembic reads DB_* / DATABASE_URL), then serve. runner:app's
-# lifespan spawns the supervised default bot and owns /interview/validate, /events, etc.
+# Apply the voice schema (alembic reads DB_* / DATABASE_URL), then serve. runner:app
+# owns /interview/validate, /events, /chat, /token and spawns per-room bots on demand.
 # runner.py's __main__ binds 127.0.0.1 (not container-reachable) by design — launch via
 # uvicorn so it binds 0.0.0.0, exactly as the module docstring intends.
-CMD ["sh", "-c", "uv run alembic upgrade head && exec uv run uvicorn runner:app --host 0.0.0.0 --port 7860"]
+#
+# `uv run --no-sync`: the venv is already fully built, so skip uv's implicit
+# re-sync on boot — that sync recompiled ~10k bytecode files and reinstalled dev
+# deps every start (~30s). --no-sync keeps uv's project environment while making
+# boot near-instant. (A plain `uvicorn` without uv hangs during app import here.)
+CMD ["sh", "-c", "uv run --no-sync alembic upgrade head && exec uv run --no-sync uvicorn runner:app --host 0.0.0.0 --port 7860"]
