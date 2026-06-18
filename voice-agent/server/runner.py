@@ -196,6 +196,16 @@ def validate_required_keys() -> None:
             "Set them in the environment (.env) before starting the interview server."
         )
 
+    # The interview-link secret is the ONLY auth boundary for candidates — a missing
+    # or placeholder value lets anyone forge an invite. Fail-closed, and it MUST match
+    # the backend's value or minted links won't validate.
+    ils = (os.getenv("INTERVIEW_LINK_SECRET") or "").strip()
+    if not ils or "change-me" in ils:
+        raise RuntimeError(
+            "INTERVIEW_LINK_SECRET is not configured (or is a placeholder). Set a "
+            "real 32+ byte random value that MATCHES the backend's INTERVIEW_LINK_SECRET."
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

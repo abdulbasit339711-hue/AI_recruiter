@@ -19,3 +19,8 @@ if not os.environ.get("KEEP_TEST_DB"):
     os.close(_fd)
     os.environ["DATABASE_URL"] = f"sqlite:///{_path}"
     atexit.register(lambda: os.path.exists(_path) and os.remove(_path))
+
+# Signing secrets are now fail-closed in prod (no hardcoded dev fallback), so the
+# suite must supply its own. setdefault keeps any value the developer already exported.
+os.environ.setdefault("IQ_TEST_SECRET", "test-only-iq-secret")
+os.environ.setdefault("INTERVIEW_LINK_SECRET", "test-only-interview-link-secret")

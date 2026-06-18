@@ -9,8 +9,9 @@ Two token types, both HS256 JWTs (mirrors packages/shared tokens.py):
   Carries the score; ``POST /upload`` verifies it and copies the score onto the
   candidate. Tamper-proof, so the score can safely round-trip through the client.
 
-Secret: ``IQ_TEST_SECRET`` env (falls back to a clearly-labelled dev default, like
-the interview-link secret does, so local dev works without configuration).
+Secret: ``IQ_TEST_SECRET`` env. Fail-closed — there is NO hardcoded fallback: a
+known default would let anyone mint a perfect-score result token. Tests set it via
+the root conftest.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ _ALGO = "HS256"
 _TEST_TYPE = "iq_test"
 _RESULT_TYPE = "iq_result"
 _LEEWAY_SECONDS = 10  # tolerate small clock skew
-_DEV_SECRET = "dev-iq-secret-change-me"
+_PLACEHOLDERS = {"dev-iq-secret-change-me", "change-me", ""}
 
 
 class IqTokenError(Exception):
@@ -56,7 +57,13 @@ class IqResultClaims:
 
 
 def iq_secret() -> str:
-    return os.getenv("IQ_TEST_SECRET") or _DEV_SECRET
+    secret = (os.getenv("IQ_TEST_SECRET") or "").strip()
+    if secret in _PLACEHOLDERS:
+        raise IqTokenError(
+            "IQ_TEST_SECRET is not configured (or is a placeholder). Set a real "
+            "random value — there is no dev fallback."
+        )
+    return secret
 
 
 def mint_test_token(

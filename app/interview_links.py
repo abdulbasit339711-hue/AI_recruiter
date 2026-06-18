@@ -17,9 +17,14 @@ __all__ = ["mint_link", "verify_link", "InviteClaims", "InviteTokenError"]
 
 
 def _secret() -> str:
-    secret = os.getenv("INTERVIEW_LINK_SECRET")
-    if not secret:
-        raise RuntimeError("INTERVIEW_LINK_SECRET is not configured")
+    secret = (os.getenv("INTERVIEW_LINK_SECRET") or "").strip()
+    # Fail-closed: a missing OR placeholder secret means anyone could forge an
+    # interview invite for any candidate/job. Reject both.
+    if not secret or "change-me" in secret:
+        raise RuntimeError(
+            "INTERVIEW_LINK_SECRET is not configured (or is a placeholder). "
+            "Set a real 32+ byte random value that MATCHES the voice agent's."
+        )
     return secret
 
 
