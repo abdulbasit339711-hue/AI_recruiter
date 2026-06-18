@@ -12,6 +12,7 @@
 //     proxy is not an open relay.
 
 import { NextRequest, NextResponse } from "next/server";
+import { verifySession, SESSION_COOKIE } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +37,9 @@ async function handle(
   const method = req.method;
 
   if (!isPublic(method, path)) {
-    const cookie = req.cookies.get("admin_session")?.value;
-    if (!ADMIN_API_TOKEN || cookie !== ADMIN_API_TOKEN) {
+    // Authoritative gate: the cookie must be a valid SIGNED session token (not the raw
+    // admin secret). The backend bearer is injected below, server-side only.
+    if (!ADMIN_API_TOKEN || !verifySession(req.cookies.get(SESSION_COOKIE)?.value)) {
       return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
     }
   }
