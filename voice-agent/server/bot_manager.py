@@ -3,6 +3,7 @@ Dual-mode Bot Manager - Supports both Single LLM and Dual LLM (Judge + Responder
 """
 
 import asyncio
+import threading
 import os
 import wave
 from loguru import logger
@@ -95,15 +96,22 @@ def build_user_turn_strategies() -> UserTurnStrategies:
 # On a fast re-open a second bot can spawn for the same link while the first is still
 # finalizing; serializing here prevents two bots from interleaving writes to the same
 # session row (last-writer-wins assessment loss).
-_FINALIZE_LOCKS: dict[str, asyncio.Lock] = {}
+# threading.Lock (NOT asyncio.Lock): two bots that resume the same session_id run on
+# DIFFERENT event loops in different threads, and an asyncio.Lock only excludes
+# coroutines on its own loop — it gave false mutual-exclusion across bots. A
+# threading.Lock serializes across threads/loops correctly. _GUARD makes lazy creation
+# of the per-session lock itself thread-safe.
+_FINALIZE_LOCKS: dict[str, "threading.Lock"] = {}
+_FINALIZE_LOCKS_GUARD = threading.Lock()
 
 
-def _finalize_lock_for(session_id: str) -> asyncio.Lock:
-    lock = _FINALIZE_LOCKS.get(session_id)
-    if lock is None:
-        lock = asyncio.Lock()
-        _FINALIZE_LOCKS[session_id] = lock
-    return lock
+def _finalize_lock_for(session_id: str) -> "threading.Lock":
+    with _FINALIZE_LOCKS_GUARD:
+        lock = _FINALIZE_LOCKS.get(session_id)
+        if lock is None:
+            lock = threading.Lock()
+            _FINALIZE_LOCKS[session_id] = lock
+        return lock
 
 
 class BotManager:
@@ -553,8 +561,14 @@ class BotManager:
         if sid is None:
             await self._finalize_unlocked(graceful, terminal)
             return
-        async with _finalize_lock_for(sid):
+        # Acquire the cross-thread lock off the event loop so we don't block this
+        # bot's loop while another bot's thread holds it.
+        lock = _finalize_lock_for(sid)
+        await asyncio.to_thread(lock.acquire)
+        try:
             await self._finalize_unlocked(graceful, terminal)
+        finally:
+            lock.release()
 
     async def _finalize_unlocked(self, graceful: bool = True, terminal: bool = False):
         if getattr(self, "_finalized", False):

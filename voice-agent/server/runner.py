@@ -98,18 +98,30 @@ bot_manager = None
 bot_ready = asyncio.Event()
 pipeline_mode = os.getenv("PIPELINE_MODE", "dual")  # Default to dual (judge + responder); set "single" to disable
 
-# Shared aiohttp session for the HTTP TTS service (one request per utterance — far
-# more robust than a persistent websocket on a flaky / resource-starved host). Lazily
-# created inside the event loop; reused across interviews.
-_aiohttp_session = None
+# aiohttp session for the HTTP TTS service (one request per utterance — far more
+# robust than a persistent websocket on a flaky / resource-starved host). An
+# aiohttp.ClientSession is bound to the loop it was created on, and each interview bot
+# runs on its OWN loop in a dedicated thread, so we keep one session PER loop (keyed by
+# id(loop)) — exactly like the per-loop asyncpg pools. A single shared session would
+# break the 2nd concurrent interview ("Event loop is closed").
+_aiohttp_sessions: dict = {}
 
 
 async def _get_aiohttp_session():
-    global _aiohttp_session
     import aiohttp
-    if _aiohttp_session is None or _aiohttp_session.closed:
-        _aiohttp_session = aiohttp.ClientSession()
-    return _aiohttp_session
+    key = id(asyncio.get_running_loop())
+    s = _aiohttp_sessions.get(key)
+    if s is None or s.closed:
+        s = aiohttp.ClientSession()
+        _aiohttp_sessions[key] = s
+    return s
+
+
+async def _close_aiohttp_session() -> None:
+    """Close + drop the current loop's aiohttp session (called in bot teardown)."""
+    s = _aiohttp_sessions.pop(id(asyncio.get_running_loop()), None)
+    if s is not None and not s.closed:
+        await s.close()
 
 # The (candidate_id, job_id) for the NEXT interview to configure on connect.
 # Set via POST /interview/configure (Phase 3 will set it from a validated token),
@@ -593,7 +605,8 @@ async def manual_chat(request: Request):
     # default dashboard bot.
     target = None
     if session:
-        for b in _interviews.values():
+        # Snapshot: _interviews is mutated from bot threads, so iterate a copy.
+        for b in list(_interviews.values()):
             if b.session_id == session and b.manager:
                 target = b.manager
                 break
@@ -618,7 +631,7 @@ async def end_interview(request: Request):
     session = data.get("session")
     if not session:
         return {"error": "no session provided"}
-    for b in _interviews.values():
+    for b in list(_interviews.values()):  # snapshot — mutated from bot threads
         if b.session_id == session and b.manager:
             try:
                 await b.manager.worker.cancel()
@@ -1236,9 +1249,14 @@ async def ensure_interview(candidate_id, job_id, room_name, session_id=None):
                 bot.error = str(e)
                 bot.ready.set()
             finally:
-                # Close THIS loop's asyncpg pool (per-loop), then tear the loop down.
+                # Close THIS loop's per-loop resources (asyncpg pool + aiohttp TTS
+                # session), then tear the loop down.
                 try:
                     loop.run_until_complete(db_manager.close())
+                except Exception:
+                    pass
+                try:
+                    loop.run_until_complete(_close_aiohttp_session())
                 except Exception:
                     pass
                 try:
