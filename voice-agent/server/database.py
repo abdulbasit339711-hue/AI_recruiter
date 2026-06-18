@@ -73,11 +73,31 @@ class DatabaseManager:
             min_size=int(os.getenv("DB_MIN_CONNECTIONS", 2)),
             max_size=int(os.getenv("DB_MAX_CONNECTIONS", 10))
         )
-        self.pool: Optional[asyncpg.Pool] = None
-        self._init_lock = asyncio.Lock()
+        # asyncpg pools are bound to the event loop they're created on. The interview
+        # bot now runs on its OWN loop in a dedicated thread (so the LiveKit FFI
+        # handshake isn't starved by the uvicorn loop), so we keep ONE pool PER loop
+        # keyed by id(loop) — the uvicorn loop and each bot loop each get their own.
+        self._pools: dict[int, asyncpg.Pool] = {}
+        self._init_locks: dict[int, asyncio.Lock] = {}
+
+    @staticmethod
+    def _loop_key() -> int:
+        return id(asyncio.get_running_loop())
+
+    @property
+    def pool(self) -> Optional[asyncpg.Pool]:
+        return self._pools.get(self._loop_key())
+
+    @pool.setter
+    def pool(self, value: Optional[asyncpg.Pool]) -> None:
+        key = self._loop_key()
+        if value is None:
+            self._pools.pop(key, None)
+        else:
+            self._pools[key] = value
 
     async def _ensure_pool(self) -> None:
-        """Lazily create the pool on first use.
+        """Lazily create the pool for the CURRENT event loop on first use.
 
         Handles the startup race (an HTTP request arriving before start() has run
         initialize()) and lets a failed/missed init self-heal. If connecting still
@@ -86,7 +106,12 @@ class DatabaseManager:
         """
         if self.pool is not None:
             return
-        async with self._init_lock:
+        key = self._loop_key()
+        lock = self._init_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()  # created on (and bound to) the current loop
+            self._init_locks[key] = lock
+        async with lock:
             if self.pool is None:
                 await self.initialize()
 

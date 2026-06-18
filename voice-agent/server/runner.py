@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import json
+import threading
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -137,6 +138,10 @@ GREETING_FALLBACK_SECONDS = float(os.getenv("GREETING_FALLBACK_SECONDS", "5"))
 _interviews: dict = {}                      # room_name -> InterviewBot
 _interviews_lock = asyncio.Lock()
 _shutting_down = False
+# The uvicorn/FastAPI event loop, captured at startup. Interview bots run on their
+# OWN loop in a dedicated thread; they schedule the few main-loop operations (e.g.
+# pruning _interviews) back onto this loop via call_soon_threadsafe.
+_MAIN_LOOP: "asyncio.AbstractEventLoop | None" = None
 
 
 class InterviewBot:
@@ -148,13 +153,21 @@ class InterviewBot:
         self.manager = None
         self.session_id = None
         self.error = None
-        self.ready = asyncio.Event()
-        self.task: "asyncio.Task | None" = None
+        # The bot runs on its OWN event loop in a dedicated thread (so the LiveKit FFI
+        # room handshake isn't starved by the busy uvicorn loop). Hence thread-safe
+        # primitives: a threading.Event for readiness (set from the bot loop, awaited
+        # from the uvicorn loop via to_thread) and a Thread handle instead of a Task.
+        self.ready = threading.Event()
+        self.thread: "threading.Thread | None" = None
+        self.loop: "asyncio.AbstractEventLoop | None" = None
         # Set when the candidate leaves and the worker is being torn down. A draining
         # bot must NOT be handed back to a re-opened link — the candidate would join a
         # dying room and see no resume. ensure_interview waits for it to finish, then
         # respawns a fresh bot that resumes the SAME session from the DB.
         self.draining = False
+
+    def alive(self) -> bool:
+        return self.thread is not None and self.thread.is_alive()
 
 # --- FastAPI App ---
 from contextlib import asynccontextmanager
@@ -193,29 +206,33 @@ async def lifespan(app: FastAPI):
     ``ensure_interview`` (called from /interview/validate). Started here so any
     launcher (uvicorn runner:app, gunicorn, container CMD) boots the full system.
     """
-    global _bot_task, _shutting_down
+    global _bot_task, _shutting_down, _MAIN_LOOP
     validate_required_keys()  # fail fast on misconfiguration, not mid-interview
     _shutting_down = False
+    _MAIN_LOOP = asyncio.get_running_loop()
     if START_DEFAULT_BOT:
         _bot_task = asyncio.create_task(_supervise_default_bot())
     try:
         yield
     finally:
         _shutting_down = True
-        tasks = []
         if _bot_task and not _bot_task.done():
             _bot_task.cancel()
-            tasks.append(_bot_task)
-        async with _interviews_lock:
-            for b in _interviews.values():
-                if b.task and not b.task.done():
-                    b.task.cancel()
-                    tasks.append(b.task)
-        for t in tasks:
             try:
-                await t
+                await _bot_task
             except asyncio.CancelledError:
                 pass
+        # Interview bots run as daemon threads (each on its own loop); ask each to
+        # stop, then let the process exit reap them. We don't hard-join — a stuck
+        # LiveKit teardown must not block server shutdown.
+        for b in list(_interviews.values()):
+            if b.alive() and b.loop and b.manager:
+                try:
+                    b.loop.call_soon_threadsafe(
+                        lambda b=b: asyncio.ensure_future(b.manager.worker.cancel())
+                    )
+                except Exception:
+                    pass
         # Close the DB pool on shutdown (was previously leaked).
         try:
             from database import db_manager
@@ -1163,19 +1180,19 @@ async def ensure_interview(candidate_id, job_id, room_name, session_id=None):
     # re-open would be handed the dying bot and join an empty/closing room. The fresh
     # bot we spawn below resumes the SAME session from the DB.
     draining = _interviews.get(room_name)
-    if draining and draining.draining and draining.task and not draining.task.done():
+    if draining and draining.draining and draining.alive():
         logger.info(f"[Interview] {room_name} is draining; waiting before respawn")
         try:
-            await asyncio.wait_for(asyncio.shield(draining.task), timeout=15.0)
-        except (asyncio.TimeoutError, Exception):
+            await asyncio.to_thread(draining.thread.join, 15.0)
+        except Exception:
             pass
 
     async with _interviews_lock:
         existing = _interviews.get(room_name)
-        if existing and not existing.draining and existing.task and not existing.task.done():
+        if existing and not existing.draining and existing.alive():
             return existing
         # prune finished
-        for rn in [rn for rn, b in _interviews.items() if b.task and b.task.done()]:
+        for rn in [rn for rn, b in _interviews.items() if not b.alive()]:
             _interviews.pop(rn, None)
         if len(_interviews) >= MAX_CONCURRENT_INTERVIEWS:
             logger.warning(f"[Interview] capacity reached ({MAX_CONCURRENT_INTERVIEWS}); refusing {room_name}")
@@ -1183,33 +1200,56 @@ async def ensure_interview(candidate_id, job_id, room_name, session_id=None):
 
         bot = InterviewBot(room_name, candidate_id, job_id)
 
-        async def _runner():
+        def _drop_self():
+            # Runs on the MAIN loop (scheduled via call_soon_threadsafe). Only remove
+            # ourselves — a re-opened link may have already replaced us with a fresh
+            # resuming bot under the same room name.
+            if _interviews.get(room_name) is bot:
+                _interviews.pop(room_name, None)
+            logger.info(f"[Interview {room_name}] ended; slot freed ({len(_interviews)} active)")
+
+        def _thread_main():
+            # The bot gets its OWN event loop, isolated from the uvicorn loop, so the
+            # blocking LiveKit FFI room handshake (and STT/LLM startup) can't starve
+            # the FFI event pump — the root cause of the ReadyForRoomEventRequest panic.
+            from database import db_manager
+            loop = asyncio.new_event_loop()
+            bot.loop = loop
+            asyncio.set_event_loop(loop)
             try:
-                await _make_and_run_bot(room_name, candidate_id, job_id, is_default=False,
-                                        bot_ref=bot, session_id=session_id)
-            except asyncio.CancelledError:
-                pass
+                loop.run_until_complete(
+                    _make_and_run_bot(room_name, candidate_id, job_id, is_default=False,
+                                      bot_ref=bot, session_id=session_id)
+                )
             except Exception as e:
                 logger.error(f"[Interview {room_name}] worker error: {e}")
                 bot.error = str(e)
                 bot.ready.set()
             finally:
-                async with _interviews_lock:
-                    # Only remove ourselves — a re-opened link may have already
-                    # replaced us with a fresh resuming bot under the same room name.
-                    if _interviews.get(room_name) is bot:
-                        _interviews.pop(room_name, None)
-                logger.info(f"[Interview {room_name}] ended; slot freed ({len(_interviews)} active)")
+                # Close THIS loop's asyncpg pool (per-loop), then tear the loop down.
+                try:
+                    loop.run_until_complete(db_manager.close())
+                except Exception:
+                    pass
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+                if _MAIN_LOOP and not _MAIN_LOOP.is_closed():
+                    _MAIN_LOOP.call_soon_threadsafe(_drop_self)
 
-        bot.task = asyncio.create_task(_runner())
+        t = threading.Thread(target=_thread_main, name=f"bot-{room_name}", daemon=True)
+        bot.thread = t
         _interviews[room_name] = bot
+        t.start()
 
     # Wait until the bot is actually IN the room (on_connected sets ready), so the
     # candidate joins to a present, configured bot — not an empty room. LiveKit
-    # cold-connect can occasionally take ~20s, hence the generous timeout.
+    # cold-connect can occasionally take ~20s, hence the generous timeout. The bot
+    # runs in another thread, so wait on its threading.Event off the uvicorn loop.
     try:
-        await asyncio.wait_for(bot.ready.wait(), timeout=35.0)
-    except asyncio.TimeoutError:
+        await asyncio.to_thread(bot.ready.wait, 35.0)
+    except Exception:
         logger.warning(f"[Interview {room_name}] bot not in room within 35s")
     return bot
 
