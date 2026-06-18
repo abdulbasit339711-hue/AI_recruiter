@@ -149,6 +149,12 @@ MAX_CONCURRENT_INTERVIEWS = int(os.getenv("MAX_CONCURRENT_INTERVIEWS", "3"))
 GREETING_FALLBACK_SECONDS = float(os.getenv("GREETING_FALLBACK_SECONDS", "5"))
 _interviews: dict = {}                      # room_name -> InterviewBot
 _interviews_lock = asyncio.Lock()
+# Only ONE bot may be in its LiveKit connect/handshake phase at a time. Each bot runs
+# in its own thread, but concurrent room.connect()s contend for the GIL and can starve
+# one bot's FFI ReadyForRoom handshake → panic. Serializing the connect window (a few
+# seconds each) keeps concurrent interviews reliable; it's a threading.Lock because the
+# bots are on different event loops/threads.
+_CONNECT_SERIALIZE = threading.Lock()
 _shutting_down = False
 # The uvicorn/FastAPI event loop, captured at startup. Interview bots run on their
 # OWN loop in a dedicated thread; they schedule the few main-loop operations (e.g.
@@ -968,6 +974,42 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
             video_in_enabled=RECORD_VIDEO,
         ),
     )
+    # LiveKit's Python FFI needs an UNBLOCKED event loop to finish its room handshake
+    # (the ReadyForRoomEventRequest step). When STT/LLM startup fires on the same
+    # StartFrame, their network connects starve that handshake → "timed out ... after
+    # ConnectCallback" panic, which is WORSE in slower containers (livekit/agents#4183:
+    # LiveKit considers a blocked loop the caller's responsibility). So we GATE the heavy
+    # services' start() on the room actually being connected: the transport connects on a
+    # quiet loop first, then STT/LLM proceed. No audio flows until the candidate joins, so
+    # deferring STT/LLM start by the ~couple seconds of connect time is harmless.
+    connected_evt = asyncio.Event()
+
+    # Global connect-serialization (see _CONNECT_SERIALIZE): held only during THIS bot's
+    # connect window, released the instant it's in the room (or by a failsafe timer).
+    _connect_lock_state = {"held": False}
+
+    def _release_connect_lock():
+        if _connect_lock_state["held"]:
+            _connect_lock_state["held"] = False
+            try:
+                _CONNECT_SERIALIZE.release()
+            except Exception:
+                pass
+
+    def _gate_on_connect(service):
+        """Defer a pipecat service's start() until the LiveKit room is connected."""
+        _orig_start = service.start
+
+        async def _gated_start(frame):
+            if not connected_evt.is_set():
+                try:
+                    await asyncio.wait_for(connected_evt.wait(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    pass  # connect failed/slow — proceed so the pipeline never hangs
+            await _orig_start(frame)
+
+        service.start = _gated_start
+
     stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
     # filler_words=true makes Deepgram transcribe hesitation fillers ("um", "uh",
     # "hmm", etc.) instead of dropping them — useful signal for delivery/assessment.
@@ -981,6 +1023,10 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
     )
+    # Hold STT (Deepgram WS) + LLM startup until the LiveKit room is connected, so their
+    # network handshakes don't starve the FFI room handshake (see _gate_on_connect above).
+    _gate_on_connect(stt)
+    _gate_on_connect(llm)
     # TTS provider. Default to Deepgram Aura over HTTP: a persistent websocket (the old
     # default) dropped under load and looped on "reconnecting", so speech failed often.
     # The HTTP service does one request per utterance — no socket to drop — which is the
@@ -1110,6 +1156,8 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         # only NOW mark ready — so validate waits until the bot is in the room and
         # the candidate never joins an empty room.
         logger.info(f"[Bot] Connected to room {room_name}")
+        connected_evt.set()  # release the gated STT/LLM start now the FFI handshake is done
+        _release_connect_lock()  # let the next queued bot start its connect
         if pre_session is not None and manager.session is None:
             try:
                 await manager.configure_session(pre_session)
@@ -1170,12 +1218,19 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     await manager.start()
     runner = WorkerRunner(handle_sigint=False)  # only the process owner handles signals
     await runner.add_workers(manager.worker)
+    # Take the global connect slot so only this bot handshakes at a time. Acquired
+    # off-loop (to_thread) so waiting doesn't block this bot's loop; released in
+    # on_connected, plus a failsafe timer in case connect never completes.
+    await asyncio.to_thread(_CONNECT_SERIALIZE.acquire)
+    _connect_lock_state["held"] = True
+    asyncio.get_running_loop().call_later(25.0, _release_connect_lock)
     logger.info(f"🚀 Bot joining room {room_name} (candidate={candidate_id}, job={job_id})")
     # readiness is signalled from the on_connected handler (above), i.e. once the
     # bot is actually in the room — not here, where it has only started connecting.
     try:
         await runner.run()
     finally:
+        _release_connect_lock()  # belt-and-suspenders: never hold the slot past the run
         # The worker has ended (disconnect / idle / cancel). Run the final goal
         # analysis and persist the assessment exactly once, for REAL interviews
         # only — the always-on default bot has no candidate/session to finalize.
