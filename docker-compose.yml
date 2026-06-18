@@ -100,14 +100,17 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Inlined at build time — must be the HOST-reachable voice origin.
-        NEXT_PUBLIC_VOICE_URL: ${NEXT_PUBLIC_VOICE_URL:-http://localhost:7860}
+        # Same-origin: the browser hits the frontend's own /voice proxy (inlined at
+        # build time), so it only ever talks to :3000. Override for a split origin.
+        NEXT_PUBLIC_VOICE_URL: ${NEXT_PUBLIC_VOICE_URL:-/voice}
     depends_on:
       - backend
     environment:
       # Server-only: the /api/admin proxy forwards here with the admin token injected.
       BACKEND_URL: http://backend:8000
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      # Server-only: where the same-origin /voice proxy forwards (the voice container).
+      VOICE_PROXY_TARGET: http://voice:7860
     ports:
       - "3000:3000"
 
