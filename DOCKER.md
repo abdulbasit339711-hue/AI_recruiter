@@ -76,5 +76,11 @@ docker compose down -v             # stop + wipe DB and recordings
 - The voice agent's optional YOLO proctoring detector auto-downloads its weights on first
   use; mount a `*.pt` file into the container if you want to pin them offline.
 - LiveKit is an external (cloud) transport — set `LIVEKIT_URL/API_KEY/API_SECRET`; no
-  local LiveKit container is run.
+  local LiveKit container is run. Live interviews spawn a per-room bot on demand via
+  `/interview/validate`.
+- `START_DEFAULT_BOT=false` (default): the local `:7860` test-room bot is disabled. With
+  it on, it connects at container boot during the startup CPU spike and its LiveKit FFI
+  handshake (`ReadyForRoomEventRequest`) times out, crashing the voice process. Leave it
+  off for the stack; flip to `true` only for local single-bot testing.
+- All services use `restart: unless-stopped` so a crashed container is brought back up.
 ```

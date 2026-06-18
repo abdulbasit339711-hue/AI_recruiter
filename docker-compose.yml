@@ -9,6 +9,7 @@
 
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${DB_USER:-ai_user}
@@ -27,6 +28,7 @@ services:
       retries: 10
 
   backend:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.backend
@@ -51,6 +53,7 @@ services:
       - "8000:8000"
 
   voice:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.voice
@@ -81,12 +84,18 @@ services:
       RECORDINGS_DIR: /data/recordings
       PIPELINE_MODE: ${PIPELINE_MODE:-dual}
       GOAL_TRACKING_ENABLED: ${GOAL_TRACKING_ENABLED:-true}
+      # The auto-starting "test-room" bot is only for the local :7860 dashboard. It
+      # connects at boot during the startup CPU spike, where its LiveKit FFI handshake
+      # times out and crashes the process. Real interviews spawn their own per-room bot
+      # on demand via /interview/validate, so keep it off for the stack.
+      START_DEFAULT_BOT: ${START_DEFAULT_BOT:-false}
     volumes:
       - recordings:/data/recordings
     ports:
       - "7860:7860"
 
   frontend:
+    restart: unless-stopped
     build:
       context: ./frontend
       dockerfile: Dockerfile
