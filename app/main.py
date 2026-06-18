@@ -49,7 +49,7 @@ from .iq import (
     verify_result_token,
     IqTokenError,
 )
-from .queue.worker import enqueue_candidate, start_worker, stop_worker, get_queue_stats
+from .queue.worker import enqueue_candidate, start_worker, stop_worker, get_queue_stats, requeue_pending
 from .services.email import OutgoingEmail, get_email_sender
 from .llm.groq_client import groq_circuit_state, get_groq_client
 from .events.broadcaster import event_hub
@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     run_migrations()
     start_worker()
+    requeue_pending()  # recover candidates a prior crash left in Queued/Processing
     get_groq_client()
     # Load heavy sentence‑transformer embedding model once at startup to avoid first‑request latency
     from .core.model_registry import get_embedding_model
@@ -465,21 +466,28 @@ async def upload_resume(
         if iq_token:
             try:
                 res = verify_result_token(iq_token)
-                if res.job_id == job_id:
+                if res.job_id != job_id:
+                    logger.warning(
+                        "IQ token job mismatch (token job=%s, upload job=%s); ignoring.",
+                        res.job_id, job_id,
+                    )
+                elif res.jti and db.query(Candidate.id).filter(
+                    Candidate.iq_result_jti == res.jti
+                ).first():
+                    # Single-use: this signed result was already attached to a prior
+                    # upload. Don't let one score be replayed across many candidates.
+                    logger.warning("IQ token replay (jti=%s already used); ignoring.", res.jti)
+                else:
                     candidate.iq_score = res.score
                     candidate.iq_correct = res.correct
                     candidate.iq_total = res.total
                     candidate.iq_time_seconds = res.time_seconds
                     candidate.iq_details = json.dumps(res.detail) if res.detail else None
+                    candidate.iq_result_jti = res.jti or None
                     # When the screen was taken (result token issuance = submit time).
                     candidate.iq_attempted_at = datetime.fromtimestamp(
                         res.iat, tz=timezone.utc
                     ).isoformat()
-                else:
-                    logger.warning(
-                        "IQ token job mismatch (token job=%s, upload job=%s); ignoring.",
-                        res.job_id, job_id,
-                    )
             except IqTokenError as e:
                 logger.warning("Ignoring invalid IQ token on upload: %s", e)
         db.add(candidate)
@@ -634,7 +642,9 @@ def update_candidate_status(
     payload: StatusUpdateRequest,
     db: Session = Depends(get_db),
 ):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    # Lock the row for the transaction so concurrent PATCHes don't lose status_history
+    # entries (read-modify-write of the JSON list). No-op on SQLite (tests).
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).with_for_update().first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
 
@@ -668,10 +678,11 @@ def add_candidate_note(
     payload: NoteRequest,
     db: Session = Depends(get_db),
 ):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    # Lock the row so concurrent note appends don't clobber each other.
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).with_for_update().first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
-    
+
     timestamp_str = _utcnow().strftime("%Y-%m-%d %H:%M UTC")
     formatted_note = f"[{timestamp_str}] {payload.author}: {payload.note}"
     
@@ -696,10 +707,11 @@ def override_candidate_score(
     payload: ScoreOverrideRequest,
     db: Session = Depends(get_db),
 ):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    # Lock the row so a concurrent status PATCH doesn't drop this override's history entry.
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).with_for_update().first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
-    
+
     history = _load_status_history(candidate)
 
     new_entry = {

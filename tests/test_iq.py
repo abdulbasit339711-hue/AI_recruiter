@@ -264,6 +264,18 @@ def test_upload_attaches_iq_score(client):
     assert cand.iq_score == 80.0 and cand.iq_correct == 8 and cand.iq_total == 10
 
 
+def test_upload_iq_token_is_single_use(client):
+    # The same signed result token must not attach its score to a 2nd upload (replay).
+    jid = _make_job()
+    token = mint_result_token(jid, 8, 10, 80.0, ttl_seconds=3600)
+    r1 = _upload(client, jid, iq_token=token)
+    assert r1.status_code == 200, r1.text
+    assert _candidate(r1.json()["id"]).iq_score == 80.0  # first use attaches
+    r2 = _upload(client, jid, iq_token=token)            # replay same token
+    assert r2.status_code == 200, r2.text
+    assert _candidate(r2.json()["id"]).iq_score is None   # replay ignored
+
+
 def test_upload_without_token_still_succeeds(client):
     jid = _make_job()
     r = _upload(client, jid)

@@ -108,6 +108,41 @@ def _worker_loop() -> None:
             evaluation_queue.task_done()
 
 
+def requeue_pending() -> int:
+    """Re-enqueue candidates a prior crash left mid-flight.
+
+    The in-process queue does NOT survive a restart, so rows stuck in Queued (enqueued
+    but never picked up) or Processing (worker died mid-pipeline) would otherwise hang
+    forever. The scoring pipeline is idempotent (it recomputes), so re-running is safe.
+    Call once at startup, after start_worker().
+    """
+    db = SessionLocal()
+    requeued = 0
+    try:
+        ids = [
+            row[0]
+            for row in db.query(Candidate.id)
+            .filter(Candidate.status.in_([S.QUEUED, S.PROCESSING]))
+            .all()
+        ]
+    finally:
+        db.close()
+    for cid in ids:
+        try:
+            enqueue_candidate(cid)
+            requeued += 1
+        except queue.Full:
+            logger.warning(
+                "requeue_pending: queue full after %d/%d; remaining will stay pending "
+                "until re-uploaded or reprocessed.",
+                requeued, len(ids),
+            )
+            break
+    if requeued:
+        logger.info("Requeued %d candidate(s) left pending by a prior restart.", requeued)
+    return requeued
+
+
 def start_worker() -> None:
     global _worker_thread
     if _worker_thread and _worker_thread.is_alive():

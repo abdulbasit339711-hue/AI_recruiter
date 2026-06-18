@@ -86,5 +86,8 @@ class Candidate(Base):
     # Per-question breakdown (JSON list): prompt, options, chosen, correct, is_correct,
     # time_seconds — shown in the HR "Aptitude screen" block.
     iq_details = Column(Text, nullable=True, default=None)
+    # jti of the IQ result token consumed at upload — makes the token single-use so the
+    # same signed score can't be replayed onto multiple candidate uploads.
+    iq_result_jti = Column(String, nullable=True, default=None)
 
     job = relationship("Job", back_populates="candidates")
