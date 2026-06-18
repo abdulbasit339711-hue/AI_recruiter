@@ -1,4 +1,5 @@
 import axios from "axios";
+import { JobSchema, CandidateSchema, validate, validateEach } from "@/lib/schemas";
 import {
   Job,
   Candidate,
@@ -209,12 +210,12 @@ export interface TurnEvaluation {
 export const api = {
   async getJobs(status?: "Active" | "Archived"): Promise<Job[]> {
     const response = await client.get<Job[]>("/jobs", { params: { status } });
-    return response.data;
+    return validateEach(JobSchema, response.data, "getJobs");
   },
 
   async getJob(jobId: number): Promise<Job> {
     const response = await client.get<Job>(`/jobs/${jobId}`);
-    return response.data;
+    return validate(JobSchema, response.data, "getJob");
   },
 
   async createJob(params: {
@@ -277,7 +278,7 @@ export const api = {
 
   async getCandidate(candidateId: number): Promise<Candidate> {
     const response = await client.get<Candidate>(`/candidates/${candidateId}`);
-    return response.data;
+    return validate(CandidateSchema, response.data, "getCandidate");
   },
 
   async triggerInterviewInvite(
