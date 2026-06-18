@@ -13,9 +13,13 @@ uv run runner.py                # interview HTTP server on :7860
 ```
 
 `runner.py` is the interview HTTP server — it owns `/interview/validate`, `/events`,
-`/chat`, and `/token`, and **spawns a `bot.py` worker per interview**. Starting `bot.py`
-directly binds :7860 with only the Pipecat WebRTC server (no `/interview/validate`), so
-every interview link 404s. Requires Python ≥ 3.11.
+`/chat`, and `/token`, and runs each interview as an **in-process bot on its own thread
++ event loop** (`ensure_interview` → a `threading.Thread` running `_make_and_run_bot`;
+each loop gets its own asyncpg pool + aiohttp session). The dedicated loop keeps the
+LiveKit FFI room handshake from being starved by the uvicorn loop. `bot.py` is a legacy
+default-pipeline module, NOT a per-interview subprocess; running it directly binds :7860
+with only the Pipecat WebRTC server (no `/interview/validate`), so every link 404s.
+Requires Python ≥ 3.11.
 
 ## Pipeline
 
@@ -25,9 +29,9 @@ model alongside a judge/scoring model.
 
 ## Layout
 
-- `runner.py` — interview HTTP server + per-interview worker spawner (**the entrypoint**).
-- `bot.py` — per-interview pipeline worker (launched by `runner.py`, not run directly).
-- `bot_manager.py` — dual-LLM orchestration.
+- `runner.py` — interview HTTP server; spawns each interview bot in its own thread+loop (**the entrypoint**).
+- `bot.py` — legacy default-pipeline + helpers (NOT a per-interview subprocess; don't run directly).
+- `bot_manager.py` — dual-LLM orchestration (built per interview by `runner.py`).
 - `session_factory.py`, `interview_session.py` — session lifecycle + domain model.
 - `database.py` — `DatabaseConfig` / `db_manager` (PostgreSQL).
 - `processors/` — Pipecat `FrameProcessor`s:

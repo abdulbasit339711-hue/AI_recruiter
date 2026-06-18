@@ -75,9 +75,11 @@ pytest                        # Run voice agent tests
 ```
 
 **Important:** `runner.py` is the interview HTTP server — it owns `/interview/validate`,
-`/events`, `/chat`, and `/token`, and spawns a `bot.py` worker per interview. Run
-`runner.py`, not `bot.py`. Starting `bot.py` directly binds :7860 with only the Pipecat
-WebRTC server, which lacks `/interview/validate`, so every interview link 404s.
+`/events`, `/chat`, and `/token`, and runs each interview as an **in-process bot on its
+own thread + event loop** (isolated from the uvicorn loop so the LiveKit FFI handshake
+isn't starved). Run `runner.py`, not `bot.py`. `bot.py` is a legacy default-pipeline
+module, not a per-interview subprocess; running it directly binds :7860 with only the
+Pipecat WebRTC server, which lacks `/interview/validate`, so every interview link 404s.
 
 ### Database
 
@@ -106,11 +108,12 @@ Jobs use soft-delete (`status` = Active/Archived) to preserve candidate history.
 - **lib/**: Utilities including CSV export functionality
 
 ### Voice Agent (voice-agent/server/)
-- **runner.py**: Interview HTTP server (run this) — routes `/interview/validate`, `/events`, `/chat`, `/token`; spawns a bot worker per interview
-- **bot.py**: Per-interview bot worker with STT→LLM→TTS pipeline (launched by runner.py, not run directly)
+- **runner.py**: Interview HTTP server (run this) — routes `/interview/validate`, `/events`, `/chat`, `/token`; runs each interview as an in-process bot on its own thread + event loop
+- **bot_manager.py**: Per-interview bot orchestration (dual-LLM responder + judge), built by runner.py
+- **bot.py**: Legacy default-pipeline + helpers (NOT a per-interview subprocess; don't run directly)
 - **question_flow_processor.py**: Interview state machine
 - **transcript_accumulator.py**: Conversation tracking
-- Uses Deepgram (STT), OpenAI (LLM), Cartesia (TTS)
+- Uses Deepgram (STT), Groq (LLM), Cartesia/Deepgram (TTS)
 
 ## Critical Implementation Details
 
