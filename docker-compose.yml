@@ -88,6 +88,8 @@ services:
       RECORDINGS_DIR: /data/recordings
       PIPELINE_MODE: ${PIPELINE_MODE:-dual}
       GOAL_TRACKING_ENABLED: ${GOAL_TRACKING_ENABLED:-true}
+      BILINGUAL_MODE: ${BILINGUAL_MODE:-true}
+      NOISE_CANCELLATION: ${NOISE_CANCELLATION:-true}
       # The auto-starting "test-room" bot is only for the local :7860 dashboard. It
       # connects at boot during the startup CPU spike, where its LiveKit FFI handshake
       # times out and crashes the process. Real interviews spawn their own per-room bot

@@ -363,7 +363,7 @@ async def health():
         "session": bot_manager.session.session_id if (bot_manager and bot_manager.session) else "none",
         "services": {"STT": svc, "LLM": svc, "TTS": svc},
         "providers": {
-            "stt": "deepgram",
+            "stt": "groq-whisper" if os.getenv("BILINGUAL_MODE", "").lower() in ("1", "true", "yes") else "deepgram",
             "llm": f"groq:{os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')}",
             "tts": os.getenv("TTS_PROVIDER", "deepgram").lower(),
             "tts_degraded": tts_degraded,
