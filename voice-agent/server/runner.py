@@ -35,6 +35,9 @@ from processors.resilient_tts import (
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.services.groq.llm import GroqLLMService
+from pipecat.services.groq.stt import GroqSTTService
+from pipecat.transcriptions.language import Language
+from pipecat.audio.filters.rnnoise_filter import RNNoiseFilter
 from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.workers.runner import WorkerRunner
 
@@ -976,11 +979,16 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         .with_grants(api.VideoGrants(room_join=True, room=room_name))
         .to_jwt()
     )
+    _noise_cancel = os.getenv("NOISE_CANCELLATION", "true").lower() not in ("0", "false", "no")
     transport = LiveKitTransport(
         url=url, token=token, room_name=room_name,
         params=LiveKitParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
+            # Server-side RNNoise filter on the inbound audio stream.  Runs fully
+            # in-process (no API key) and reduces background noise before STT sees it,
+            # lowering false transcriptions and spurious interruptions.
+            audio_in_filter=RNNoiseFilter() if _noise_cancel else None,
             # Ingest the candidate's camera so BotManager can record video.
             video_in_enabled=RECORD_VIDEO,
         ),
@@ -1026,15 +1034,34 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
 
         service.start = _gated_start
 
-    stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
-    # filler_words=true makes Deepgram transcribe hesitation fillers ("um", "uh",
-    # "hmm", etc.) instead of dropping them — useful signal for delivery/assessment.
-    stt_settings = {"extra": {"filler_words": True}}
-    if DEEPGRAM_ENDPOINTING_MS is not None:
-        # Server-side silence (ms) before Deepgram finalizes a transcript.
-        stt_settings["endpointing"] = DEEPGRAM_ENDPOINTING_MS
-    stt_kwargs["settings"] = DeepgramSTTService.Settings(**stt_settings)
-    stt = DeepgramSTTService(**stt_kwargs)
+    _bilingual = os.getenv("BILINGUAL_MODE", "").lower() in ("1", "true", "yes")
+    if _bilingual:
+        # Bilingual English + Roman Urdu mode: use Groq Whisper (supports Urdu auto-detect).
+        # language=None → auto-detect per utterance (handles English / Roman Urdu mix).
+        # prompt guides Whisper to keep Roman Urdu in Latin script rather than transliterating.
+        stt = GroqSTTService(
+            api_key=os.environ["GROQ_API_KEY"],
+            settings=GroqSTTService.Settings(
+                model="whisper-large-v3-turbo",
+                language=None,  # auto-detect English / Urdu per utterance
+                prompt=(
+                    "The speaker may use Roman Urdu (Urdu in Latin script) mixed with English. "
+                    "Transcribe Urdu words phonetically in Roman Urdu (Latin script), "
+                    "not in Arabic/Nastaliq script. Example: 'mera tajurba teen saal ka hai'."
+                ),
+            ),
+        )
+        logger.info("[STT] Bilingual mode: GroqSTTService (Whisper) with Roman Urdu auto-detect")
+    else:
+        stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
+        # filler_words=true makes Deepgram transcribe hesitation fillers ("um", "uh",
+        # "hmm", etc.) instead of dropping them — useful signal for delivery/assessment.
+        stt_settings = {"extra": {"filler_words": True}}
+        if DEEPGRAM_ENDPOINTING_MS is not None:
+            stt_settings["endpointing"] = DEEPGRAM_ENDPOINTING_MS
+        stt_kwargs["settings"] = DeepgramSTTService.Settings(**stt_settings)
+        stt = DeepgramSTTService(**stt_kwargs)
+        logger.info("[STT] Deepgram streaming STT")
     llm = GroqLLMService(
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
@@ -1102,7 +1129,9 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
                 self._connection = None
                 if keepalive_task:
                     await self.cancel_task(keepalive_task)
-    stt._connection_handler = _types.MethodType(_patched_connection_handler, stt)
+    # Only patch DeepgramSTTService — GroqSTTService (bilingual mode) uses a different transport.
+    if isinstance(stt, DeepgramSTTService):
+        stt._connection_handler = _types.MethodType(_patched_connection_handler, stt)
 
     if is_default:
         bot_manager = manager

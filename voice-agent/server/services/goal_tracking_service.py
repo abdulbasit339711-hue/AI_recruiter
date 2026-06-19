@@ -244,6 +244,8 @@ Conversation Context:
 """
 
         return f"""You are analyzing a candidate's interview response for goal progress.
+NOTE: The candidate may respond in English, Roman Urdu (Urdu written in Latin script), or a mix.
+Evaluate meaning and intent regardless of language — Roman Urdu responses are equally valid.
 
 CANDIDATE RESPONSE: {response_text}
 
@@ -408,6 +410,9 @@ Evidence Found: {len(goal.get('evidence', []))} items
         ])
 
         return f"""You are an AI HR analyst conducting a comprehensive post-interview candidate evaluation.
+NOTE: The transcript may contain Roman Urdu (Urdu written in Latin/phonetic script) mixed with English.
+Roman Urdu responses are fully valid — evaluate meaning and quality regardless of language.
+When quoting evidence, reproduce the original text (Roman Urdu or English) exactly.
 
 SESSION OVERVIEW:
 - Duration: {(session_overview.get('duration_seconds') or 0) // 60} minutes

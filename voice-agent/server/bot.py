@@ -132,19 +132,41 @@ BASE_INTERVIEWER_PERSONA = (
     "Base each question on what the candidate just said, and assess them against the role's goals."
 )
 
+BILINGUAL_ADDENDUM = (
+    "\n\nBILINGUAL MODE — English & Roman Urdu:\n"
+    "- You MUST speak in a natural mix of English and Roman Urdu (Urdu written in Latin "
+    "script, e.g. 'Aap ka experience kya hai?' or 'Bohat acha — ab agle sawal ki taraf "
+    "chalte hain.').\n"
+    "- Keep Roman Urdu conversational and phonetic — no Arabic script, no formal literary "
+    "Urdu. Mix freely: start a sentence in English, finish it in Roman Urdu, or vice versa.\n"
+    "- The candidate may reply in English, Roman Urdu, or a mix — accept all freely.\n"
+    "- When transcribing or summarising candidate answers, use Roman Urdu for any Urdu "
+    "words the candidate spoke (keep them in Latin script).\n"
+    "- Common transitions: 'Theek hai', 'Acha', 'Bilkul', 'Shukriya', 'Bohat acha'.\n"
+    "- Common question starters: 'Aap ne', 'Kya aap', 'Zara batayein', 'Is ke baare mein'.\n"
+    "- Greet the candidate with: 'Assalam o Alaikum! Mera naam AI interviewer hai. Aaj hum "
+    "aap ka interview karenge — English ya Roman Urdu, jis mein aap comfortable hon, usi "
+    "mein baat kar sakte hain.'"
+)
+
 
 def compose_system_prompt(
     job_role: str,
     company_name: str,
     interview_type: str = "technical",
     job_llm_prompt: str | None = None,
+    bilingual: bool = False,
 ) -> str:
     """Build the interviewer system prompt for a specific job/role."""
+    import os as _os
+    bilingual = bilingual or _os.getenv("BILINGUAL_MODE", "").lower() in ("1", "true", "yes")
     prompt = BASE_INTERVIEWER_PERSONA.format(
         interview_type=interview_type or "technical",
         job_role=job_role or "this role",
         company_name=company_name or "the company",
     )
+    if bilingual:
+        prompt += BILINGUAL_ADDENDUM
     if job_llm_prompt:
         prompt += "\n\nRole-specific evaluation guidance:\n" + job_llm_prompt.strip()
     return prompt

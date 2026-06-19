@@ -324,7 +324,7 @@ async def build_recruiter_config(job: dict, candidate: dict | None = None) -> Re
             company_name=company_name,
             interview_type=SCREENING_INTERVIEW_TYPE,
             system_prompt=compose_system_prompt(
-                job_role, company_name, SCREENING_INTERVIEW_TYPE, instructions)
+                job_role, company_name, SCREENING_INTERVIEW_TYPE, instructions, bilingual=True)
             + _candidate_briefing(candidate),
             questions=questions,
             goals=goals,
@@ -375,7 +375,8 @@ async def build_recruiter_config(job: dict, candidate: dict | None = None) -> Re
         job_role=job_role,
         company_name=company_name,
         interview_type="technical",
-        system_prompt=compose_system_prompt(job_role, company_name, "technical", job.get("llm_prompt"))
+        system_prompt=compose_system_prompt(
+            job_role, company_name, "technical", job.get("llm_prompt"), bilingual=True)
         + _candidate_briefing(candidate),
         questions=questions,
         goals=goals,

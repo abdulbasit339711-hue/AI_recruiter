@@ -237,7 +237,13 @@ export default function InterviewPage() {
       // can't even see the "tap to enable sound" prompt (so the bot is silent).
       // Candidates with no working mic can still answer via the text chat box.
       try {
-        await room.localParticipant.setMicrophoneEnabled(true);
+        // Request native browser noise suppression + echo cancellation so the STT
+        // service receives cleaner audio (complements the server-side RNNoise filter).
+        await room.localParticipant.setMicrophoneEnabled(true, {
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: true,
+        });
         setMicEnabled(true);
       } catch {
         setMicEnabled(false);

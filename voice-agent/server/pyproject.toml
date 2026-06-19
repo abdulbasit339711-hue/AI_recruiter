@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     # 1.4.0 + the dedicated-loop bot fix (runner.py) is required for LiveKit to
     # complete the room handshake; 1.3.0 still FFI-panics even off the uvicorn loop.
-    "pipecat-ai[cartesia,deepgram,openai,runner,silero,webrtc,livekit]==1.4.0",
+    "pipecat-ai[cartesia,deepgram,groq,openai,rnnoise,runner,silero,webrtc,livekit]==1.4.0",
     "pipecatcloud",
     "fastapi",
     "uvicorn",
@@ -19,6 +19,7 @@ dependencies = [
     "alembic>=1.13.0",
     "pyjwt>=2.8.0",
     "recruiter-shared",
+    "pyrnnoise>=0.4.1",
 ]
 
 [tool.uv.sources]
