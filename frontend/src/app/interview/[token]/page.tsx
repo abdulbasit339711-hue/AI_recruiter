@@ -213,7 +213,16 @@ export default function InterviewPage() {
       room.on(RoomEvent.ParticipantDisconnected, (p: Participant) => {
         if (isAgent(p)) setAgentPresent(false);
       });
-      await room.connect(info.livekit_url, info.livekit_token);
+      // Bound the join so a blocked/again WebRTC path can't hang on "Connecting…"
+      // forever (corporate Wi‑Fi / VPN often block the UDP/TURN media transport even
+      // when HTTPS works). On timeout we surface a clear, retryable error below.
+      const CONNECT_TIMEOUT_MS = 20000;
+      await Promise.race([
+        room.connect(info.livekit_url, info.livekit_token),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("CONNECT_TIMEOUT")), CONNECT_TIMEOUT_MS)
+        ),
+      ]);
       // Seed from whoever is already in the room (the bot is normally there first).
       setAgentPresent([...room.remoteParticipants.values()].some(isAgent));
       // Join is a user gesture, so this usually unblocks remote audio immediately.
@@ -243,7 +252,21 @@ export default function InterviewPage() {
       }
     } catch (e) {
       console.error(e);
-      setError(describeMediaError(e));
+      // Clean up the half-open room so a retry starts fresh.
+      try {
+        roomRef.current?.disconnect();
+      } catch {
+        /* ignore */
+      }
+      roomRef.current = null;
+      const timedOut = e instanceof Error && e.message === "CONNECT_TIMEOUT";
+      setError(
+        timedOut
+          ? "Couldn’t connect to the live interview — the audio/video connection timed out. " +
+              "Your network may be blocking it (corporate Wi‑Fi or a VPN often do). Try a " +
+              "different network or turn off any VPN, then tap “Join now” to retry."
+          : describeMediaError(e)
+      );
       setPhase("ready");
     }
   }

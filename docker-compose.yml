@@ -79,6 +79,10 @@ services:
       # Must MATCH the backend's values (token verification / operator auth).
       INTERVIEW_LINK_SECRET: ${INTERVIEW_LINK_SECRET}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      # Require the operator bearer token on /chat, /interview/configure|end, /settings,
+      # /pipeline. Candidate routes (/interview/validate, /events) stay open. On by
+      # default now that the stack may be exposed via a tunnel.
+      VOICE_REQUIRE_AUTH: ${VOICE_REQUIRE_AUTH:-true}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       RECORDINGS_DIR: /data/recordings

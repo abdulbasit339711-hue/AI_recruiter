@@ -86,21 +86,44 @@ def _templates_to_config(templates: list[dict]) -> tuple[list[InterviewGoal], li
 
 
 def _generic_config() -> tuple[list[InterviewGoal], list[InterviewQuestion]]:
-    goals = [
-        InterviewGoal(id="technical_depth", label="Technical Depth",
-                      description="Depth and correctness of technical reasoning for the role", weight=0.5),
-        InterviewGoal(id="communication", label="Communication",
-                      description="Clear, structured communication", weight=0.3),
-        InterviewGoal(id="role_fit", label="Role Fit",
-                      description="Relevant experience and motivation for this role", weight=0.2),
+    """Fallback 14-dimension evaluation framework used when no role-specific templates exist."""
+    specs = [
+        ("communication_skills",   "Communication Skills",           "Clarity and effectiveness of communication; active listening and professional interaction",                          0.07),
+        ("confidence_presentation","Confidence & Presentation",       "Confidence in responses, professional demeanor, and handling of challenging questions",                              0.06),
+        ("technical_competency",   "Technical Competency",           "Role-specific knowledge and technical expertise; ability to apply skills to practical scenarios",                    0.10),
+        ("problem_solving",        "Problem-Solving & Critical Thinking","Analytical and decision-making abilities; creativity in resolving challenges",                                  0.09),
+        ("relevant_experience",    "Relevant Experience",            "Relevance of previous experience and responsibilities; achievements and demonstrated impact",                        0.09),
+        ("skills_match",           "Skills Match Assessment",        "Alignment with job requirements; identification of strengths and skill gaps",                                        0.08),
+        ("cultural_fit",           "Cultural & Organizational Fit",  "Alignment with company values and culture; teamwork, ethics, and adaptability",                                     0.07),
+        ("leadership_ownership",   "Leadership & Ownership",         "Initiative, accountability, leadership and influence potential",                                                     0.06),
+        ("learning_agility",       "Learning Agility",               "Willingness to learn and improve; adaptability to change and feedback",                                             0.07),
+        ("emotional_intelligence", "Emotional Intelligence",         "Self-awareness and emotional control; interpersonal and conflict-management skills",                                 0.06),
+        ("motivation_alignment",   "Motivation & Career Alignment",  "Interest in the role and organization; career goals and long-term commitment",                                      0.07),
+        ("behavioral_assessment",  "Behavioral Assessment",          "Professional attitude and work ethic; reliability and responsibility",                                               0.07),
+        ("resume_consistency",     "Resume & Interview Consistency", "Consistency between resume and interview responses; authenticity of experience and achievements",                    0.07),
+        ("overall_performance",    "Overall Performance Evaluation", "Key strengths and development areas; overall suitability and competency rating",                                    0.04),
     ]
+    goals = [InterviewGoal(id=gid, label=label, description=desc, weight=round(w, 3))
+             for gid, label, desc, w in specs]
     questions = [
-        InterviewQuestion(id="q1", text="Tell me about a recent project most relevant to this role and your specific contribution.",
-                          goal_id="role_fit", expected_depth=AnswerDepth.LONG, expected_theme="project contribution outcome"),
-        InterviewQuestion(id="q2", text="Walk me through a technically challenging problem you solved and how you approached it.",
-                          goal_id="technical_depth", expected_depth=AnswerDepth.LONG, expected_theme="problem approach solution"),
-        InterviewQuestion(id="q3", text="How do you communicate trade-offs or handle disagreements with your team?",
-                          goal_id="communication", expected_depth=AnswerDepth.MEDIUM, expected_theme="communication conflict"),
+        InterviewQuestion(id="q1", text="Walk me through your most recent role and your key responsibilities.",
+                          goal_id="relevant_experience", expected_depth=AnswerDepth.LONG,
+                          expected_theme="experience responsibilities impact"),
+        InterviewQuestion(id="q2", text="Describe a technically challenging problem you solved and the approach you took.",
+                          goal_id="technical_competency", expected_depth=AnswerDepth.LONG,
+                          expected_theme="problem approach solution"),
+        InterviewQuestion(id="q3", text="Tell me about a time you had to adapt quickly to a significant change.",
+                          goal_id="learning_agility", expected_depth=AnswerDepth.MEDIUM,
+                          expected_theme="change adaptability learning"),
+        InterviewQuestion(id="q4", text="How do you handle disagreements with teammates or stakeholders?",
+                          goal_id="communication_skills", expected_depth=AnswerDepth.MEDIUM,
+                          expected_theme="communication conflict teamwork"),
+        InterviewQuestion(id="q5", text="What motivates you about this role and where do you see yourself in three years?",
+                          goal_id="motivation_alignment", expected_depth=AnswerDepth.MEDIUM,
+                          expected_theme="motivation career goals"),
+        InterviewQuestion(id="q6", text="Describe a situation where you took ownership of a problem no one asked you to solve.",
+                          goal_id="leadership_ownership", expected_depth=AnswerDepth.MEDIUM,
+                          expected_theme="initiative ownership accountability"),
     ]
     return goals, questions
 
@@ -229,12 +252,28 @@ DEPARTMENT: {job.get('department')}
 JOB DESCRIPTION:
 {(job.get('job_description') or '').strip()[:2000]}
 
-Produce 3-5 interview GOALS (competencies to assess) for this role. For each goal:
-- "title": short competency name
-- "description": one sentence on what a strong candidate shows
-- "priority_weight": 0.0-1.0 (higher = more important)
+Select 5-7 of the most ROLE-RELEVANT dimensions from this standard evaluation framework and produce interview goals for them:
+1. Communication Skills
+2. Confidence & Presentation
+3. Technical Competency
+4. Problem-Solving & Critical Thinking
+5. Relevant Experience
+6. Skills Match Assessment
+7. Cultural & Organizational Fit
+8. Leadership & Ownership
+9. Learning Agility
+10. Emotional Intelligence
+11. Motivation & Career Alignment
+12. Behavioral Assessment
+13. Resume & Interview Consistency
+14. Overall Performance Evaluation
+
+For each selected dimension produce:
+- "title": the exact dimension name from the list above
+- "description": one sentence on what a strong candidate shows for this role
+- "priority_weight": 0.0-1.0 (higher = more important for this role)
 - "success_criteria": 2-4 short strings describing a strong answer
-- "questions": 1-2 specific interview questions for this goal
+- "questions": 1-2 specific, role-tailored interview questions
 
 Return exactly: {{"goals": [{{"title": "...", "description": "...", "priority_weight": 0.0, "success_criteria": ["..."], "questions": ["..."]}}]}}"""
 

@@ -1485,9 +1485,27 @@ def _build_candidate_report_md(candidate: Candidate, job_title: str, interview: 
         L += [f"- Role: {sess.get('role_type')}", f"- Status: {sess.get('status')}"]
         oa = _parse(sess.get("overall_assessment"))
         ov = (oa or {}).get("overall_assessment") if isinstance(oa, dict) else None
-        if isinstance(ov, dict):
+        fr = (oa or {}).get("final_ai_recommendation") if isinstance(oa, dict) else None
+        if isinstance(fr, dict):
+            if fr.get("decision"):
+                L.append(f"- **AI Recommendation: {fr['decision']}**")
+            if fr.get("overall_candidate_score") is not None:
+                L.append(f"- Overall Candidate Score: {fr['overall_candidate_score']}/100")
+            if fr.get("job_match_percentage") is not None:
+                L.append(f"- Job Match: {fr['job_match_percentage']}%")
+            if fr.get("decision_rationale"):
+                L.append(f"- Rationale: {fr['decision_rationale']}")
+            for label, key in (("Key Strengths", "key_strengths"), ("Development Areas", "development_areas")):
+                vals = fr.get(key) or []
+                if vals:
+                    L.append(f"- {label}: " + "; ".join(str(v) for v in vals))
+        elif isinstance(ov, dict):
             if ov.get("hiring_recommendation"):
-                L.append(f"- **Recommendation: {ov['hiring_recommendation']}**")
+                L.append(f"- **AI Recommendation: {ov['hiring_recommendation']}**")
+            if ov.get("overall_candidate_score") is not None:
+                L.append(f"- Overall Candidate Score: {ov['overall_candidate_score']}/100")
+            if ov.get("job_match_percentage") is not None:
+                L.append(f"- Job Match: {ov['job_match_percentage']}%")
             for label, key in (("Strengths", "strengths"), ("Areas for improvement", "areas_for_improvement")):
                 vals = ov.get(key) or []
                 if vals:

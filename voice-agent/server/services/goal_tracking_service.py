@@ -394,7 +394,7 @@ Evidence Found: {len(goal.get('evidence', []))} items
             for turn in transcript[-50:]  # Last 50 turns for context
         ])
 
-        return f"""You are conducting a comprehensive interview goal assessment.
+        return f"""You are an AI HR analyst conducting a comprehensive post-interview candidate evaluation.
 
 SESSION OVERVIEW:
 - Duration: {(session_overview.get('duration_seconds') or 0) // 60} minutes
@@ -408,7 +408,25 @@ GOALS ANALYSIS:
 CONVERSATION TRANSCRIPT:
 {transcript_text}
 
-Provide comprehensive analysis in JSON format:
+Evaluate the candidate across ALL 14 dimensions below, then provide a final AI recommendation.
+
+EVALUATION FRAMEWORK:
+1. Communication Skills — clarity, active listening, professional interaction
+2. Confidence & Presentation — confidence, demeanor, handling of challenging questions
+3. Technical Competency — role-specific knowledge, practical application of skills
+4. Problem-Solving & Critical Thinking — analytical ability, decision-making, creativity
+5. Relevant Experience — prior responsibilities, achievements, demonstrated impact
+6. Skills Match Assessment — alignment with job requirements, strengths and gaps
+7. Cultural & Organizational Fit — values alignment, teamwork, ethics, adaptability
+8. Leadership & Ownership — initiative, accountability, influence potential
+9. Learning Agility — willingness to learn, adaptability to change and feedback
+10. Emotional Intelligence — self-awareness, emotional control, conflict management
+11. Motivation & Career Alignment — interest in the role, career goals, long-term commitment
+12. Behavioral Assessment — professional attitude, work ethic, reliability
+13. Resume & Interview Consistency — consistency between CV claims and interview responses
+14. Overall Performance Evaluation — key strengths, development areas, suitability rating
+
+Provide your analysis in JSON format:
 {{
     "goal_assessments": [
         {{
@@ -424,18 +442,49 @@ Provide comprehensive analysis in JSON format:
             "recommendations": ["improvement1", "improvement2"]
         }}
     ],
+    "dimension_scores": {{
+        "communication_skills": {{"score": 0-100, "notes": "..."}},
+        "confidence_presentation": {{"score": 0-100, "notes": "..."}},
+        "technical_competency": {{"score": 0-100, "notes": "..."}},
+        "problem_solving": {{"score": 0-100, "notes": "..."}},
+        "relevant_experience": {{"score": 0-100, "notes": "..."}},
+        "skills_match": {{"score": 0-100, "notes": "..."}},
+        "cultural_fit": {{"score": 0-100, "notes": "..."}},
+        "leadership_ownership": {{"score": 0-100, "notes": "..."}},
+        "learning_agility": {{"score": 0-100, "notes": "..."}},
+        "emotional_intelligence": {{"score": 0-100, "notes": "..."}},
+        "motivation_alignment": {{"score": 0-100, "notes": "..."}},
+        "behavioral_assessment": {{"score": 0-100, "notes": "..."}},
+        "resume_consistency": {{"score": 0-100, "notes": "..."}},
+        "overall_performance": {{"score": 0-100, "notes": "..."}}
+    }},
     "overall_assessment": {{
         "interview_effectiveness": 0.0-1.0,
         "goal_coverage_rate": 0.0-1.0,
         "candidate_performance": 0.0-1.0,
         "strengths": ["strength1", "strength2"],
         "areas_for_improvement": ["area1", "area2"],
-        "hiring_recommendation": "strong_hire|hire|no_hire|strong_no_hire"
+        "overall_candidate_score": 0-100,
+        "job_match_percentage": 0-100,
+        "hiring_recommendation": "Hire|Consider|Reject"
+    }},
+    "final_ai_recommendation": {{
+        "overall_candidate_score": 0-100,
+        "job_match_percentage": 0-100,
+        "decision": "Hire|Consider|Reject",
+        "decision_rationale": "One concise paragraph explaining the recommendation",
+        "key_strengths": ["strength1", "strength2", "strength3"],
+        "development_areas": ["area1", "area2"]
     }},
     "next_steps": ["action1", "action2"]
 }}
 
-Be thorough and evidence-based in your analysis."""
+Scoring guide for hiring_recommendation / decision:
+- Hire: strong candidate, clear fit, recommend for next stage (overall_candidate_score >= 70)
+- Consider: mixed signals, conditional recommendation, needs further evaluation (40-69)
+- Reject: significant gaps or misalignment (< 40)
+
+Be thorough and evidence-based. Cite specific quotes from the transcript when scoring dimensions."""
 
     # ===================================
     # UTILITY METHODS

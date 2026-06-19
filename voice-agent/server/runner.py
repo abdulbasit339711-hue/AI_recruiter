@@ -81,7 +81,7 @@ def _suppress_idle_stt_noise(record) -> bool:
     return not any(s in msg for s in _STT_IDLE_NOISE)
 
 
-logger.add(sys.stderr, level="DEBUG", filter=_suppress_idle_stt_noise)
+logger.add(sys.stderr, level="DEBUG", filter=_suppress_idle_stt_noise, enqueue=True)
 
 # The Deepgram SDK uses websockets' DEPRECATED legacy client, which logs benign
 # teardown tracebacks ("keepalive ping failed" / "data transfer failed" with an
@@ -281,10 +281,12 @@ from fastapi.responses import JSONResponse
 #
 # For an exposed/production deployment, set VOICE_REQUIRE_AUTH=true to require the
 # shared admin bearer token on these operator endpoints.
+# Genuine operator/system endpoints that reconfigure the bot or runtime — gated when
+# VOICE_REQUIRE_AUTH is on. NOTE: /chat and /interview/end are reachable by the
+# candidate page (text answers; ending one's own interview), so they are NOT gated —
+# gating them 401s real candidates. /interview/validate and /events are candidate-open too.
 _PROTECTED_VOICE_ROUTES = {
     ("POST", "/interview/configure"),
-    ("POST", "/chat"),
-    ("POST", "/interview/end"),
     ("POST", "/settings"),
     ("POST", "/pipeline"),
 }
@@ -535,6 +537,11 @@ async def sse_events(session: str | None = None):
     queue = await broadcaster.subscribe(session)
     logger.debug("Client subscribed to events stream")
     async def event_generator():
+        # SSE comment sent immediately so the Next.js proxy's ReadableStream.pull()
+        # receives a first chunk right away — without this the proxy route handler
+        # holds open its fetch() without ever flushing response headers to the browser
+        # (Next.js 15 standalone calls pull() before sending the 200 status line).
+        yield ": connected\n\n"
         try:
             while True:
                 message = await queue.get()
@@ -542,7 +549,11 @@ async def sse_events(session: str | None = None):
         except asyncio.CancelledError:
             broadcaster.unsubscribe(queue)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 @app.get("/session")
 async def get_session():
@@ -999,14 +1010,19 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     def _gate_on_connect(service):
         """Defer a pipecat service's start() until the LiveKit room is connected."""
         _orig_start = service.start
+        svc_name = service.__class__.__name__
 
         async def _gated_start(frame):
             if not connected_evt.is_set():
                 try:
+                    logger.debug(f"[Gate] {svc_name}.start() waiting for LiveKit connect")
                     await asyncio.wait_for(connected_evt.wait(), timeout=30.0)
                 except asyncio.TimeoutError:
+                    logger.warning(f"[Gate] {svc_name}.start() timed out waiting for connect")
                     pass  # connect failed/slow — proceed so the pipeline never hangs
+            logger.debug(f"[Gate] {svc_name}.start() calling original start")
             await _orig_start(frame)
+            logger.debug(f"[Gate] {svc_name}.start() done")
 
         service.start = _gated_start
 
@@ -1056,6 +1072,38 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
             user_turn_strategies=build_user_turn_strategies()),
     )
     manager = BotManager(transport, stt, llm, tts, context, user_aggregator, assistant_aggregator, mode=pipeline_mode)
+
+    # Patch DeepgramSTTService._connection_handler to add retry backoff.
+    # Without backoff the tight WebSocket retry loop (on e.g. an invalid API key) can
+    # starve the event loop and prevent StartFrame from propagating through the pipeline,
+    # leaving PipelineWorker stuck in _wait_for_pipeline_start indefinitely.
+    import types as _types, asyncio as _asyncio_stt
+    async def _patched_connection_handler(self):
+        while True:
+            connect_kwargs = self._build_connect_kwargs()
+            keepalive_task = None
+            try:
+                async with self._client.listen.v1.connect(**connect_kwargs) as connection:
+                    self._connection = connection
+                    self._connection_ready.set()
+                    from deepgram.core.events import EventType as _EvtType
+                    connection.on(_EvtType.MESSAGE, self._on_message)
+                    connection.on(_EvtType.ERROR, self._on_error)
+                    logger.debug(f"{self}: Websocket connection initialized")
+                    keepalive_task = self.create_task(
+                        self._keepalive_handler(), f"{self}::keepalive"
+                    )
+                    await connection.start_listening()
+            except Exception as e:
+                logger.warning(f"{self}: Connection lost, will retry: {e}")
+                await _asyncio_stt.sleep(2.0)
+            finally:
+                self._connection_ready.clear()
+                self._connection = None
+                if keepalive_task:
+                    await self.cancel_task(keepalive_task)
+    stt._connection_handler = _types.MethodType(_patched_connection_handler, stt)
+
     if is_default:
         bot_manager = manager
     if bot_ref:
@@ -1218,6 +1266,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     await manager.start()
     runner = WorkerRunner(handle_sigint=False)  # only the process owner handles signals
     await runner.add_workers(manager.worker)
+
     # Take the global connect slot so only this bot handshakes at a time. Acquired
     # off-loop (to_thread) so waiting doesn't block this bot's loop; released in
     # on_connected, plus a failsafe timer in case connect never completes.
