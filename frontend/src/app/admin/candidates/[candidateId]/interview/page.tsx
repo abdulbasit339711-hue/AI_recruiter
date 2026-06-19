@@ -1,136 +1,153 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { Brain, Trophy } from "lucide-react";
+import { Brain } from "lucide-react";
 
 import { InterviewPanel } from "@/components/candidates/InterviewPanel";
 import { useCandidate } from "@/hooks/useCandidate";
+import { useInterviewResult } from "@/hooks/useInterviewResult";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { CountUp, RadialGauge, BarChart } from "@/components/ui/charts";
-import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
+import { CountUp, RadialGauge } from "@/components/ui/charts";
+import { FadeIn } from "@/components/ui/motion";
 
 const TIER_MAX = { tier1: 30, tier2: 40, tier3: 30 } as const;
+
+function parseAssessment(raw: string | null | undefined) {
+  if (!raw) return null;
+  try {
+    const p = JSON.parse(raw);
+    if (p && typeof p === "object") return p as Record<string, unknown>;
+  } catch { /* ignore */ }
+  return null;
+}
 
 export default function CandidateInterviewPage() {
   const { candidateId } = useParams<{ candidateId: string }>();
   const id = Number(candidateId);
   const { data: candidate, isLoading } = useCandidate(id);
+  const { data: interviewResult } = useInterviewResult(id);
+
+  const assessment = parseAssessment(interviewResult?.session?.overall_assessment);
+  const fr = (assessment?.final_ai_recommendation ?? {}) as Record<string, unknown>;
+  const ov = (assessment?.overall_assessment ?? {}) as Record<string, unknown>;
+  const decision = String(fr.decision ?? ov.hiring_recommendation ?? "").replace(/_/g, " ");
+  const overallScore = fr.overall_candidate_score != null ? Number(fr.overall_candidate_score)
+    : ov.overall_candidate_score != null ? Number(ov.overall_candidate_score) : null;
+  const jobMatch = fr.job_match_percentage != null ? Number(fr.job_match_percentage)
+    : ov.job_match_percentage != null ? Number(ov.job_match_percentage) : null;
+  const rationale = String(fr.decision_rationale ?? "");
+
+  const d = decision.toLowerCase();
+  const decisionColor = d === "hire" ? "var(--strong)" : d === "reject" ? "var(--weak)" : d ? "var(--promising)" : null;
+  const decisionBg = d === "hire" ? "rgba(52,194,138,0.12)" : d === "reject" ? "rgba(242,92,124,0.12)" : d ? "rgba(245,181,68,0.12)" : null;
+
+  const total = Number(candidate?.hr_score_override ?? candidate?.total_score) || 0;
+  const gaugeColor = total >= 70 ? "var(--strong)" : total >= 40 ? "var(--promising)" : "var(--weak)";
+  const tiers = [
+    { label: "Profile", value: Number(candidate?.tier1) || 0, max: TIER_MAX.tier1, color: "var(--strong)" },
+    { label: "Semantic", value: Number(candidate?.tier2) || 0, max: TIER_MAX.tier2, color: "var(--primary)" },
+    { label: "LLM eval", value: Number(candidate?.tier3) || 0, max: TIER_MAX.tier3, color: "var(--promising)" },
+  ];
+
+  const iq = candidate?.iq_score;
+  const hasIq = iq != null && !Number.isNaN(Number(iq));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-4xl space-y-4 p-6">
+      {/* ── Compact page header ── */}
       <FadeIn>
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-xl font-semibold text-heading">Interview results</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              {candidate?.name || candidate?.filename || "Candidate"} · scores &amp; transcript
-            </p>
+            <h1 className="text-lg font-semibold text-heading">
+              {candidate?.name || candidate?.filename || "Candidate"}
+            </h1>
+            <p className="text-xs text-muted-foreground">Interview results</p>
           </div>
+          {decisionColor && (
+            <span
+              className="rounded-lg px-4 py-1.5 text-sm font-bold tracking-wide"
+              style={{ background: decisionBg ?? undefined, color: decisionColor, border: `1px solid ${decisionColor}40` }}
+            >
+              {decision.toUpperCase()}
+            </span>
+          )}
         </div>
       </FadeIn>
 
-      {isLoading ? (
-        <ScoreSkeleton />
-      ) : candidate ? (
-        <ScoreOverview candidate={candidate} />
-      ) : null}
+      {/* ── Single compact summary card: score + tiers + AI verdict ── */}
+      {!isLoading && candidate && (
+        <FadeIn delay={0.05}>
+          <GlassCard className="p-4">
+            <div className="flex flex-wrap items-center gap-5">
+              {/* Gauge */}
+              <RadialGauge value={Math.round(total)} max={100} size={90} stroke={8} color={gaugeColor} label="score" sublabel="/ 100" />
 
-      <FadeIn delay={0.15}>
-        <GlassCard className="p-5 sm:p-6">
+              {/* Tier bars */}
+              <div className="flex-1 min-w-[160px] space-y-2">
+                {tiers.map((t) => {
+                  const pct = t.max ? (t.value / t.max) * 100 : 0;
+                  return (
+                    <div key={t.label} className="flex items-center gap-2">
+                      <span className="w-16 text-[11px] text-muted-foreground shrink-0">{t.label}</span>
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden bg-foreground/10">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: t.color }} />
+                      </div>
+                      <span className="w-10 text-right font-mono text-[11px] tabular-nums text-heading">
+                        {Math.round(t.value)}/{t.max}
+                      </span>
+                    </div>
+                  );
+                })}
+                {hasIq && (
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <Brain className="h-3 w-3 text-primary shrink-0 ml-0.5" />
+                    <span className="w-14 text-[11px] text-muted-foreground shrink-0">IQ screen</span>
+                    <span className="font-mono text-[11px] font-semibold text-primary tabular-nums">
+                      <CountUp value={Number(iq)} suffix="%" />
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* AI verdict column */}
+              {(overallScore != null || jobMatch != null) && (
+                <div className="shrink-0 flex flex-col gap-2 border-l border-border pl-5">
+                  {overallScore != null && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">AI Score</div>
+                      <span className="font-mono text-2xl font-bold tabular-nums leading-none" style={{ color: decisionColor ?? "var(--primary)" }}>
+                        {overallScore}<span className="text-xs font-normal text-muted-foreground">/100</span>
+                      </span>
+                    </div>
+                  )}
+                  {jobMatch != null && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Job match</div>
+                      <span className="font-mono text-2xl font-bold tabular-nums leading-none" style={{ color: decisionColor ?? "var(--primary)" }}>
+                        {jobMatch}<span className="text-xs font-normal text-muted-foreground">%</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Rationale — compact, below the row */}
+            {rationale && (
+              <p className="mt-3 border-t border-border pt-3 text-xs leading-relaxed text-foreground/70">
+                {rationale}
+              </p>
+            )}
+          </GlassCard>
+        </FadeIn>
+      )}
+
+      {/* ── Interview panel ── */}
+      <FadeIn delay={0.1}>
+        <GlassCard className="p-5">
           <InterviewPanel candidateId={id} />
         </GlassCard>
       </FadeIn>
-    </div>
-  );
-}
-
-function ScoreOverview({
-  candidate,
-}: {
-  candidate: NonNullable<ReturnType<typeof useCandidate>["data"]>;
-}) {
-  const total = Number(candidate.hr_score_override ?? candidate.total_score) || 0;
-  const tiers = [
-    { label: "Profile rules", value: Number(candidate.tier1) || 0, max: TIER_MAX.tier1, color: "var(--strong)" },
-    { label: "Semantic", value: Number(candidate.tier2) || 0, max: TIER_MAX.tier2, color: "var(--primary)" },
-    { label: "LLM eval", value: Number(candidate.tier3) || 0, max: TIER_MAX.tier3, color: "var(--promising)" },
-  ];
-  // Normalize to percent-of-max so each bar reads against its own ceiling, but
-  // label with the raw "x/max" so the absolute score stays legible. We key the
-  // raw label by bar label (unique) to avoid collisions when two tiers share a %.
-  // Normalize each bar to percent-of-its-own-max, but nudge by a sub-pixel epsilon
-  // per index so every `value` is float-unique. That lets formatValue map a value
-  // back to its raw "x/max" label without collisions when two tiers share a percent.
-  const barData = tiers.map((t, i) => ({
-    label: t.label,
-    value: (t.max ? (t.value / t.max) * 100 : 0) + i * 1e-6,
-    color: t.color,
-  }));
-  const rawByValue = new Map(barData.map((b, i) => [b.value, `${Math.round(tiers[i].value)}/${tiers[i].max}`]));
-  const iq = candidate.iq_score;
-  const hasIq = iq != null && !Number.isNaN(Number(iq));
-
-  const gaugeColor =
-    total >= 70 ? "var(--strong)" : total >= 40 ? "var(--promising)" : "var(--weak)";
-
-  return (
-    <Stagger className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-      {/* Total score gauge */}
-      <StaggerItem>
-        <GlassCard className="flex h-full flex-col items-center justify-center gap-3 p-5 sm:p-6">
-          <div className="flex w-full items-center justify-between">
-            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-heading">
-              <Trophy className="h-4 w-4 text-promising" /> Total score
-            </h3>
-            {candidate.hr_score_override != null && (
-              <span className="rounded-full bg-promising/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-promising">
-                Overridden
-              </span>
-            )}
-          </div>
-          <RadialGauge value={Number(total.toFixed(0))} max={100} size={150} color={gaugeColor} label="score" sublabel="/ 100" />
-          {hasIq && (
-            <div className="mt-1 flex items-center gap-2 rounded-xl bg-foreground/[0.04] px-3 py-2">
-              <Brain className="h-4 w-4 text-primary" />
-              <span className="text-xs text-muted-foreground">IQ screen</span>
-              <span className="font-mono text-base font-semibold tabular-nums text-heading">
-                <CountUp value={Number(iq)} suffix="%" />
-              </span>
-            </div>
-          )}
-        </GlassCard>
-      </StaggerItem>
-
-      {/* Tier breakdown */}
-      <StaggerItem>
-        <GlassCard className="flex h-full flex-col p-5 sm:p-6">
-          <h3 className="text-sm font-semibold text-heading">Scoring breakdown</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">3-tier engine · each bar scaled to its own ceiling.</p>
-          <div className="mt-5 flex-1">
-            <BarChart
-              data={barData}
-              formatValue={(v) => rawByValue.get(v) ?? `${Math.round(v)}`}
-            />
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border pt-3 text-[11px] text-muted-foreground">
-            {tiers.map((t) => (
-              <span key={t.label} className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ background: t.color }} />
-                {t.label}
-              </span>
-            ))}
-          </div>
-        </GlassCard>
-      </StaggerItem>
-    </Stagger>
-  );
-}
-
-function ScoreSkeleton() {
-  return (
-    <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-      <div className="glass h-64 animate-pulse rounded-2xl bg-foreground/[0.03]" />
-      <div className="glass h-64 animate-pulse rounded-2xl bg-foreground/[0.03]" />
     </div>
   );
 }

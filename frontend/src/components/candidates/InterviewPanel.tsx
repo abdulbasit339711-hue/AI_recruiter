@@ -14,7 +14,7 @@ import {
   type VisionReport,
   type CommunicationAnalysis,
 } from "@/lib/api";
-import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
+import { FadeIn } from "@/components/ui/motion";
 
 /**
  * Renders a candidate's AI-interview results (status, goals, assessment,
@@ -26,6 +26,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "assessment" | "transcript">("overview");
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -69,7 +70,7 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
 
   async function onResumeSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file later
+    e.target.value = "";
     if (!file) return;
     setUploading(true);
     try {
@@ -104,12 +105,50 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
     );
   }
 
+  // Parse overall_assessment JSON once, used by Overview tab
+  let parsedAssessment: Record<string, unknown> | null = null;
+  if (result?.session?.overall_assessment) {
+    try {
+      const p = JSON.parse(result.session.overall_assessment);
+      if (p && typeof p === "object") parsedAssessment = p as Record<string, unknown>;
+    } catch {
+      parsedAssessment = null;
+    }
+  }
+
+  const fr = parsedAssessment
+    ? ((parsedAssessment.final_ai_recommendation ?? {}) as Record<string, unknown>)
+    : null;
+  const ov = parsedAssessment
+    ? ((parsedAssessment.overall_assessment ?? {}) as Record<string, unknown>)
+    : null;
+  const keyStrengths: string[] =
+    (fr?.key_strengths as string[]) ?? (ov?.strengths as string[]) ?? [];
+  const devAreas: string[] =
+    (fr?.development_areas as string[]) ?? (ov?.areas_for_improvement as string[]) ?? [];
+
+  // KPI strip values
+  const speaking = result?.speaking;
+  const session = result?.session;
+  const visionObs = result?.vision?.observations ?? [];
+  const avgEngagement =
+    visionObs.length > 0
+      ? (
+          visionObs.reduce(
+            (acc, o) => acc + (typeof o.engagement === "number" ? o.engagement : 0),
+            0
+          ) / visionObs.length
+        ).toFixed(1)
+      : null;
+
+  const transcriptCount = result?.transcript?.length ?? 0;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* ── Header row: title + action buttons ── */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-heading">AI interview</h3>
         <div className="flex items-center gap-2">
-          {/* Attach / replace the candidate's résumé and re-score (works even if they had none). */}
           <input
             ref={resumeInputRef}
             type="file"
@@ -125,7 +164,6 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             Replace résumé
           </button>
-          {/* One-click report (résumé score + interview assessment + transcript). */}
           {result?.has_interview && (
             <a
               href={getCandidateReportUrl(candidateId, "pdf")}
@@ -169,199 +207,291 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
           </div>
         </FadeIn>
       ) : (
-        <Stagger className="space-y-6" gap={0.06}>
-          <StaggerItem>
-            <section className="rounded-xl glass-tile p-4 flex items-center gap-4">
-              {/* Mini radial progress ring */}
-              {(() => {
-                const completed = result.session?.completed_goals ?? 0;
-                const total = result.session?.total_goals ?? 0;
-                const pct = total > 0 ? completed / total : 0;
-                const size = 64;
-                const stroke = 6;
-                const r = (size - stroke) / 2;
-                const circ = 2 * Math.PI * r;
-                const dash = circ * 0.75;
-                const offset = dash * (1 - pct);
-                return (
-                  <div className="relative shrink-0 inline-flex items-center justify-center" style={{ width: size, height: size }}>
-                    <svg width={size} height={size} className="-rotate-[135deg]">
-                      <circle cx={size/2} cy={size/2} r={r} fill="none"
-                        stroke="color-mix(in srgb, var(--foreground) 12%, transparent)"
-                        strokeWidth={stroke} strokeLinecap="round"
-                        strokeDasharray={`${dash} ${circ}`} />
-                      <circle cx={size/2} cy={size/2} r={r} fill="none"
-                        stroke="var(--primary)" strokeWidth={stroke} strokeLinecap="round"
-                        strokeDasharray={`${dash} ${circ}`}
-                        strokeDashoffset={offset}
-                        style={{ transition: "stroke-dashoffset 0.9s ease" }} />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="font-mono text-[11px] font-semibold text-heading leading-none">
-                        {completed}/{total}
-                      </span>
+        <div className="space-y-4">
+          {/* ── A. Always-visible KPI strip ── */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat
+              label="Duration"
+              value={speaking?.duration_seconds != null ? fmtTime(speaking.duration_seconds) : "—"}
+              mono
+            />
+            <Stat
+              label="Candidate talk"
+              value={speaking?.candidate_talk_ratio_pct != null ? `${Math.round(speaking.candidate_talk_ratio_pct)}%` : "—"}
+              mono
+            />
+            <Stat
+              label="Goals covered"
+              value={session ? `${session.completed_goals ?? 0}/${session.total_goals ?? 0}` : "—"}
+              mono
+            />
+            <Stat
+              label="Engagement"
+              value={avgEngagement != null ? `${avgEngagement}/5` : "—"}
+              mono
+            />
+          </div>
+
+          {/* ── B. Tab bar ── */}
+          <div className="flex gap-0 border-b border-border">
+            {(
+              [
+                { id: "overview", label: "Overview" },
+                { id: "assessment", label: "Assessment" },
+                { id: "transcript", label: `Transcript (${transcriptCount})` },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? "border-b-2 border-primary text-primary font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── C. Tab content ── */}
+
+          {/* Overview tab */}
+          {activeTab === "overview" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {/* Left column */}
+                <div className="space-y-4">
+                  {/* Strengths + dev areas pills */}
+                  {(keyStrengths.length > 0 || devAreas.length > 0) && (
+                    <div className="rounded-xl glass-tile p-4 space-y-3">
+                      {keyStrengths.length > 0 && (
+                        <div>
+                          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-strong">
+                            Key Strengths
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {keyStrengths.map((s, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1 rounded-full bg-strong/15 px-2.5 py-1 text-xs text-strong"
+                              >
+                                <span>✓</span> {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {devAreas.length > 0 && (
+                        <div>
+                          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-promising">
+                            Development Areas
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {devAreas.map((s, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1 rounded-full bg-promising/15 px-2.5 py-1 text-xs text-promising"
+                              >
+                                <span>↗</span> {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Speaking balance */}
+                  {speaking && (speaking.candidate_words ?? 0) > 0 && (
+                    <SpeakingSection s={speaking} />
+                  )}
+                </div>
+
+                {/* Right column */}
+                <div className="space-y-4">
+                  {/* Vision engagement timeline */}
+                  {result.vision && (
+                    <VisionSection
+                      vision={result.vision}
+                      onSeek={result.has_video ? seekTo : undefined}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Video player (collapsed) */}
+              {result.has_video && (
+                <details className="rounded-xl glass-tile overflow-hidden">
+                  <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-heading hover:bg-foreground/[0.03] transition-colors">
+                    Interview video
+                  </summary>
+                  <div className="p-4 pt-0">
+                    <VideoSection
+                      candidateId={candidateId}
+                      hasAnnotated={!!result.has_annotated_video}
+                      onRefresh={load}
+                      videoRef={videoRef}
+                    />
+                  </div>
+                </details>
+              )}
+
+              {/* Audio player (collapsed) */}
+              {result.has_audio && (
+                <details className="rounded-xl glass-tile overflow-hidden">
+                  <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-heading hover:bg-foreground/[0.03] transition-colors">
+                    {result.has_video ? "Audio track" : "Interview recording"}
+                  </summary>
+                  <div className="px-4 pb-4">
+                    <audio
+                      controls
+                      preload="none"
+                      className="w-full"
+                      src={getInterviewAudioUrl(candidateId)}
+                    >
+                      Your browser does not support audio playback.
+                    </audio>
+                    <div className="mt-2 text-right">
+                      <a
+                        href={getInterviewAudioUrl(candidateId)}
+                        download
+                        className="text-[11px] font-medium text-primary hover:underline"
+                      >
+                        Download audio
+                      </a>
                     </div>
                   </div>
-                );
-              })()}
-              {/* Right side info */}
-              <div className="flex-1 min-w-0 space-y-1.5">
-                {/* Status badge */}
-                {(() => {
-                  const status = result.session?.status ?? "";
-                  const pillClass =
-                    status.toLowerCase() === "active"
-                      ? "bg-[#F5B544]/15 text-[#a87100]"
-                      : status.toLowerCase() === "completed"
-                      ? "bg-strong/15 text-strong"
-                      : "bg-foreground/10 text-muted-foreground";
-                  return (
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${pillClass}`}>
-                      {status || "—"}
-                    </span>
-                  );
-                })()}
-                <p className="truncate text-sm font-medium text-heading">
-                  {result.session?.role_type ?? "—"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {result.session?.completed_goals ?? 0} of {result.session?.total_goals ?? 0} goals ·{" "}
-                  <span className="font-mono font-semibold text-heading">
-                    {Math.round((Number(result.session?.average_progress) || 0) * 100)}%
-                  </span>{" "}
-                  avg progress
-                </p>
-              </div>
-            </section>
-          </StaggerItem>
+                </details>
+              )}
 
-          {result.session?.overall_assessment && (
-            <StaggerItem>
-              <FinalAssessment raw={result.session.overall_assessment} />
-            </StaggerItem>
-          )}
-
-          {result.metrics && (
-            <StaggerItem>
-            <section className="rounded-xl glass-tile p-4">
-              <details>
-                <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Cost details — expand
-                </summary>
-                <div className="mt-3">
-                  <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Interview</div>
-                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-                    <Stat label="STT (est.)" value={result.metrics.interview.stt_tokens.toLocaleString()} mono />
-                    <Stat label="LLM in" value={result.metrics.interview.llm_input_tokens.toLocaleString()} mono />
-                    <Stat label="LLM out" value={result.metrics.interview.llm_output_tokens.toLocaleString()} mono />
-                    <Stat label="TTS (est.)" value={result.metrics.interview.tts_tokens.toLocaleString()} mono />
-                    <Stat label="Total" value={result.metrics.interview.total_tokens.toLocaleString()} mono />
+              {/* Cost details */}
+              {result.metrics && (
+                <details className="rounded-xl glass-tile overflow-hidden">
+                  <summary className="cursor-pointer select-none px-4 py-3 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    Cost details — expand
+                  </summary>
+                  <div className="px-4 pb-4">
+                    <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Interview</div>
+                    <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+                      <Stat label="STT (est.)" value={result.metrics.interview.stt_tokens.toLocaleString()} mono />
+                      <Stat label="LLM in" value={result.metrics.interview.llm_input_tokens.toLocaleString()} mono />
+                      <Stat label="LLM out" value={result.metrics.interview.llm_output_tokens.toLocaleString()} mono />
+                      <Stat label="TTS (est.)" value={result.metrics.interview.tts_tokens.toLocaleString()} mono />
+                      <Stat label="Total" value={result.metrics.interview.total_tokens.toLocaleString()} mono />
+                    </div>
+                    <div className="mt-3 mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Resume scoring</div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <Stat label="LLM in" value={result.metrics.scoring.prompt_tokens.toLocaleString()} mono />
+                      <Stat label="LLM out" value={result.metrics.scoring.completion_tokens.toLocaleString()} mono />
+                      <Stat label="Scoring cost" value={`$${result.metrics.scoring.cost_usd.toFixed(4)}`} mono />
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Interview LLM cost: ${result.metrics.interview.cost_usd.toFixed(4)} · STT/TTS token
+                      counts are character-based estimates.
+                    </p>
                   </div>
-                  <div className="mt-3 mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Resume scoring</div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <Stat label="LLM in" value={result.metrics.scoring.prompt_tokens.toLocaleString()} mono />
-                    <Stat label="LLM out" value={result.metrics.scoring.completion_tokens.toLocaleString()} mono />
-                    <Stat label="Scoring cost" value={`$${result.metrics.scoring.cost_usd.toFixed(4)}`} mono />
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Assessment tab */}
+          {activeTab === "assessment" && (
+            <div className="space-y-4">
+              {/* 14-dimension grid */}
+              {result.session?.overall_assessment && (
+                <FinalAssessment raw={result.session.overall_assessment} />
+              )}
+
+              {/* Goals grid */}
+              <section className="rounded-xl glass-tile p-4">
+                <h4 className="mb-3 text-sm font-semibold text-heading">Goals</h4>
+                {(result.goals ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No goals recorded.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {(result.goals ?? []).map((g) => (
+                      <GoalTile key={g.title} goal={g} />
+                    ))}
                   </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Interview LLM cost: ${result.metrics.interview.cost_usd.toFixed(4)} · STT/TTS token
-                    counts are character-based estimates.
-                  </p>
-                </div>
-              </details>
-            </section>
-            </StaggerItem>
+                )}
+              </section>
+
+              {/* Communication analysis */}
+              {(result.transcript?.length ?? 0) > 0 && (
+                <CommunicationSection
+                  candidateId={candidateId}
+                  autoLoad={!!result.has_communication}
+                />
+              )}
+            </div>
           )}
 
-          {result.has_video && (
-            <StaggerItem>
-              <VideoSection
-                candidateId={candidateId}
-                hasAnnotated={!!result.has_annotated_video}
-                onRefresh={load}
-                videoRef={videoRef}
-              />
-            </StaggerItem>
-          )}
+          {/* Transcript tab */}
+          {activeTab === "transcript" && (
+            <div className="space-y-4">
+              {result.has_audio && (
+                <section className="rounded-xl glass-tile p-4">
+                  <h4 className="mb-3 text-sm font-semibold text-heading">
+                    {result.has_video ? "Audio track" : "Interview recording"}
+                  </h4>
+                  <audio
+                    controls
+                    preload="none"
+                    className="w-full"
+                    src={getInterviewAudioUrl(candidateId)}
+                  >
+                    Your browser does not support audio playback.
+                  </audio>
+                  <div className="mt-2 text-right">
+                    <a
+                      href={getInterviewAudioUrl(candidateId)}
+                      download
+                      className="text-[11px] font-medium text-primary hover:underline"
+                    >
+                      Download audio
+                    </a>
+                  </div>
+                </section>
+              )}
 
-          {result.speaking && (result.speaking.candidate_words ?? 0) > 0 && (
-            <StaggerItem>
-              <SpeakingSection s={result.speaking} />
-            </StaggerItem>
-          )}
-
-          {result.has_audio && (
-            <StaggerItem>
               <section className="rounded-xl glass-tile p-4">
                 <h4 className="mb-3 text-sm font-semibold text-heading">
-                  {result.has_video ? "Audio track" : "Interview recording"}
+                  Transcript
+                  <span className="ml-2 text-[11px] text-muted-foreground font-normal">
+                    {transcriptCount} messages
+                  </span>
                 </h4>
-                <audio controls preload="none" className="w-full" src={getInterviewAudioUrl(candidateId)}>
-                  Your browser does not support audio playback.
-                </audio>
-                <div className="mt-2 text-right">
-                  <a href={getInterviewAudioUrl(candidateId)} download className="text-[11px] font-medium text-primary hover:underline">
-                    Download audio
-                  </a>
+                <div className="max-h-[500px] space-y-3 overflow-y-auto pr-2">
+                  {(result.transcript ?? []).map((t, i) => (
+                    <div
+                      key={i}
+                      className={`flex flex-col ${t.speaker === "agent" ? "items-start" : "items-end"}`}
+                    >
+                      <div
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                          t.speaker === "agent"
+                            ? "bg-foreground/10 text-foreground"
+                            : "bg-primary text-white"
+                        }`}
+                      >
+                        {t.text}
+                      </div>
+                      {t.speaker !== "agent" && t.evaluation && (
+                        <TurnEvalBadge ev={t.evaluation} />
+                      )}
+                    </div>
+                  ))}
+                  {transcriptCount === 0 && (
+                    <p className="text-xs text-muted-foreground">No transcript recorded.</p>
+                  )}
                 </div>
               </section>
-            </StaggerItem>
+            </div>
           )}
-
-          {result.vision && (
-            <StaggerItem>
-              <VisionSection vision={result.vision} onSeek={result.has_video ? seekTo : undefined} />
-            </StaggerItem>
-          )}
-
-          {(result.transcript?.length ?? 0) > 0 && (
-            <StaggerItem>
-              <CommunicationSection
-                candidateId={candidateId}
-                autoLoad={!!result.has_communication}
-              />
-            </StaggerItem>
-          )}
-
-          <StaggerItem>
-            <section className="rounded-xl glass-tile p-4">
-              <h4 className="mb-3 text-sm font-semibold text-heading">Goals · questions &amp; answers</h4>
-              <ul className="space-y-3">
-                {(result.goals ?? []).map((g) => (
-                  <GoalRow key={g.title} goal={g} />
-                ))}
-                {(result.goals ?? []).length === 0 && (
-                  <li className="text-xs text-muted-foreground">No goals recorded.</li>
-                )}
-              </ul>
-            </section>
-          </StaggerItem>
-
-          <StaggerItem>
-            <section className="rounded-xl glass-tile p-4">
-              <h4 className="mb-3 text-sm font-semibold text-heading">Transcript</h4>
-              <div className="max-h-[420px] space-y-3 overflow-y-auto pr-2">
-                {(result.transcript ?? []).map((t, i) => (
-                  <div key={i} className={`flex flex-col ${t.speaker === "agent" ? "items-start" : "items-end"}`}>
-                    <div
-                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                        t.speaker === "agent" ? "bg-foreground/10 text-foreground" : "bg-primary text-white"
-                      }`}
-                    >
-                      {t.text}
-                    </div>
-                    {t.speaker !== "agent" && t.evaluation && (
-                      <TurnEvalBadge ev={t.evaluation} />
-                    )}
-                  </div>
-                ))}
-                {(result.transcript ?? []).length === 0 && (
-                  <p className="text-xs text-muted-foreground">No transcript recorded.</p>
-                )}
-              </div>
-            </section>
-          </StaggerItem>
-        </Stagger>
+        </div>
       )}
     </div>
   );
@@ -369,9 +499,14 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
 
 /** Interview video playback with a raw / annotated (YOLO boxes) toggle. */
 function VideoSection({
-  candidateId, hasAnnotated, onRefresh, videoRef,
+  candidateId,
+  hasAnnotated,
+  onRefresh,
+  videoRef,
 }: {
-  candidateId: number; hasAnnotated: boolean; onRefresh: () => void;
+  candidateId: number;
+  hasAnnotated: boolean;
+  onRefresh: () => void;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
 }) {
   const [annotated, setAnnotated] = useState(false);
@@ -396,9 +531,8 @@ function VideoSection({
   }
 
   return (
-    <section className="rounded-xl glass-tile p-4">
+    <div>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-heading">Interview video</h4>
         <div className="flex items-center gap-2">
           {hasAnnotated && (
             <div className="flex rounded-lg border border-border p-0.5 text-xs">
@@ -453,7 +587,7 @@ function VideoSection({
           Download {annotated ? "annotated" : "video"}
         </a>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -468,8 +602,7 @@ function VisionSection({ vision, onSeek }: { vision: VisionReport; onSeek?: (t: 
   const agg = vision.aggregate ?? {};
   const flags = agg.integrity_flags ?? [];
   const present = Math.round((agg.present_ratio ?? 0) * 100);
-  const engagement = agg.avg_engagement ?? 0; // 0–3 scale
-  const engagementPct = Math.round((engagement / 3) * 100);
+  const engagementRaw = agg.avg_engagement ?? 0;
   const obs = (vision.observations ?? []).filter((o) => o.summary || o.delivery_notes);
   const quality = vision.data_quality;
   const insufficient = quality?.level === "insufficient";
@@ -481,6 +614,18 @@ function VisionSection({ vision, onSeek }: { vision: VisionReport; onSeek?: (t: 
       ? { borderColor: "var(--promising)", background: "var(--promising-bg)", color: "var(--promising-text)" }
       : { borderColor: "var(--weak)", background: "var(--weak-bg)", color: "var(--weak-text)" };
 
+  const avgEngagementPerObs =
+    obs.length > 0
+      ? obs.reduce((acc, o) => acc + (typeof o.engagement === "number" ? o.engagement : 0), 0) /
+        obs.length
+      : null;
+
+  function engagementColor(e: number): string {
+    if (e >= 4) return "var(--strong)";
+    if (e >= 2) return "var(--promising)";
+    return "var(--weak)";
+  }
+
   return (
     <section className="rounded-xl glass-tile p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -490,7 +635,6 @@ function VisionSection({ vision, onSeek }: { vision: VisionReport; onSeek?: (t: 
         </span>
       </div>
 
-      {/* Data-quality gate: how much usable footage backs this read */}
       {quality && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border p-2.5 text-xs" style={qualityStyle}>
           <span className="font-semibold uppercase tracking-wide">{quality.level}</span>
@@ -498,19 +642,69 @@ function VisionSection({ vision, onSeek }: { vision: VisionReport; onSeek?: (t: 
         </div>
       )}
 
-      {/* Video-level narrative summary (synthesized across all frames) */}
       {vision.overall_summary && !insufficient && (
         <p className="mb-3 rounded-lg bg-foreground/[0.04] p-3 text-sm leading-relaxed text-foreground">
           {vision.overall_summary}
         </p>
       )}
 
-      {/* Headline metrics */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {/* Engagement timeline */}
+      {obs.length > 0 && (
+        <div className="mb-4">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-[11px] font-medium text-muted-foreground">Engagement timeline</span>
+            {avgEngagementPerObs != null && (
+              <span className="text-[11px] text-faint">avg {avgEngagementPerObs.toFixed(1)}/5</span>
+            )}
+          </div>
+          <div className="relative flex items-end gap-0">
+            <div
+              className="pointer-events-none absolute left-0 right-0 h-px bg-border"
+              style={{ top: "50%", transform: "translateY(-100%)" }}
+            />
+            <div className="relative flex items-end gap-3 overflow-x-auto pb-1 pt-2">
+              {obs.map((o, i) => {
+                const eng = typeof o.engagement === "number" ? o.engagement : 2;
+                const size = Math.min(48, eng * 8 + 8);
+                const color = engagementColor(eng);
+                return (
+                  <div
+                    key={i}
+                    className="flex shrink-0 flex-col items-center gap-1"
+                    title={`engagement ${eng}/5 · ${o.summary ?? ""}`}
+                  >
+                    <div
+                      className="rounded-full transition-transform hover:scale-110"
+                      style={{
+                        width: size,
+                        height: size,
+                        background: color,
+                        opacity: 0.85,
+                        boxShadow: `0 0 0 2px color-mix(in srgb, ${color} 30%, transparent)`,
+                      }}
+                    />
+                    <span className="text-[10px] text-faint tabular-nums">{fmtTime(o.t ?? 0)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3 key metrics */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
         <Stat label="Presence" value={`${present}%`} mono />
-        <Stat label="Engagement" value={`${engagementPct}%`} mono />
-        <Stat label="Max people" value={String(agg.max_people_count ?? 0)} mono />
-        <Stat label="Frames" value={`${agg.frames_analyzed ?? 0} / ${agg.frames_detected ?? 0}`} mono />
+        <Stat
+          label="Engagement"
+          value={
+            avgEngagementPerObs != null
+              ? `${avgEngagementPerObs.toFixed(1)}/5`
+              : `${Math.round((engagementRaw / 3) * 5 * 10) / 10}/5`
+          }
+          mono
+        />
+        <Stat label="Frames" value={String(agg.frames_analyzed ?? 0)} mono />
       </div>
 
       {/* Integrity flags */}
@@ -531,9 +725,9 @@ function VisionSection({ vision, onSeek }: { vision: VisionReport; onSeek?: (t: 
         )}
       </div>
 
-      {/* Timed observations */}
+      {/* Per-frame notes (collapsed) */}
       {obs.length > 0 && (
-        <details className="mt-3" open>
+        <details className="mt-3">
           <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-muted-foreground">
             Per-frame notes ({obs.length})
           </summary>
@@ -552,7 +746,7 @@ function VisionSection({ vision, onSeek }: { vision: VisionReport; onSeek?: (t: 
                   ) : (
                     <span className="font-mono tabular-nums">{fmtTime(o.t ?? 0)}</span>
                   )}
-                  {typeof o.engagement === "number" && <span>· engagement {o.engagement}/3</span>}
+                  {typeof o.engagement === "number" && <span>· engagement {o.engagement}/5</span>}
                   {o.looking_away && <span className="text-promising">· looking away</span>}
                   {o.present === false && <span className="text-weak">· absent</span>}
                 </div>
@@ -565,7 +759,9 @@ function VisionSection({ vision, onSeek }: { vision: VisionReport; onSeek?: (t: 
                       o.gestures && `gestures: ${o.gestures}`,
                       o.facial_expression && `expression: ${o.facial_expression}`,
                       o.eye_contact && `eye contact: ${o.eye_contact}`,
-                    ].filter(Boolean).join(" · ")}
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 )}
               </li>
@@ -582,16 +778,19 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
   const [data, setData] = useState<CommunicationAnalysis | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const run = useCallback(async (refresh = false) => {
-    setBusy(true);
-    try {
-      setData(await api.getCommunicationAnalysis(candidateId, refresh));
-    } catch {
-      toast.error("Couldn't analyze communication");
-    } finally {
-      setBusy(false);
-    }
-  }, [candidateId]);
+  const run = useCallback(
+    async (refresh = false) => {
+      setBusy(true);
+      try {
+        setData(await api.getCommunicationAnalysis(candidateId, refresh));
+      } catch {
+        toast.error("Couldn't analyze communication");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [candidateId]
+  );
 
   useEffect(() => {
     if (autoLoad) run(false);
@@ -657,9 +856,12 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
 
       {f && Object.keys(f.by_filler ?? {}).length > 0 && (
         <div className="mb-3 flex flex-wrap gap-1.5">
-          {Object.entries(f.by_filler).map(([w, c]) => (
-            <span key={w} className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[11px] text-muted-foreground">
-              &ldquo;{w}&rdquo; ×{c}
+          {Object.entries(f.by_filler).map(([w, cnt]) => (
+            <span
+              key={w}
+              className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[11px] text-muted-foreground"
+            >
+              &ldquo;{w}&rdquo; ×{cnt}
             </span>
           ))}
         </div>
@@ -667,22 +869,32 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
 
       {a?.error && <p className="text-xs text-weak">{a.error}</p>}
 
-      {/* Content / answer quality — the primary, most job-relevant signal (WORDS) */}
-      {(contentRows.some(([, v]) => v) || (c?.red_flags?.length ?? 0) > 0 || (c?.strengths?.length ?? 0) > 0) && (
+      {(contentRows.some(([, v]) => v) ||
+        (c?.red_flags?.length ?? 0) > 0 ||
+        (c?.strengths?.length ?? 0) > 0) && (
         <div className="mb-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-heading">Content &amp; answer quality</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-heading">
+            Content &amp; answer quality
+          </p>
           <dl className="space-y-2">
-            {contentRows.filter(([, v]) => v).map(([label, v]) => (
-              <div key={label} className="grid grid-cols-[120px_1fr] gap-2 text-sm">
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-                <dd className="text-foreground">{v}</dd>
-              </div>
-            ))}
+            {contentRows
+              .filter(([, v]) => v)
+              .map(([label, v]) => (
+                <div key={label} className="grid grid-cols-[120px_1fr] gap-2 text-sm">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {label}
+                  </dt>
+                  <dd className="text-foreground">{v}</dd>
+                </div>
+              ))}
           </dl>
           {(c?.strengths?.length ?? 0) > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {c!.strengths!.map((s, i) => (
-                <span key={i} className="inline-flex items-center rounded-full bg-strong/15 px-2.5 py-1 text-xs text-strong">
+                <span
+                  key={i}
+                  className="inline-flex items-center rounded-full bg-strong/15 px-2.5 py-1 text-xs text-strong"
+                >
                   ✓ {s}
                 </span>
               ))}
@@ -691,7 +903,10 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
           {(c?.red_flags?.length ?? 0) > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {c!.red_flags!.map((s, i) => (
-                <span key={i} className="inline-flex items-center rounded-full bg-weak/15 px-2.5 py-1 text-xs text-weak">
+                <span
+                  key={i}
+                  className="inline-flex items-center rounded-full bg-weak/15 px-2.5 py-1 text-xs text-weak"
+                >
                   ⚑ {s}
                 </span>
               ))}
@@ -702,21 +917,28 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
 
       {rows.filter(([, v]) => v).length > 0 && (
         <>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-heading">Delivery &amp; communication</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-heading">
+            Delivery &amp; communication
+          </p>
           <dl className="space-y-2">
-            {rows.filter(([, v]) => v).map(([label, v]) => (
-              <div key={label} className="grid grid-cols-[120px_1fr] gap-2 text-sm">
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-                <dd className="text-foreground">{v}</dd>
-              </div>
-            ))}
+            {rows
+              .filter(([, v]) => v)
+              .map(([label, v]) => (
+                <div key={label} className="grid grid-cols-[120px_1fr] gap-2 text-sm">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {label}
+                  </dt>
+                  <dd className="text-foreground">{v}</dd>
+                </div>
+              ))}
           </dl>
         </>
       )}
 
       {a?.accent_note && (
         <p className="mt-3 text-[11px] text-faint">
-          Note: this is a text analysis of the transcript — true accent classification requires audio modelling.
+          Note: this is a text analysis of the transcript — true accent classification requires audio
+          modelling.
         </p>
       )}
     </section>
@@ -733,15 +955,17 @@ function fmtTime(seconds: number): string {
 function SpeakingSection({ s }: { s: NonNullable<InterviewResult["speaking"]> }) {
   const candPct = Math.round(s.candidate_talk_ratio_pct);
   const botPct = 100 - candPct;
-  // Estimate bot words from ratio
   const botWords = candPct > 0 ? Math.round((s.candidate_words * botPct) / candPct) : 0;
 
   return (
     <section className="rounded-xl glass-tile p-4">
       <h4 className="mb-3 text-sm font-semibold text-heading">Speaking balance &amp; pace</h4>
 
-      {/* Visual talk-ratio bar */}
-      <div className="overflow-hidden rounded-full h-3 flex" role="img" aria-label={`Candidate ${candPct}%, Interviewer ${botPct}%`}>
+      <div
+        className="overflow-hidden rounded-full h-3 flex"
+        role="img"
+        aria-label={`Candidate ${candPct}%, Interviewer ${botPct}%`}
+      >
         <div
           className="h-full transition-all"
           style={{ width: `${candPct}%`, background: "var(--primary)" }}
@@ -752,14 +976,15 @@ function SpeakingSection({ s }: { s: NonNullable<InterviewResult["speaking"]> })
         />
       </div>
 
-      {/* Per-speaker sub-labels */}
       <div className="mt-2 flex items-start justify-between gap-2 text-[11px] text-muted-foreground">
         <div>
           <span className="font-semibold" style={{ color: "var(--primary)" }}>
             Candidate {candPct}%
           </span>
           <br />
-          <span>{s.candidate_words.toLocaleString()} words · {s.candidate_turns} turns</span>
+          <span>
+            {s.candidate_words.toLocaleString()} words · {s.candidate_turns} turns
+          </span>
         </div>
         <div className="text-right">
           <span className="font-semibold text-muted-foreground">Interviewer {botPct}%</span>
@@ -772,7 +997,6 @@ function SpeakingSection({ s }: { s: NonNullable<InterviewResult["speaking"]> })
         Talk-time is word-share, a rough proxy for who spoke more.
       </p>
 
-      {/* 3 key stats */}
       <div className="mt-3 grid grid-cols-3 gap-2">
         <Stat label="Talk ratio" value={`${candPct}%`} mono />
         <Stat label="Candidate words" value={String(s.candidate_words)} mono />
@@ -781,8 +1005,8 @@ function SpeakingSection({ s }: { s: NonNullable<InterviewResult["speaking"]> })
 
       {s.approx_words_per_min != null && (
         <p className="mt-2 text-[11px] text-faint">
-          Pace is words ÷ total interview time (includes pauses &amp; the interviewer&apos;s turns), so it
-          reads lower than true speaking rate — use it for relative comparison, not an absolute.
+          Pace is words ÷ total interview time (includes pauses &amp; the interviewer&apos;s turns),
+          so it reads lower than true speaking rate — use it for relative comparison, not an absolute.
         </p>
       )}
     </section>
@@ -810,35 +1034,24 @@ function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number]
   const evidence = goal.evidence ?? [];
   const hasDetail = questions.length > 0 || evidence.length > 0;
 
-  // Coloured left border based on progress
   const borderColor =
-    pct > 66
-      ? "var(--strong)"
-      : pct >= 33
-      ? "var(--promising)"
-      : "var(--weak)";
-
+    pct > 66 ? "var(--strong)" : pct >= 33 ? "var(--promising)" : "var(--weak)";
   const barColor =
-    pct > 66
-      ? "var(--strong)"
-      : pct >= 33
-      ? "var(--promising)"
-      : "var(--weak)";
+    pct > 66 ? "var(--strong)" : pct >= 33 ? "var(--promising)" : "var(--weak)";
 
   return (
-    <li
-      className="rounded-lg border-l-2 pl-3 py-0.5"
-      style={{ borderLeftColor: borderColor }}
-    >
+    <li className="rounded-lg border-l-2 pl-3 py-0.5" style={{ borderLeftColor: borderColor }}>
       <div className="flex items-start justify-between gap-2">
         <span className="min-w-0 truncate text-xs text-foreground" title={goal.title}>
           {goal.title}
         </span>
-        <span className="shrink-0 font-mono text-xs font-semibold tabular-nums" style={{ color: barColor }}>
+        <span
+          className="shrink-0 font-mono text-xs font-semibold tabular-nums"
+          style={{ color: barColor }}
+        >
           {pct}%
         </span>
       </div>
-      {/* Thin inline progress bar */}
       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-foreground/10">
         <div
           className="h-full rounded-full transition-all"
@@ -850,12 +1063,16 @@ function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number]
       )}
       {hasDetail && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-[11px] text-muted-foreground">Questions &amp; answers</summary>
+          <summary className="cursor-pointer text-[11px] text-muted-foreground">
+            Questions &amp; answers
+          </summary>
           {questions.length > 0 && (
             <div className="mt-2">
               <div className="text-[11px] uppercase tracking-wide text-faint">Questions</div>
               <ul className="ml-4 mt-1 list-disc text-xs text-foreground">
-                {questions.map((q, i) => <li key={i}>{q}</li>)}
+                {questions.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
               </ul>
             </div>
           )}
@@ -864,10 +1081,7 @@ function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number]
               <div className="text-[11px] uppercase tracking-wide text-faint">Candidate answers</div>
               <ul className="mt-1 space-y-1">
                 {evidence.map((e, i) => (
-                  <li
-                    key={i}
-                    className="rounded-md glass-tile px-2 py-1 text-xs italic text-foreground"
-                  >
+                  <li key={i} className="rounded-md glass-tile px-2 py-1 text-xs italic text-foreground">
                     &ldquo;{e.text}&rdquo;
                   </li>
                 ))}
@@ -880,16 +1094,122 @@ function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number]
   );
 }
 
+/** Compact visual goal tile — mini ring + title, used in the 3-col goals grid. */
+function GoalTile({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number] }) {
+  const pct = Math.min(100, Math.round((Number(goal.progress_score) || 0) * 100));
+  const color = pct > 66 ? "var(--strong)" : pct >= 33 ? "var(--promising)" : "var(--weak)";
+  const hexBg =
+    pct > 66
+      ? "rgba(52,194,138,0.10)"
+      : pct >= 33
+      ? "rgba(245,181,68,0.10)"
+      : "rgba(242,92,124,0.10)";
+  const size = 44,
+    stroke = 5,
+    r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const questions = goal.questions ?? [];
+  const evidence = goal.evidence ?? [];
+  const hasDetail = questions.length > 0 || evidence.length > 0;
+
+  const tile = (
+    <div
+      className="rounded-xl p-2.5 flex flex-col items-center gap-1.5 text-center"
+      style={{ background: hexBg, border: `1px solid ${color}33` }}
+      title={goal.title}
+    >
+      <div
+        className="relative inline-flex items-center justify-center"
+        style={{ width: size, height: size }}
+      >
+        <svg width={size} height={size} className="-rotate-90">
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="color-mix(in srgb, var(--foreground) 10%, transparent)"
+            strokeWidth={stroke}
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            strokeDashoffset={circ * (1 - pct / 100)}
+            style={{ transition: "stroke-dashoffset 0.8s ease" }}
+          />
+        </svg>
+        <span
+          className="absolute font-mono text-[11px] font-bold tabular-nums"
+          style={{ color }}
+        >
+          {pct}%
+        </span>
+      </div>
+      <p className="line-clamp-2 text-[11px] leading-tight text-foreground">{goal.title}</p>
+    </div>
+  );
+
+  if (!hasDetail) return tile;
+
+  return (
+    <details className="group">
+      <summary className="list-none cursor-pointer">{tile}</summary>
+      <div className="mt-1.5 rounded-xl border border-border p-2.5 text-xs space-y-2">
+        {questions.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+              Questions
+            </div>
+            <ul className="list-disc ml-3 space-y-0.5 text-foreground">
+              {questions.map((q, i) => (
+                <li key={i}>{q}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {evidence.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+              Evidence
+            </div>
+            <ul className="space-y-1">
+              {evidence.map((e, i) => (
+                <li key={i} className="rounded-md glass-tile px-2 py-1 italic text-foreground">
+                  &ldquo;{e.text}&rdquo;
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
 /** Compact per-answer evaluation shown under a candidate message. */
 function TurnEvalBadge({ ev }: { ev: TurnEvaluation }) {
   const score = typeof ev.score === "number" ? ev.score : null;
   const color =
-    score == null ? "text-muted-foreground" : score >= 7 ? "text-strong" : score >= 4 ? "text-promising" : "text-weak";
+    score == null
+      ? "text-muted-foreground"
+      : score >= 7
+      ? "text-strong"
+      : score >= 4
+      ? "text-promising"
+      : "text-weak";
   const strength = ev.strengths?.[0];
   const weakness = ev.weaknesses?.[0];
   return (
     <div className="mt-1 max-w-[80%] text-right text-[11px] text-muted-foreground">
-      {score != null && <span className={`font-mono font-semibold tabular-nums ${color}`}>{score}/10</span>}
+      {score != null && (
+        <span className={`font-mono font-semibold tabular-nums ${color}`}>{score}/10</span>
+      )}
       {ev.depth && <span> · {ev.depth}</span>}
       {strength && <span> · 👍 {strength}</span>}
       {weakness && <span> · 👎 {weakness}</span>}
@@ -924,9 +1244,9 @@ function scoreColor(score: number): string {
 
 function decisionStyle(decision: string): { bg: string; text: string } {
   const d = decision.toLowerCase();
-  if (d === "hire")    return { bg: "var(--strong)",     text: "#fff" };
-  if (d === "reject")  return { bg: "var(--weak)",       text: "#fff" };
-  return                      { bg: "var(--promising)",  text: "#fff" };
+  if (d === "hire") return { bg: "var(--strong)", text: "#fff" };
+  if (d === "reject") return { bg: "var(--weak)", text: "#fff" };
+  return { bg: "var(--promising)", text: "#fff" };
 }
 
 /** Renders the final transcript evaluation. The value is JSON from the voice agent; older
@@ -950,138 +1270,117 @@ function FinalAssessment({ raw }: { raw: string }) {
   );
 
   if (!parsed) {
-    return <Wrap><p className="text-sm text-foreground">{raw}</p></Wrap>;
+    return (
+      <Wrap>
+        <p className="text-sm text-foreground">{raw}</p>
+      </Wrap>
+    );
   }
 
-  // New schema: final_ai_recommendation + dimension_scores
-  const fr  = (parsed.final_ai_recommendation ?? {}) as Record<string, unknown>;
-  const ds  = (parsed.dimension_scores ?? {}) as Record<string, { score: number; notes?: string }>;
-  // Legacy schema fallback
-  const ov  = (parsed.overall_assessment ?? {}) as Record<string, unknown>;
+  const fr = (parsed.final_ai_recommendation ?? {}) as Record<string, unknown>;
+  const ds = (parsed.dimension_scores ?? {}) as Record<string, { score: number; notes?: string }>;
+  const ov = (parsed.overall_assessment ?? {}) as Record<string, unknown>;
   const goals = (parsed.goal_assessments as Record<string, unknown>[]) ?? [];
 
-  const decision = String(fr.decision ?? ov.hiring_recommendation ?? "").replace(/_/g, " ");
-  const overallScore   = fr.overall_candidate_score  != null ? Number(fr.overall_candidate_score)  : (ov.overall_candidate_score  != null ? Number(ov.overall_candidate_score)  : null);
-  const jobMatch       = fr.job_match_percentage      != null ? Number(fr.job_match_percentage)      : (ov.job_match_percentage      != null ? Number(ov.job_match_percentage)      : null);
-  const rationale      = String(fr.decision_rationale ?? "");
-  const keyStrengths   = (fr.key_strengths        as string[]) ?? (ov.strengths              as string[]) ?? [];
-  const devAreas       = (fr.development_areas    as string[]) ?? (ov.areas_for_improvement  as string[]) ?? [];
-  const legacyPerf     = Number(ov.candidate_performance);
-  const legacyCoverage = Number(ov.goal_coverage_rate);
+  const keyStrengths: string[] =
+    (fr.key_strengths as string[]) ?? (ov.strengths as string[]) ?? [];
+  const devAreas: string[] =
+    (fr.development_areas as string[]) ?? (ov.areas_for_improvement as string[]) ?? [];
 
-  const hasDimensions  = Object.keys(ds).length > 0;
-  const ds_ = decisionStyle(decision);
+  const hasDimensions = Object.keys(ds).length > 0;
 
   return (
     <Wrap>
-      {/* ── Hero: decision + score + match ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        {decision && (
-          <span
-            className="rounded-full px-3 py-1 text-sm font-bold tracking-wide"
-            style={{ background: ds_.bg, color: ds_.text }}
-          >
-            {decision.toUpperCase()}
-          </span>
-        )}
-        {overallScore != null && (
-          <div className="flex flex-col items-center rounded-xl border border-border px-4 py-2 text-center">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Overall Score</span>
-            <span className="text-2xl font-bold tabular-nums" style={{ color: scoreColor(overallScore) }}>
-              {overallScore}<span className="text-sm font-normal text-muted-foreground">/100</span>
-            </span>
-          </div>
-        )}
-        {jobMatch != null && (
-          <div className="flex flex-col items-center rounded-xl border border-border px-4 py-2 text-center">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Job Match</span>
-            <span className="text-2xl font-bold tabular-nums" style={{ color: scoreColor(jobMatch) }}>
-              {jobMatch}<span className="text-sm font-normal text-muted-foreground">%</span>
-            </span>
-          </div>
-        )}
-        {/* Legacy perf/coverage when no new schema */}
-        {overallScore == null && !Number.isNaN(legacyPerf) && legacyPerf > 0 && (
-          <span className="text-xs text-foreground">
-            Performance: <span className="font-mono font-semibold tabular-nums">{Math.round(legacyPerf * 100)}%</span>
-          </span>
-        )}
-        {jobMatch == null && !Number.isNaN(legacyCoverage) && legacyCoverage > 0 && (
-          <span className="text-xs text-foreground">
-            Goal coverage: <span className="font-mono font-semibold tabular-nums">{Math.round(legacyCoverage * 100)}%</span>
-          </span>
-        )}
-      </div>
-
-      {/* ── Rationale ── */}
-      {rationale && (
-        <p className="rounded-lg bg-foreground/[0.04] px-3 py-2 text-sm leading-relaxed text-foreground">
-          {rationale}
-        </p>
+      {/* Strengths + Dev Areas */}
+      {(keyStrengths.length > 0 || devAreas.length > 0) && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {keyStrengths.length > 0 && (
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-strong">
+                Key Strengths
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {keyStrengths.map((s, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 rounded-full bg-strong/15 px-2.5 py-1 text-xs text-strong"
+                  >
+                    <span>✓</span> {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {devAreas.length > 0 && (
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-promising">
+                Development Areas
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {devAreas.map((s, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 rounded-full bg-promising/15 px-2.5 py-1 text-xs text-promising"
+                  >
+                    <span>↗</span> {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* ── Strengths + Development areas ── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {keyStrengths.length > 0 && (
-          <div>
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-strong">Key Strengths</div>
-            <ul className="space-y-1">
-              {keyStrengths.map((s, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-sm text-foreground">
-                  <span className="mt-0.5 text-strong">✓</span> {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {devAreas.length > 0 && (
-          <div>
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-promising">Development Areas</div>
-            <ul className="space-y-1">
-              {devAreas.map((s, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-sm text-foreground">
-                  <span className="mt-0.5 text-promising">↗</span> {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      {/* ── 14-Dimension scores ── */}
+      {/* 14-Dimension grid */}
       {hasDimensions && (
         <div>
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             14-Dimension Assessment
           </div>
-          <ul className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             {DIMENSION_ORDER.map((key) => {
-              const d = ds[key];
-              if (!d) return null;
-              const score = Number(d.score ?? 0);
+              const dim = ds[key];
+              if (!dim) return null;
+              const score = Number(dim.score ?? 0);
               const color = scoreColor(score);
+              const hexColor =
+                score >= 75 ? "#34C28A" : score >= 50 ? "#F5B544" : "#F25C7C";
+              const rgb = hexColor
+                .slice(1)
+                .match(/.{2}/g)!
+                .map((h) => parseInt(h, 16))
+                .join(",");
               return (
-                <li key={key}>
-                  <div className="mb-0.5 flex items-center justify-between gap-2">
-                    <span className="text-xs text-foreground">{DIMENSION_LABELS[key]}</span>
-                    <span className="shrink-0 font-mono text-xs font-semibold tabular-nums" style={{ color }}>
-                      {score}/100
-                    </span>
+                <div
+                  key={key}
+                  className="rounded-xl p-3"
+                  title={
+                    dim.notes
+                      ? `${DIMENSION_LABELS[key]}: ${dim.notes}`
+                      : DIMENSION_LABELS[key]
+                  }
+                  style={{
+                    background: `rgba(${rgb}, 0.10)`,
+                    border: `1px solid rgba(${rgb}, 0.25)`,
+                  }}
+                >
+                  <div
+                    className="text-2xl font-mono font-bold tabular-nums leading-none"
+                    style={{ color }}
+                  >
+                    {score}
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-foreground/10">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, background: color }} />
+                  <div className="mt-1 text-[11px] text-muted-foreground uppercase tracking-wide leading-tight">
+                    {DIMENSION_LABELS[key]}
                   </div>
-                  {d.notes && (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{d.notes}</p>
-                  )}
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
         </div>
       )}
 
-      {/* ── Per-goal detail (collapsible) ── */}
+      {/* Per-goal detail (collapsible) */}
       {goals.length > 0 && (
         <details>
           <summary className="cursor-pointer text-xs text-muted-foreground">
@@ -1091,7 +1390,9 @@ function FinalAssessment({ raw }: { raw: string }) {
             {goals.map((g, i) => (
               <li key={i} className="rounded-lg border border-border p-2 text-sm">
                 <div className="flex justify-between gap-2">
-                  <span className="font-medium text-heading">{String(g.goal_title ?? "Goal")}</span>
+                  <span className="font-medium text-heading">
+                    {String(g.goal_title ?? "Goal")}
+                  </span>
                   <span className="shrink-0 text-muted-foreground">
                     <span className="font-mono font-semibold tabular-nums text-heading">
                       {Math.round(Number(g.final_score ?? 0) * 100)}%
@@ -1112,3 +1413,8 @@ function FinalAssessment({ raw }: { raw: string }) {
     </Wrap>
   );
 }
+
+// GoalRow is defined but kept for potential future use
+void GoalRow;
+// decisionStyle is defined but kept for potential future use
+void decisionStyle;
