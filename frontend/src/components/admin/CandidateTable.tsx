@@ -2,12 +2,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronRight, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import type { Candidate } from "@/types";
 import { formatDuration as fmtDuration, cn } from "@/lib/utils";
-import { avatarGradient, initials, scoreMeta } from "@/lib/score";
-import { ScoreChip } from "@/components/ui/ScoreChip";
-import { CountUp } from "@/components/ui/charts";
+import { avatarGradient, initials, scoreMeta, scoreTier } from "@/lib/score";
 import { Reveal } from "@/components/ui/Reveal";
 import { StatusBadge } from "./StatusBadge";
 import { StatusBadge as HRStatusBadge } from "../candidates/StatusBadge";
@@ -21,14 +19,6 @@ interface CandidateTableProps {
   onUpdate: () => void;
 }
 
-// Same column rhythm as the design spec.
-const GRID = "grid-cols-[2.4fr_1.3fr_1.1fr_1.5fr_1.2fr_0.9fr_40px]";
-
-/** Profile (Tier 1, /30) + semantic (Tier 2, /40) → a 0–100 résumé-fit number. */
-function resumeMatch(c: Candidate): number {
-  return Math.round((((c.tier1 ?? 0) + (c.tier2 ?? 0)) / 70) * 100);
-}
-
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "—";
@@ -39,90 +29,140 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-// System (pipeline) states worth surfacing under the name; "Reviewed" is the steady state.
 const NOTABLE_SYSTEM = new Set(["Queued", "Processing", "Ungraded", "Error"]);
 
-/** Tiny stacked bar: Tier 1 (/30) + Tier 2 (/40) + Tier 3 (/30) → share of 100. */
-function TierBar({ cand }: { cand: Candidate }) {
-  const segments = [
-    { key: "t1", value: cand.tier1 ?? 0, color: "var(--primary)" },
-    { key: "t2", value: cand.tier2 ?? 0, color: "var(--strong)" },
-    { key: "t3", value: cand.tier3 ?? 0, color: "var(--promising)" },
+/** Score number coloring by tier thresholds. */
+function scoreColor(score: number | null | undefined): string {
+  const tier = scoreTier(score);
+  if (tier === "strong") return "text-strong";
+  if (tier === "promising") return "text-promising";
+  return "text-weak";
+}
+
+/** Status pill styling for pipeline (evaluation) status. */
+function pipelineStatusStyle(status: string): string {
+  if (status === "Shortlisted" || status === "Processed" || status === "Reviewed")
+    return "bg-strong/15 text-strong";
+  if (status === "Queued" || status === "Processing" || status === "Pending")
+    return "bg-promising/15 text-promising";
+  if (status === "Failed" || status === "Error" || status === "Rejected")
+    return "bg-weak/15 text-weak";
+  return "bg-foreground/[0.07] text-muted-foreground";
+}
+
+/** Three tiny tier dots with individual tooltips. */
+function TierDots({ cand }: { cand: Candidate }) {
+  const dots = [
+    { key: "t1", value: cand.tier1 ?? 0, max: 30, color: "var(--strong)", label: "Profile (Tier 1)" },
+    { key: "t2", value: cand.tier2 ?? 0, max: 40, color: "var(--primary)", label: "Semantic (Tier 2)" },
+    { key: "t3", value: cand.tier3 ?? 0, max: 30, color: "var(--promising)", label: "LLM (Tier 3)" },
   ];
-  const total = segments.reduce((s, seg) => s + seg.value, 0);
   return (
-    <div
-      className="mt-1.5 flex h-1.5 w-16 overflow-hidden rounded-full bg-foreground/[0.07]"
-      title={`Tier 1 ${(cand.tier1 ?? 0).toFixed(1)} · Tier 2 ${(cand.tier2 ?? 0).toFixed(1)} · Tier 3 ${(cand.tier3 ?? 0).toFixed(1)}`}
-      aria-hidden
-    >
-      {total > 0 &&
-        segments.map((seg) => (
-          <span
-            key={seg.key}
-            className="h-full transition-[width] duration-500"
-            style={{ width: `${(seg.value / 100) * 100}%`, background: seg.color }}
-          />
-        ))}
+    <div className="flex items-center gap-2">
+      {dots.map((d) => {
+        const pct = Math.round((d.value / d.max) * 100);
+        return (
+          <div key={d.key} className="flex flex-col items-center gap-1" title={`${d.label}: ${d.value.toFixed(1)}/${d.max} (${pct}%)`}>
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ background: d.color, opacity: d.value > 0 ? 1 : 0.2 }}
+            />
+            <span className="font-mono text-[10px] text-muted-foreground tabular-nums leading-none">
+              {d.value.toFixed(0)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLoading, onView, onUpdate }) => {
+/** Stacked progress bar showing tier breakdown proportional to /100. */
+function TierBar({ cand }: { cand: Candidate }) {
+  const t1 = cand.tier1 ?? 0;
+  const t2 = cand.tier2 ?? 0;
+  const t3 = cand.tier3 ?? 0;
+  return (
+    <div
+      className="mt-1.5 flex h-1 w-full overflow-hidden rounded-full bg-foreground/[0.07]"
+      title={`T1 ${t1.toFixed(1)} · T2 ${t2.toFixed(1)} · T3 ${t3.toFixed(1)}`}
+      aria-hidden
+    >
+      <span className="h-full transition-[width] duration-500" style={{ width: `${t1}%`, background: "var(--strong)" }} />
+      <span className="h-full transition-[width] duration-500" style={{ width: `${t2}%`, background: "var(--primary)" }} />
+      <span className="h-full transition-[width] duration-500" style={{ width: `${t3}%`, background: "var(--promising)" }} />
+    </div>
+  );
+}
+
+const COL = "grid-cols-[2.2fr_1fr_1.1fr_1fr_1.1fr_0.8fr_auto]";
+
+export const CandidateTable: React.FC<CandidateTableProps> = ({
+  candidates,
+  isLoading,
+  onView,
+  onUpdate,
+}) => {
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const toggleNotes = (id: number) => setExpandedId((prev) => (prev === id ? null : id));
+  const toggleNotes = (id: number) =>
+    setExpandedId((prev) => (prev === id ? null : id));
 
   return (
-    <div className="glass overflow-hidden rounded-2xl">
+    <div className="overflow-hidden rounded-2xl border border-border">
       <div className="overflow-x-auto">
         <div className="min-w-[860px]">
           {/* Header */}
           <div
             className={cn(
-              "grid gap-3 border-b border-border px-[22px] py-3.5 font-mono text-[11px] uppercase tracking-[0.08em] text-faint",
-              GRID
+              "grid gap-3 border-b border-border px-4 py-3",
+              "bg-white/[0.03] font-mono text-[11px] uppercase tracking-widest text-muted-foreground",
+              COL
             )}
           >
             <div>Candidate</div>
-            <div className="flex items-center gap-1.5 text-primary-strong">
-              Match
-              <ChevronRight className="h-3 w-3 rotate-90" />
-            </div>
-            <div>Résumé</div>
-            <div>Aptitude (IQ)</div>
-            <div>HR status</div>
+            <div>Score</div>
+            <div>Tiers</div>
+            <div>Aptitude</div>
+            <div>Status</div>
             <div>Submitted</div>
             <div aria-hidden />
           </div>
 
-          {/* Body */}
+          {/* Loading skeleton */}
           {isLoading ? (
             <div>
               {Array.from({ length: 6 }).map((_, i) => (
                 <div
                   key={i}
-                  className={cn("grid items-center gap-3 border-b border-border/60 px-[22px] py-4", GRID)}
-                  style={{ opacity: 1 - i * 0.06 }}
+                  className={cn(
+                    "grid items-center gap-3 border-b border-border px-4 py-3",
+                    COL
+                  )}
+                  style={{ opacity: 1 - i * 0.08 }}
                 >
-                  {/* Candidate */}
                   <div className="flex items-center gap-3">
-                    <div className="h-[38px] w-[38px] shrink-0 animate-pulse rounded-[11px] bg-foreground/[0.07]" />
+                    <div className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-foreground/[0.07]" />
                     <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="h-3.5 w-3/5 animate-pulse rounded bg-foreground/[0.07]" />
+                      <div className="h-3 w-3/5 animate-pulse rounded bg-foreground/[0.07]" />
                       <div className="h-2.5 w-2/5 animate-pulse rounded bg-foreground/[0.05]" />
                     </div>
                   </div>
-                  <div className="h-6 w-20 animate-pulse rounded-full bg-foreground/[0.07]" />
-                  <div className="h-4 w-8 animate-pulse rounded bg-foreground/[0.07]" />
-                  <div className="h-4 w-14 animate-pulse rounded bg-foreground/[0.07]" />
-                  <div className="h-5 w-16 animate-pulse rounded-full bg-foreground/[0.07]" />
-                  <div className="h-3.5 w-12 animate-pulse rounded bg-foreground/[0.05]" />
+                  <div className="h-6 w-14 animate-pulse rounded bg-foreground/[0.07]" />
+                  <div className="flex gap-1.5">
+                    {[0,1,2].map((j) => (
+                      <div key={j} className="h-2 w-2 animate-pulse rounded-full bg-foreground/[0.07]" />
+                    ))}
+                  </div>
+                  <div className="h-4 w-12 animate-pulse rounded bg-foreground/[0.07]" />
+                  <div className="h-5 w-20 animate-pulse rounded-full bg-foreground/[0.07]" />
+                  <div className="h-3.5 w-10 animate-pulse rounded bg-foreground/[0.05]" />
                   <div />
                 </div>
               ))}
             </div>
           ) : candidates.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
+            /* Empty state */
+            <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 <Users className="h-6 w-6" />
               </span>
@@ -134,13 +174,18 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
           ) : (
             candidates.map((cand, idx) => {
               const effective = cand.hr_score_override ?? cand.total_score;
-              const overridden = cand.hr_score_override !== null && cand.hr_score_override !== undefined;
+              const overridden =
+                cand.hr_score_override !== null &&
+                cand.hr_score_override !== undefined;
               const name = cand.name || cand.filename;
               const subParts = [
                 cand.current_role,
-                cand.years_experience != null ? `${cand.years_experience} yrs` : null,
+                cand.years_experience != null
+                  ? `${cand.years_experience} yrs`
+                  : null,
               ].filter(Boolean);
               const expanded = expandedId === cand.id;
+              const meta = scoreMeta(effective);
 
               return (
                 <React.Fragment key={cand.id}>
@@ -156,30 +201,38 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
                       }
                     }}
                     className={cn(
-                      "group relative grid cursor-pointer items-center gap-3 border-b border-border/60 px-[22px] py-4 transition-[background-color,box-shadow] duration-200 hover:z-10 hover:bg-foreground/[0.04] hover:shadow-[0_18px_40px_-28px_rgba(20,30,60,0.45)] focus:outline-none focus-visible:bg-foreground/[0.05]",
-                      GRID
+                      "group relative grid cursor-pointer items-center gap-3 border-b border-border px-4 py-3",
+                      "transition-colors duration-150 hover:bg-white/[0.02] last:border-0",
+                      "focus:outline-none focus-visible:bg-white/[0.03]",
+                      COL
                     )}
                   >
-                    {/* Tier-colored accent rail on hover */}
+                    {/* Left accent rail */}
                     <span
                       aria-hidden
-                      className="pointer-events-none absolute inset-y-2 left-0 w-[3px] origin-center scale-y-0 rounded-full opacity-0 transition-all duration-200 group-hover:scale-y-100 group-hover:opacity-100"
-                      style={{ background: scoreMeta(effective).colorVar }}
+                      className="pointer-events-none absolute inset-y-2.5 left-0 w-[3px] origin-center scale-y-0 rounded-r-full opacity-0 transition-all duration-200 group-hover:scale-y-100 group-hover:opacity-100"
+                      style={{ background: meta.colorVar }}
                     />
 
                     {/* Candidate */}
                     <div className="flex min-w-0 items-center gap-3">
                       <span
-                        className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px] text-[13px] font-semibold text-white"
-                        style={{ background: avatarGradient(name) }}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                        style={{ background: avatarGradient(name ?? "?") }}
                         aria-hidden
                       >
-                        {initials(cand.name) === "··" ? (cand.filename?.[0] ?? "?").toUpperCase() : initials(cand.name)}
+                        {initials(cand.name) === "··"
+                          ? (cand.filename?.[0] ?? "?").toUpperCase()
+                          : initials(cand.name)}
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-heading">{name}</p>
+                        <p className="truncate text-sm font-medium text-heading">
+                          {name}
+                        </p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {subParts.length ? subParts.join(" · ") : cand.email ?? "No email captured"}
+                          {subParts.length
+                            ? subParts.join(" · ")
+                            : (cand.email ?? "No email captured")}
                         </p>
                         {NOTABLE_SYSTEM.has(cand.status) && (
                           <span className="mt-1 inline-block">
@@ -189,64 +242,105 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({ candidates, isLo
                       </div>
                     </div>
 
-                    {/* Match */}
-                    <div className="flex items-center gap-2.5">
-                      <CountUp
-                        value={Math.round(effective ?? 0)}
-                        className="font-mono text-xl font-semibold leading-none text-heading"
-                      />
-                      <div className="flex flex-col items-start gap-0.5">
-                        <ScoreChip score={effective} size="sm" />
-                        {overridden && (
-                          <span className="text-[9px] font-semibold uppercase tracking-wide text-promising">
-                            Overridden
-                          </span>
-                        )}
+                    {/* Score */}
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-baseline gap-0.5">
+                        <span
+                          className={cn(
+                            "font-mono text-lg font-bold tabular-nums leading-none",
+                            scoreColor(effective)
+                          )}
+                        >
+                          {Math.round(effective ?? 0)}
+                        </span>
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          /100
+                        </span>
                       </div>
+                      {overridden && (
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-promising">
+                          overridden
+                        </span>
+                      )}
                     </div>
 
-                    {/* Résumé — number + tier breakdown bar */}
-                    <div title="Profile (Tier 1) + semantic (Tier 2) + LLM (Tier 3)">
-                      <span className="font-mono text-[15px] text-foreground tabular-nums">{resumeMatch(cand)}</span>
+                    {/* Tiers */}
+                    <div className="space-y-1.5">
+                      <TierDots cand={cand} />
                       <TierBar cand={cand} />
                     </div>
 
-                    {/* Aptitude (IQ) */}
+                    {/* Aptitude */}
                     <div>
                       {cand.iq_score != null ? (
                         <>
                           <div className="font-mono text-sm text-foreground">
-                            {cand.iq_total ? Math.round((cand.iq_correct! / cand.iq_total) * 100) : Math.round(cand.iq_score)}%
-                            <span className="ml-1 text-xs text-faint">acc</span>
+                            {cand.iq_total
+                              ? Math.round(
+                                  (cand.iq_correct! / cand.iq_total) * 100
+                                )
+                              : Math.round(cand.iq_score)}
+                            %
+                            <span className="ml-1 text-[10px] text-muted-foreground">acc</span>
                           </div>
-                          <div className="mt-0.5 font-mono text-xs text-muted-foreground">
-                            {cand.iq_time_seconds != null ? fmtDuration(cand.iq_time_seconds) : "—"}
+                          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                            {cand.iq_time_seconds != null
+                              ? fmtDuration(cand.iq_time_seconds)
+                              : "—"}
                           </div>
                         </>
                       ) : (
-                        <span className="text-xs text-faint">Not taken</span>
+                        <span className="text-xs text-muted-foreground/50">Not taken</span>
                       )}
                     </div>
 
-                    {/* HR status */}
-                    <div onClick={(e) => e.stopPropagation()}>
+                    {/* Status */}
+                    <div
+                      className="flex flex-col gap-1.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium",
+                          pipelineStatusStyle(cand.status)
+                        )}
+                      >
+                        {cand.status}
+                      </span>
                       <HRStatusBadge status={cand.hr_status} />
                     </div>
 
                     {/* Submitted */}
-                    <div className="text-[13px] text-muted-foreground">{timeAgo(cand.created_at)}</div>
+                    <div className="font-mono text-[12px] text-muted-foreground">
+                      {timeAgo(cand.created_at)}
+                    </div>
 
-                    {/* Affordance + hover actions */}
-                    <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
-                      <div className="hidden group-hover:flex group-focus-within:flex">
-                        <CandidateActions candidate={cand} onUpdate={onUpdate} onToggleNote={() => toggleNotes(cand.id)} />
+                    {/* Actions */}
+                    <div
+                      className="flex items-center justify-end gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                        <CandidateActions
+                          candidate={cand}
+                          onUpdate={onUpdate}
+                          onToggleNote={() => toggleNotes(cand.id)}
+                        />
                       </div>
-                      <ChevronRight className="h-[18px] w-[18px] text-faint transition-colors group-hover:text-foreground" />
+                      <a
+                        href={`/admin/candidates/${cand.id}/interview`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-white/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                        title="Open interview page"
+                      >
+                        View
+                      </a>
                     </div>
                   </Reveal>
 
+                  {/* Expanded notes panel */}
                   {expanded && (
-                    <div className="border-b border-border/60 bg-foreground/[0.02] px-[22px] py-4">
+                    <div className="border-b border-border bg-white/[0.01] px-4 py-4">
                       <div className="glass-tile max-w-3xl rounded-xl p-4">
                         <CandidateNotesPanel
                           candidateId={cand.id}
