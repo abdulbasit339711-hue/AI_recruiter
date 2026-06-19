@@ -1,27 +1,26 @@
 // src/app/layout.tsx
 import './globals.css';
-import { Bricolage_Grotesque, Geist, Geist_Mono } from 'next/font/google';
+import { Poppins, JetBrains_Mono } from 'next/font/google';
 import { ReactNode } from 'react';
 import { Providers } from '@/components/providers';
 
-// Display / headings — warm, characterful
-const display = Bricolage_Grotesque({
+// OZI Group — Poppins for both display and body
+const display = Poppins({
   subsets: ['latin'],
   variable: '--font-display',
   weight: ['400', '500', '600', '700', '800'],
   display: 'swap',
 });
 
-// Body / UI — clean, highly legible
-const sans = Geist({
+const sans = Poppins({
   subsets: ['latin'],
   variable: '--font-sans',
   weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
 });
 
-// Numbers / scores / timers — tabular
-const mono = Geist_Mono({
+// OZI Group — JetBrains Mono for code / scores / numbers
+const mono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
   weight: ['400', '500', '600'],
@@ -29,8 +28,8 @@ const mono = Geist_Mono({
 });
 
 export const metadata = {
-  title: 'AI-Recruiter',
-  description: 'A calm, premium hiring surface — scoring, aptitude, and interviews in one place.',
+  title: 'OZI Recruiter',
+  description: 'AI-powered hiring — scoring, aptitude, and interviews in one place.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
