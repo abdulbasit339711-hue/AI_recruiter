@@ -605,7 +605,7 @@ function CommunicationSection({ candidateId, autoLoad }: { candidateId: number; 
         <div className="mb-3 flex flex-wrap gap-1.5">
           {Object.entries(f.by_filler).map(([w, c]) => (
             <span key={w} className="rounded-full bg-foreground/[0.06] px-2 py-0.5 text-[11px] text-muted-foreground">
-              “{w}” ×{c}
+              &ldquo;{w}&rdquo; ×{c}
             </span>
           ))}
         </div>
@@ -766,7 +766,7 @@ function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number]
                     key={i}
                     className="rounded-md glass-tile px-2 py-1 text-xs italic text-foreground"
                   >
-                    “{e.text}”
+                    &ldquo;{e.text}&rdquo;
                   </li>
                 ))}
               </ul>
@@ -795,6 +795,38 @@ function TurnEvalBadge({ ev }: { ev: TurnEvaluation }) {
   );
 }
 
+const DIMENSION_LABELS: Record<string, string> = {
+  communication_skills: "Communication Skills",
+  confidence_presentation: "Confidence & Presentation",
+  technical_competency: "Technical Competency",
+  problem_solving: "Problem-Solving & Critical Thinking",
+  relevant_experience: "Relevant Experience",
+  skills_match: "Skills Match Assessment",
+  cultural_fit: "Cultural & Organizational Fit",
+  leadership_ownership: "Leadership & Ownership",
+  learning_agility: "Learning Agility",
+  emotional_intelligence: "Emotional Intelligence",
+  motivation_alignment: "Motivation & Career Alignment",
+  behavioral_assessment: "Behavioral Assessment",
+  resume_consistency: "Resume & Interview Consistency",
+  overall_performance: "Overall Performance Evaluation",
+};
+
+const DIMENSION_ORDER = Object.keys(DIMENSION_LABELS);
+
+function scoreColor(score: number): string {
+  if (score >= 75) return "var(--strong)";
+  if (score >= 50) return "var(--promising)";
+  return "var(--weak)";
+}
+
+function decisionStyle(decision: string): { bg: string; text: string } {
+  const d = decision.toLowerCase();
+  if (d === "hire")    return { bg: "var(--strong)",     text: "#fff" };
+  if (d === "reject")  return { bg: "var(--weak)",       text: "#fff" };
+  return                      { bg: "var(--promising)",  text: "#fff" };
+}
+
 /** Renders the final transcript evaluation. The value is JSON from the voice agent; older
  *  sessions may hold plain text, in which case we show it verbatim. */
 function FinalAssessment({ raw }: { raw: string }) {
@@ -806,9 +838,9 @@ function FinalAssessment({ raw }: { raw: string }) {
     parsed = null;
   }
 
-  const Section = ({ children }: { children: ReactNode }) => (
-    <section className="rounded-xl glass-tile p-4">
-      <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-heading">
+  const Wrap = ({ children }: { children: ReactNode }) => (
+    <section className="rounded-xl glass-tile p-4 space-y-4">
+      <h4 className="flex items-center gap-2 text-sm font-semibold text-heading">
         <ClipboardCheck className="h-4 w-4 text-primary" /> Final evaluation
       </h4>
       {children}
@@ -816,67 +848,143 @@ function FinalAssessment({ raw }: { raw: string }) {
   );
 
   if (!parsed) {
-    return (
-      <Section>
-        <p className="text-sm text-foreground">{raw}</p>
-      </Section>
-    );
+    return <Wrap><p className="text-sm text-foreground">{raw}</p></Wrap>;
   }
 
-  const overall = (parsed.overall_assessment ?? {}) as Record<string, unknown>;
-  const rec = String(overall.hiring_recommendation ?? "").replace(/_/g, " ");
-  const perf = Number(overall.candidate_performance);
-  const coverage = Number(overall.goal_coverage_rate);
-  const strengths = (overall.strengths as string[]) ?? [];
-  const improvements = (overall.areas_for_improvement as string[]) ?? [];
+  // New schema: final_ai_recommendation + dimension_scores
+  const fr  = (parsed.final_ai_recommendation ?? {}) as Record<string, unknown>;
+  const ds  = (parsed.dimension_scores ?? {}) as Record<string, { score: number; notes?: string }>;
+  // Legacy schema fallback
+  const ov  = (parsed.overall_assessment ?? {}) as Record<string, unknown>;
   const goals = (parsed.goal_assessments as Record<string, unknown>[]) ?? [];
-  const recBg = /strong_hire|^hire/i.test(String(overall.hiring_recommendation))
-    ? "var(--strong)"
-    : /no_hire/i.test(String(overall.hiring_recommendation))
-    ? "var(--weak)"
-    : "color-mix(in srgb, var(--muted-foreground) 55%, transparent)";
+
+  const decision = String(fr.decision ?? ov.hiring_recommendation ?? "").replace(/_/g, " ");
+  const overallScore   = fr.overall_candidate_score  != null ? Number(fr.overall_candidate_score)  : (ov.overall_candidate_score  != null ? Number(ov.overall_candidate_score)  : null);
+  const jobMatch       = fr.job_match_percentage      != null ? Number(fr.job_match_percentage)      : (ov.job_match_percentage      != null ? Number(ov.job_match_percentage)      : null);
+  const rationale      = String(fr.decision_rationale ?? "");
+  const keyStrengths   = (fr.key_strengths        as string[]) ?? (ov.strengths              as string[]) ?? [];
+  const devAreas       = (fr.development_areas    as string[]) ?? (ov.areas_for_improvement  as string[]) ?? [];
+  const legacyPerf     = Number(ov.candidate_performance);
+  const legacyCoverage = Number(ov.goal_coverage_rate);
+
+  const hasDimensions  = Object.keys(ds).length > 0;
+  const ds_ = decisionStyle(decision);
 
   return (
-    <Section>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {rec && (
+    <Wrap>
+      {/* ── Hero: decision + score + match ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        {decision && (
           <span
-            className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
-            style={{ background: recBg }}
+            className="rounded-full px-3 py-1 text-sm font-bold tracking-wide"
+            style={{ background: ds_.bg, color: ds_.text }}
           >
-            {rec}
+            {decision.toUpperCase()}
           </span>
         )}
-        {!Number.isNaN(perf) && (
+        {overallScore != null && (
+          <div className="flex flex-col items-center rounded-xl border border-border px-4 py-2 text-center">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Overall Score</span>
+            <span className="text-2xl font-bold tabular-nums" style={{ color: scoreColor(overallScore) }}>
+              {overallScore}<span className="text-sm font-normal text-muted-foreground">/100</span>
+            </span>
+          </div>
+        )}
+        {jobMatch != null && (
+          <div className="flex flex-col items-center rounded-xl border border-border px-4 py-2 text-center">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Job Match</span>
+            <span className="text-2xl font-bold tabular-nums" style={{ color: scoreColor(jobMatch) }}>
+              {jobMatch}<span className="text-sm font-normal text-muted-foreground">%</span>
+            </span>
+          </div>
+        )}
+        {/* Legacy perf/coverage when no new schema */}
+        {overallScore == null && !Number.isNaN(legacyPerf) && legacyPerf > 0 && (
           <span className="text-xs text-foreground">
-            Performance: <span className="font-mono font-semibold tabular-nums">{Math.round(perf * 100)}%</span>
+            Performance: <span className="font-mono font-semibold tabular-nums">{Math.round(legacyPerf * 100)}%</span>
           </span>
         )}
-        {!Number.isNaN(coverage) && (
+        {jobMatch == null && !Number.isNaN(legacyCoverage) && legacyCoverage > 0 && (
           <span className="text-xs text-foreground">
-            Goal coverage: <span className="font-mono font-semibold tabular-nums">{Math.round(coverage * 100)}%</span>
+            Goal coverage: <span className="font-mono font-semibold tabular-nums">{Math.round(legacyCoverage * 100)}%</span>
           </span>
         )}
       </div>
-      {strengths.length > 0 && (
-        <div className="mb-2">
-          <div className="text-[11px] uppercase tracking-wide text-strong">Strengths</div>
-          <ul className="ml-4 list-disc text-sm text-foreground">
-            {strengths.map((s, i) => <li key={i}>{s}</li>)}
+
+      {/* ── Rationale ── */}
+      {rationale && (
+        <p className="rounded-lg bg-foreground/[0.04] px-3 py-2 text-sm leading-relaxed text-foreground">
+          {rationale}
+        </p>
+      )}
+
+      {/* ── Strengths + Development areas ── */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {keyStrengths.length > 0 && (
+          <div>
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-strong">Key Strengths</div>
+            <ul className="space-y-1">
+              {keyStrengths.map((s, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-sm text-foreground">
+                  <span className="mt-0.5 text-strong">✓</span> {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {devAreas.length > 0 && (
+          <div>
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-promising">Development Areas</div>
+            <ul className="space-y-1">
+              {devAreas.map((s, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-sm text-foreground">
+                  <span className="mt-0.5 text-promising">↗</span> {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* ── 14-Dimension scores ── */}
+      {hasDimensions && (
+        <div>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            14-Dimension Assessment
+          </div>
+          <ul className="space-y-2">
+            {DIMENSION_ORDER.map((key) => {
+              const d = ds[key];
+              if (!d) return null;
+              const score = Number(d.score ?? 0);
+              const color = scoreColor(score);
+              return (
+                <li key={key}>
+                  <div className="mb-0.5 flex items-center justify-between gap-2">
+                    <span className="text-xs text-foreground">{DIMENSION_LABELS[key]}</span>
+                    <span className="shrink-0 font-mono text-xs font-semibold tabular-nums" style={{ color }}>
+                      {score}/100
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-foreground/10">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, background: color }} />
+                  </div>
+                  {d.notes && (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">{d.notes}</p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
-      {improvements.length > 0 && (
-        <div className="mb-2">
-          <div className="text-[11px] uppercase tracking-wide text-promising">Areas for improvement</div>
-          <ul className="ml-4 list-disc text-sm text-foreground">
-            {improvements.map((s, i) => <li key={i}>{s}</li>)}
-          </ul>
-        </div>
-      )}
+
+      {/* ── Per-goal detail (collapsible) ── */}
       {goals.length > 0 && (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-xs text-muted-foreground">Per-goal assessment ({goals.length})</summary>
+        <details>
+          <summary className="cursor-pointer text-xs text-muted-foreground">
+            Per-goal assessment ({goals.length})
+          </summary>
           <ul className="mt-2 space-y-2">
             {goals.map((g, i) => (
               <li key={i} className="rounded-lg border border-border p-2 text-sm">
@@ -890,13 +998,15 @@ function FinalAssessment({ raw }: { raw: string }) {
                   </span>
                 </div>
                 {Array.isArray(g.key_quotes) && (g.key_quotes as string[]).length > 0 && (
-                  <p className="mt-1 text-xs italic text-muted-foreground">“{(g.key_quotes as string[])[0]}”</p>
+                  <p className="mt-1 text-xs italic text-muted-foreground">
+                    &ldquo;{(g.key_quotes as string[])[0]}&rdquo;
+                  </p>
                 )}
               </li>
             ))}
           </ul>
         </details>
       )}
-    </Section>
+    </Wrap>
   );
 }
