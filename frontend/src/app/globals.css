@@ -86,6 +86,15 @@
     --glass-inset:  rgba(255, 255, 255, 0.92);
     --glass-shadow: 0 20px 48px -24px rgba(11, 13, 17, 0.18), 0 4px 12px -6px rgba(11, 13, 17, 0.08);
 
+    /* theme-adaptive surface tokens (used in inline styles) */
+    --surface-card:    rgba(255, 255, 255, 0.75);
+    --surface-subtle:  rgba(0, 0, 0, 0.03);
+    --surface-input:   rgba(0, 0, 0, 0.04);
+    --surface-row:     rgba(0, 0, 0, 0.03);
+    --surface-border:  rgba(0, 0, 0, 0.08);
+    --surface-divider: rgba(0, 0, 0, 0.06);
+    --chart-bar-bg:    rgba(0, 0, 0, 0.04);
+
     /* score semantics — OZI Emerald / Amber / Rose */
     --strong:          #34C28A;  --strong-text: #1a8c5e;   --strong-bg:    rgba(52, 194, 138, 0.12);
     --promising:       #F5B544;  --promising-text: #a87100; --promising-bg: rgba(245, 181, 68, 0.14);
@@ -136,6 +145,15 @@
     --glass-inset:  rgba(61, 175, 204, 0.06);
     --glass-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(61, 175, 204, 0.07);
 
+    /* theme-adaptive surface tokens (dark overrides) */
+    --surface-card:    rgba(8, 34, 52, 0.70);
+    --surface-subtle:  rgba(255, 255, 255, 0.03);
+    --surface-input:   rgba(255, 255, 255, 0.02);
+    --surface-row:     rgba(255, 255, 255, 0.02);
+    --surface-border:  rgba(255, 255, 255, 0.08);
+    --surface-divider: rgba(255, 255, 255, 0.06);
+    --chart-bar-bg:    rgba(255, 255, 255, 0.03);
+
     --strong:    #34C28A;  --strong-text: #6ddcb0;    --strong-bg:    rgba(52, 194, 138, 0.16);
     --promising: #F5B544;  --promising-text: #f5cf86;  --promising-bg: rgba(245, 181, 68, 0.18);
     --weak:      #F25C7C;  --weak-text: #f8849e;      --weak-bg:      rgba(242, 92, 124, 0.18);
@@ -177,6 +195,9 @@
   --color-weak:                var(--weak);
   --color-faint:               var(--faint);
   --color-glass-border:        var(--glass-border);
+  --color-surface-card:        var(--surface-card);
+  --color-surface-subtle:      var(--surface-subtle);
+  --color-surface-border:      var(--surface-border);
 
   /* OZI brand palette as Tailwind utilities */
   --color-ozi-brand:           #1C99BF;
@@ -308,6 +329,18 @@
    ============================================================ */
 .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 .text-glow-teal { text-shadow: 0 0 18px rgba(28,153,191,0.45); }
+
+/* ── Adaptive surface helpers ── */
+.surface-card {
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.surface-subtle { background: var(--surface-subtle); }
+.surface-input  { background: var(--surface-input); border: 1px solid var(--surface-border); }
+.surface-row:hover { background: var(--surface-row); }
+.surface-divider { border-color: var(--surface-divider); }
 
 /* ============================================================
    Score chips — OZI Emerald / Amber / Rose

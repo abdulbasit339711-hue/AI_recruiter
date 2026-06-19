@@ -55,7 +55,7 @@ export default function DashboardPage() {
   }
 
   const avgScore = m.avgScore;
-  const totalJobs = m.totalJobs;
+  const totalJobs = jobs?.length ?? m.totalJobs; // active jobs only
   const totalCandidates = m.totalCandidates;
   const pendingCount = m.pendingCount;
   const processedCount = m.processedCount;
@@ -106,7 +106,7 @@ export default function DashboardPage() {
       {/* KPI Cards */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat
-          label="Total Jobs"
+          label="Active Jobs"
           value={totalJobs}
           accentColor="#1C99BF"
           icon={<Briefcase className="h-4 w-4" />}
@@ -183,7 +183,7 @@ export default function DashboardPage() {
                     <div
                       className="relative w-full flex-1 rounded-lg"
                       style={{
-                        background: "rgba(255,255,255,0.03)",
+                        background: "var(--surface-subtle)",
                         minHeight: 80,
                       }}
                     >
@@ -237,7 +237,7 @@ export default function DashboardPage() {
                     </div>
                     <div
                       className="h-2.5 w-full overflow-hidden rounded-full"
-                      style={{ background: "rgba(255,255,255,0.04)" }}
+                      style={{ background: "var(--surface-subtle)" }}
                     >
                       <motion.div
                         initial={{ width: 0 }}
@@ -489,8 +489,8 @@ export default function DashboardPage() {
                     href={`/admin/jobs?jobId=${job.id}`}
                     className="flex items-center gap-3 rounded-xl p-3.5 transition-all glass-hover"
                     style={{
-                      background: "rgba(8,34,52,0.5)",
-                      border: "1px solid rgba(255,255,255,0.06)",
+                      background: "var(--surface-card)",
+                      border: "1px solid var(--surface-border)",
                     }}
                   >
                     <span

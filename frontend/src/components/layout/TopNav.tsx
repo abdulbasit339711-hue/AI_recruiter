@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
-import { Bell, Briefcase, LayoutDashboard, Users } from "lucide-react";
+import { Bell, Briefcase, LayoutDashboard, Users, Sun, Moon } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -13,11 +15,18 @@ const NAV_ITEMS = [
 
 export function TopNav() {
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch
+  useEffect(() => setMounted(true), []);
+
+  const isDark = theme === "dark";
 
   return (
     <header
-      className="sticky top-0 z-40 border-b border-white/[0.06] backdrop-blur-xl"
-      style={{ background: "rgba(4,17,27,0.85)" }}
+      className="sticky top-0 z-40 backdrop-blur-xl transition-colors"
+      style={{ background: "var(--surface-card)", borderBottom: "1px solid var(--surface-border)" }}
     >
       <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
@@ -41,7 +50,7 @@ export function TopNav() {
           </svg>
           <div>
             <span className="font-mono text-base font-bold" style={{ color: "#1C99BF" }}>OZI</span>
-            <span className="ml-0.5 font-mono text-base font-bold text-white/60"> Recruiter</span>
+            <span className="ml-0.5 font-mono text-base font-bold text-foreground/50"> Recruiter</span>
           </div>
         </Link>
 
@@ -55,7 +64,8 @@ export function TopNav() {
                 key={item.to}
                 href={item.to}
                 className="relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                style={{ color: isActive ? "#1C99BF" : "#9CA3B0" }}
+                style={{ color: isActive ? "#1C99BF" : undefined }}
+                data-inactive={!isActive || undefined}
               >
                 {isActive && (
                   <motion.div
@@ -65,8 +75,8 @@ export function TopNav() {
                     transition={{ type: "spring", duration: 0.4 }}
                   />
                 )}
-                <Icon className="h-4 w-4" />
-                {item.label}
+                <Icon className={`h-4 w-4 ${!isActive ? "text-muted-foreground" : ""}`} />
+                <span className={isActive ? "" : "text-muted-foreground"}>{item.label}</span>
               </Link>
             );
           })}
@@ -74,6 +84,24 @@ export function TopNav() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          {/* Theme toggle */}
+          {mounted && (
+            <button
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+              className="relative rounded-lg p-2 text-muted-foreground hover:text-heading transition-colors"
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              <motion.div
+                key={theme}
+                initial={{ scale: 0.7, opacity: 0, rotate: -30 }}
+                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                transition={{ duration: 0.25 }}
+              >
+                {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </motion.div>
+            </button>
+          )}
+
           {/* Bell */}
           <button className="relative rounded-lg p-2 text-muted-foreground hover:text-heading transition-colors">
             <Bell className="h-5 w-5" />
@@ -85,8 +113,11 @@ export function TopNav() {
 
           {/* Avatar pill */}
           <div
-            className="flex items-center gap-2.5 rounded-full border border-white/[0.08] py-1 pl-1 pr-3"
-            style={{ background: "rgba(8,34,52,0.6)" }}
+            className="flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-3 transition-colors"
+            style={{
+              background: "var(--surface-card)",
+              borderColor: "var(--surface-border)",
+            }}
           >
             <div
               className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white"
@@ -103,7 +134,10 @@ export function TopNav() {
       </div>
 
       {/* Mobile bottom nav */}
-      <div className="flex items-center justify-around border-t border-white/[0.04] px-2 py-1 md:hidden">
+      <div
+        className="flex items-center justify-around border-t px-2 py-1 md:hidden"
+        style={{ borderColor: "var(--surface-border)" }}
+      >
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = pathname.startsWith(item.to);

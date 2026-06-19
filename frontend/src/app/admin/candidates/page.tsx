@@ -395,8 +395,8 @@ export default function AdminCandidatesPage() {
               <div
                 className="h-full rounded-2xl p-[18px]"
                 style={{
-                  background: "rgba(8,34,52,0.7)",
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "var(--surface-card)",
+                  border: "1px solid var(--surface-border)",
                   backdropFilter: "blur(12px)",
                 }}
               >

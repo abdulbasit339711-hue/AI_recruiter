@@ -311,7 +311,7 @@ export default function CandidateInterviewPage() {
                     </div>
                     <div
                       className="h-2 w-full overflow-hidden rounded-full"
-                      style={{ background: "rgba(255,255,255,0.04)" }}
+                      style={{ background: "var(--surface-subtle)" }}
                     >
                       <motion.div
                         initial={{ width: 0 }}
@@ -446,9 +446,9 @@ export default function CandidateInterviewPage() {
           transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
           className="mb-4 overflow-hidden rounded-2xl"
           style={{
-            background: "rgba(8,34,52,0.7)",
+            background: "var(--surface-card)",
             backdropFilter: "blur(16px)",
-            border: "1px solid rgba(255,255,255,0.08)",
+            border: "1px solid var(--surface-border)",
             borderLeft: `6px solid ${decisionColor}`,
           }}
         >
@@ -605,13 +605,13 @@ export default function CandidateInterviewPage() {
                     </h3>
                     <div
                       className="h-4 w-full overflow-hidden rounded-full"
-                      style={{ background: "rgba(255,255,255,0.04)" }}
+                      style={{ background: "var(--surface-subtle)" }}
                     >
                       <div className="flex h-full">
                         <div
                           style={{
                             width: `${botRatio}%`,
-                            background: "rgba(255,255,255,0.1)",
+                            background: "var(--surface-subtle)",
                           }}
                         />
                         <div
@@ -656,7 +656,7 @@ export default function CandidateInterviewPage() {
                             key={i}
                             className="relative flex-1 rounded-md"
                             style={{
-                              background: "rgba(255,255,255,0.03)",
+                              background: "var(--surface-subtle)",
                               minHeight: 8,
                             }}
                           >
@@ -741,7 +741,7 @@ export default function CandidateInterviewPage() {
                             <div
                               className="h-1.5 w-full overflow-hidden rounded-full"
                               style={{
-                                background: "rgba(255,255,255,0.04)",
+                                background: "var(--surface-subtle)",
                               }}
                             >
                               <motion.div
@@ -825,9 +825,9 @@ export default function CandidateInterviewPage() {
                                     color: "#E8EDF5",
                                   }
                                 : {
-                                    background: "rgba(255,255,255,0.04)",
+                                    background: "var(--surface-subtle)",
                                     border:
-                                      "1px solid rgba(255,255,255,0.05)",
+                                      "1px solid var(--surface-border)",
                                     color: "#9CA3B0",
                                   }
                             }
@@ -888,8 +888,7 @@ function GoalTile({ goal, index }: {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="cursor-pointer rounded-2xl p-4 transition-all"
-      style={{ background: "rgba(8,34,52,0.7)", border: "1px solid rgba(255,255,255,0.08)" }}
+      className="surface-card cursor-pointer rounded-2xl p-4 transition-all"
       onClick={() => setOpen(o => !o)}
     >
       <div className="flex items-start gap-3">
@@ -1001,7 +1000,7 @@ function AssessmentView({
                 className="rounded-lg px-3 py-1 text-xs font-medium transition-colors"
                 style={showAnnotated
                   ? { background: "rgba(28,153,191,0.15)", color: "#1C99BF", border: "1px solid rgba(28,153,191,0.3)" }
-                  : { background: "rgba(255,255,255,0.04)", color: "#9CA3B0", border: "1px solid rgba(255,255,255,0.08)" }
+                  : { background: "var(--surface-subtle)", color: "#9CA3B0", border: "1px solid var(--surface-border)" }
                 }
               >
                 {showAnnotated ? "Annotated" : "Original"} ↕
@@ -1032,7 +1031,7 @@ function AssessmentView({
               { label: "Frames Analyzed", value: String(vision.aggregate?.frames_analyzed ?? "—"), color: "#9CA3B0" },
               { label: "Phone Seen", value: vision.aggregate?.phone_seen ? "Yes" : "No", color: vision.aggregate?.phone_seen ? "#F25C7C" : "#34C28A" },
             ].map((stat) => (
-              <div key={stat.label} className="rounded-xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div key={stat.label} className="rounded-xl p-4" style={{ background: "var(--surface-subtle)", border: "1px solid var(--surface-border)" }}>
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{stat.label}</p>
                 <p className="mt-1 font-mono text-xl font-bold tabular-nums" style={{ color: stat.color }}>{stat.value}</p>
               </div>

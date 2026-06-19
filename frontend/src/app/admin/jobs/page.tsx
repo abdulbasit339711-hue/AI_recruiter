@@ -82,8 +82,8 @@ export default function AdminJobsPage() {
               key={i}
               className="animate-pulse rounded-2xl p-5"
               style={{
-                background: "rgba(8,34,52,0.7)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--surface-card)",
+                border: "1px solid var(--surface-border)",
                 backdropFilter: "blur(12px)",
               }}
             >
@@ -111,8 +111,8 @@ export default function AdminJobsPage() {
         <div
           className="flex flex-col items-center justify-center gap-4 rounded-2xl px-6 py-20 text-center"
           style={{
-            background: "rgba(8,34,52,0.7)",
-            border: "1px solid rgba(255,255,255,0.08)",
+            background: "var(--surface-card)",
+            border: "1px solid var(--surface-border)",
             backdropFilter: "blur(12px)",
           }}
         >

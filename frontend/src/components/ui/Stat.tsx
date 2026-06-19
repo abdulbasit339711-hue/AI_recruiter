@@ -28,13 +28,7 @@ export function Stat({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
-      className="relative overflow-hidden rounded-2xl p-5"
-      style={{
-        background: "rgba(8,34,52,0.7)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        border: "1px solid rgba(255,255,255,0.08)",
-      }}
+      className="surface-card relative overflow-hidden rounded-2xl p-5"
     >
       {/* Colored bottom strip */}
       <div
