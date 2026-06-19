@@ -153,6 +153,22 @@ def get_metrics(db: Session = Depends(get_db)):
         .count()
     )
     failed = db.query(Candidate).filter(Candidate.status.in_([S.ERROR, "Failed"])).count()
+    # Score distribution buckets
+    buckets = [("0–20", 0, 20), ("21–40", 21, 40), ("41–60", 41, 60), ("61–80", 61, 80), ("81–100", 81, 100)]
+    score_distribution = []
+    for label, lo, hi in buckets:
+        count = (
+            db.query(Candidate)
+            .filter(Candidate.total_score >= lo, Candidate.total_score <= hi)
+            .count()
+        )
+        score_distribution.append({"label": label, "count": count})
+
+    shortlisted_count = db.query(Candidate).filter(
+        Candidate.status.in_([S.SHORTLISTED, "Shortlisted"])
+    ).count()
+    top_score = float(db.query(func.max(Candidate.total_score)).scalar() or 0.0)
+
     return {
         "totalJobs": total_jobs,
         "totalCandidates": total_candidates,
@@ -160,6 +176,9 @@ def get_metrics(db: Session = Depends(get_db)):
         "pendingCount": queued,
         "processedCount": processed,
         "failedCount": failed,
+        "scoreDistribution": score_distribution,
+        "shortlistedCount": shortlisted_count,
+        "topScore": top_score,
     }
 
 

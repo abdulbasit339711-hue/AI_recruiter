@@ -171,19 +171,67 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
       ) : (
         <Stagger className="space-y-6" gap={0.06}>
           <StaggerItem>
-            <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Status" value={result.session?.status ?? "—"} />
-              <Stat label="Role" value={result.session?.role_type ?? "—"} />
-              <Stat
-                label="Goals completed"
-                value={`${result.session?.completed_goals ?? 0}/${result.session?.total_goals ?? 0}`}
-                mono
-              />
-              <Stat
-                label="Avg progress"
-                value={`${Math.round((Number(result.session?.average_progress) || 0) * 100)}%`}
-                mono
-              />
+            <section className="rounded-xl glass-tile p-4 flex items-center gap-4">
+              {/* Mini radial progress ring */}
+              {(() => {
+                const completed = result.session?.completed_goals ?? 0;
+                const total = result.session?.total_goals ?? 0;
+                const pct = total > 0 ? completed / total : 0;
+                const size = 64;
+                const stroke = 6;
+                const r = (size - stroke) / 2;
+                const circ = 2 * Math.PI * r;
+                const dash = circ * 0.75;
+                const offset = dash * (1 - pct);
+                return (
+                  <div className="relative shrink-0 inline-flex items-center justify-center" style={{ width: size, height: size }}>
+                    <svg width={size} height={size} className="-rotate-[135deg]">
+                      <circle cx={size/2} cy={size/2} r={r} fill="none"
+                        stroke="color-mix(in srgb, var(--foreground) 12%, transparent)"
+                        strokeWidth={stroke} strokeLinecap="round"
+                        strokeDasharray={`${dash} ${circ}`} />
+                      <circle cx={size/2} cy={size/2} r={r} fill="none"
+                        stroke="var(--primary)" strokeWidth={stroke} strokeLinecap="round"
+                        strokeDasharray={`${dash} ${circ}`}
+                        strokeDashoffset={offset}
+                        style={{ transition: "stroke-dashoffset 0.9s ease" }} />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="font-mono text-[11px] font-semibold text-heading leading-none">
+                        {completed}/{total}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Right side info */}
+              <div className="flex-1 min-w-0 space-y-1.5">
+                {/* Status badge */}
+                {(() => {
+                  const status = result.session?.status ?? "";
+                  const pillClass =
+                    status.toLowerCase() === "active"
+                      ? "bg-[#F5B544]/15 text-[#a87100]"
+                      : status.toLowerCase() === "completed"
+                      ? "bg-strong/15 text-strong"
+                      : "bg-foreground/10 text-muted-foreground";
+                  return (
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${pillClass}`}>
+                      {status || "—"}
+                    </span>
+                  );
+                })()}
+                <p className="truncate text-sm font-medium text-heading">
+                  {result.session?.role_type ?? "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {result.session?.completed_goals ?? 0} of {result.session?.total_goals ?? 0} goals ·{" "}
+                  <span className="font-mono font-semibold text-heading">
+                    {Math.round((Number(result.session?.average_progress) || 0) * 100)}%
+                  </span>{" "}
+                  avg progress
+                </p>
+              </div>
             </section>
           </StaggerItem>
 
@@ -196,25 +244,31 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
           {result.metrics && (
             <StaggerItem>
             <section className="rounded-xl glass-tile p-4">
-              <h4 className="mb-3 text-sm font-semibold">Usage &amp; cost (tokens)</h4>
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Interview</div>
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-                <Stat label="STT (est.)" value={result.metrics.interview.stt_tokens.toLocaleString()} mono />
-                <Stat label="LLM in" value={result.metrics.interview.llm_input_tokens.toLocaleString()} mono />
-                <Stat label="LLM out" value={result.metrics.interview.llm_output_tokens.toLocaleString()} mono />
-                <Stat label="TTS (est.)" value={result.metrics.interview.tts_tokens.toLocaleString()} mono />
-                <Stat label="Total" value={result.metrics.interview.total_tokens.toLocaleString()} mono />
-              </div>
-              <div className="mt-3 mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Resume scoring</div>
-              <div className="grid grid-cols-3 gap-3">
-                <Stat label="LLM in" value={result.metrics.scoring.prompt_tokens.toLocaleString()} mono />
-                <Stat label="LLM out" value={result.metrics.scoring.completion_tokens.toLocaleString()} mono />
-                <Stat label="Scoring cost" value={`$${result.metrics.scoring.cost_usd.toFixed(4)}`} mono />
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground">
-                Interview LLM cost: ${result.metrics.interview.cost_usd.toFixed(4)} · STT/TTS token
-                counts are character-based estimates.
-              </p>
+              <details>
+                <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  Cost details — expand
+                </summary>
+                <div className="mt-3">
+                  <div className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Interview</div>
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+                    <Stat label="STT (est.)" value={result.metrics.interview.stt_tokens.toLocaleString()} mono />
+                    <Stat label="LLM in" value={result.metrics.interview.llm_input_tokens.toLocaleString()} mono />
+                    <Stat label="LLM out" value={result.metrics.interview.llm_output_tokens.toLocaleString()} mono />
+                    <Stat label="TTS (est.)" value={result.metrics.interview.tts_tokens.toLocaleString()} mono />
+                    <Stat label="Total" value={result.metrics.interview.total_tokens.toLocaleString()} mono />
+                  </div>
+                  <div className="mt-3 mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Resume scoring</div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Stat label="LLM in" value={result.metrics.scoring.prompt_tokens.toLocaleString()} mono />
+                    <Stat label="LLM out" value={result.metrics.scoring.completion_tokens.toLocaleString()} mono />
+                    <Stat label="Scoring cost" value={`$${result.metrics.scoring.cost_usd.toFixed(4)}`} mono />
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Interview LLM cost: ${result.metrics.interview.cost_usd.toFixed(4)} · STT/TTS token
+                    counts are character-based estimates.
+                  </p>
+                </div>
+              </details>
             </section>
             </StaggerItem>
           )}
@@ -678,33 +732,53 @@ function fmtTime(seconds: number): string {
 /** Objective speaking metrics: talk-time balance, pace, answer length. */
 function SpeakingSection({ s }: { s: NonNullable<InterviewResult["speaking"]> }) {
   const candPct = Math.round(s.candidate_talk_ratio_pct);
+  const botPct = 100 - candPct;
+  // Estimate bot words from ratio
+  const botWords = candPct > 0 ? Math.round((s.candidate_words * botPct) / candPct) : 0;
+
   return (
     <section className="rounded-xl glass-tile p-4">
       <h4 className="mb-3 text-sm font-semibold text-heading">Speaking balance &amp; pace</h4>
 
-      {/* Talk-time split bar (candidate vs interviewer) */}
-      <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
-        <span>Candidate {candPct}%</span>
-        <span>Interviewer {100 - candPct}%</span>
+      {/* Visual talk-ratio bar */}
+      <div className="overflow-hidden rounded-full h-3 flex" role="img" aria-label={`Candidate ${candPct}%, Interviewer ${botPct}%`}>
+        <div
+          className="h-full transition-all"
+          style={{ width: `${candPct}%`, background: "var(--primary)" }}
+        />
+        <div
+          className="h-full transition-all"
+          style={{ width: `${botPct}%`, background: "var(--ozi-ink-300, #9CA3B0)" }}
+        />
       </div>
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-foreground/10">
-        <div className="h-full bg-primary" style={{ width: `${candPct}%` }} />
-        <div className="h-full bg-foreground/25" style={{ width: `${100 - candPct}%` }} />
+
+      {/* Per-speaker sub-labels */}
+      <div className="mt-2 flex items-start justify-between gap-2 text-[11px] text-muted-foreground">
+        <div>
+          <span className="font-semibold" style={{ color: "var(--primary)" }}>
+            Candidate {candPct}%
+          </span>
+          <br />
+          <span>{s.candidate_words.toLocaleString()} words · {s.candidate_turns} turns</span>
+        </div>
+        <div className="text-right">
+          <span className="font-semibold text-muted-foreground">Interviewer {botPct}%</span>
+          <br />
+          <span>~{botWords.toLocaleString()} words</span>
+        </div>
       </div>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
+
+      <p className="mt-1.5 text-[11px] text-faint">
         Talk-time is word-share, a rough proxy for who spoke more.
       </p>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {/* 3 key stats */}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Stat label="Talk ratio" value={`${candPct}%`} mono />
         <Stat label="Candidate words" value={String(s.candidate_words)} mono />
         <Stat label="Avg / answer" value={String(s.avg_words_per_answer)} mono />
-        <Stat label="Answers" value={String(s.candidate_turns)} mono />
-        <Stat
-          label="Pace (approx)"
-          value={s.approx_words_per_min != null ? `${s.approx_words_per_min} wpm` : "—"}
-          mono
-        />
       </div>
+
       {s.approx_words_per_min != null && (
         <p className="mt-2 text-[11px] text-faint">
           Pace is words ÷ total interview time (includes pauses &amp; the interviewer&apos;s turns), so it
@@ -735,17 +809,45 @@ function GoalRow({ goal }: { goal: NonNullable<InterviewResult["goals"]>[number]
   const questions = goal.questions ?? [];
   const evidence = goal.evidence ?? [];
   const hasDetail = questions.length > 0 || evidence.length > 0;
+
+  // Coloured left border based on progress
+  const borderColor =
+    pct > 66
+      ? "var(--strong)"
+      : pct >= 33
+      ? "var(--promising)"
+      : "var(--weak)";
+
+  const barColor =
+    pct > 66
+      ? "var(--strong)"
+      : pct >= 33
+      ? "var(--promising)"
+      : "var(--weak)";
+
   return (
-    <li>
-      <div className="mb-1 flex justify-between gap-2 text-xs">
-        <span className="min-w-0 truncate text-foreground" title={goal.title}>{goal.title}</span>
-        <span className="shrink-0 text-muted-foreground">
-          {goal.completion_status} · <span className="font-mono font-semibold tabular-nums text-heading">{pct}%</span>
+    <li
+      className="rounded-lg border-l-2 pl-3 py-0.5"
+      style={{ borderLeftColor: borderColor }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="min-w-0 truncate text-xs text-foreground" title={goal.title}>
+          {goal.title}
+        </span>
+        <span className="shrink-0 font-mono text-xs font-semibold tabular-nums" style={{ color: barColor }}>
+          {pct}%
         </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-foreground/10">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+      {/* Thin inline progress bar */}
+      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-foreground/10">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${pct}%`, background: barColor }}
+        />
       </div>
+      {goal.completion_status && (
+        <p className="mt-1 text-[10px] text-muted-foreground">{goal.completion_status}</p>
+      )}
       {hasDetail && (
         <details className="mt-2">
           <summary className="cursor-pointer text-[11px] text-muted-foreground">Questions &amp; answers</summary>

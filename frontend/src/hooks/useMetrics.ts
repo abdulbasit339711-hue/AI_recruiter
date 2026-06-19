@@ -11,6 +11,9 @@ type Metrics = {
   pendingCount: number;
   processedCount: number;
   failedCount: number;
+  scoreDistribution: { label: string; count: number }[];
+  shortlistedCount: number;
+  topScore: number;
 };
 
 export const useMetrics = () => {
