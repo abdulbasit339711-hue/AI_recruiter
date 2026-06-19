@@ -1,29 +1,38 @@
-import type { CandidateStatus } from "@/types";
-
-// Tints tuned to read on the light base; `dark:` brightens text for the dark toggle.
-const STATUS_STYLES: Record<string, string> = {
-  Queued: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  Processing: "border-cyan-500/20 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
-  Shortlisted: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  Reviewed: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  Rejected: "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300",
-  Ungraded: "border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-300",
-  Error: "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300",
-  Pending: "border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  Processed: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  Failed: "border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300",
-  Active: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  Archived: "border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-300",
+type StatusBadgeProps = {
+  status: string;
 };
 
-export function StatusBadge({ status }: { status: CandidateStatus | "Active" | "Archived" | string }) {
+function statusColor(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "hired" || s === "strong") return "#34C28A";
+  if (s === "processed" || s === "shortlisted" || s === "in interview") return "#1C99BF";
+  if (s === "pending" || s === "pending review" || s === "promising") return "#F5B544";
+  if (s === "failed" || s === "rejected" || s === "weak") return "#F25C7C";
+  if (s === "archived") return "#556070";
+  return "#9CA3B0";
+}
+
+export function StatusBadge({ status }: StatusBadgeProps) {
+  const color = statusColor(status);
   return (
     <span
-      className={`inline-flex h-5 items-center rounded-full border px-2 text-[11px] font-medium ${
-        STATUS_STYLES[status] ?? "border-border bg-foreground/5 text-muted-foreground"
-      }`}
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+      style={{
+        background: `${color}26`,
+        color,
+        border: `1px solid ${color}33`,
+      }}
     >
+      <span
+        className="h-1.5 w-1.5 rounded-full shrink-0"
+        style={{
+          background: color,
+          boxShadow: `0 0 6px ${color}80`,
+        }}
+      />
       {status}
     </span>
   );
 }
+
+export default StatusBadge;

@@ -1,164 +1,157 @@
 // src/app/admin/jobs/page.tsx
-"use client"
+"use client";
 
-import React, { useState } from "react"
-import { useJobs } from "@/hooks/useJobs"
-import { useCreateJob } from "@/hooks/useCreateJob"
-import { useUpdateJob } from "@/hooks/useUpdateJob"
-import { useArchiveJob } from "@/hooks/useArchiveJob"
-import { JobCard } from "@/components/job/JobCard"
-import { JobFormModal } from "@/components/admin/JobFormModal"
-import { Button } from "@/components/ui/button"
-import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion"
-import { Plus, Briefcase } from "lucide-react"
-import type { Job } from "@/types"
+import React, { useState } from "react";
+import { useJobs } from "@/hooks/useJobs";
+import { useCreateJob } from "@/hooks/useCreateJob";
+import { useUpdateJob } from "@/hooks/useUpdateJob";
+import { useArchiveJob } from "@/hooks/useArchiveJob";
+import { JobCard } from "@/components/job/JobCard";
+import { JobFormModal } from "@/components/admin/JobFormModal";
+import { Plus, Briefcase } from "lucide-react";
+import type { Job } from "@/types";
 
 export default function AdminJobsPage() {
-  const { data: jobs = [], isLoading, isError, error } = useJobs()
-  const createJobMutation = useCreateJob()
-  const updateJobMutation = useUpdateJob()
-  const archiveJobMutation = useArchiveJob()
+  const { data: jobs = [], isLoading, isError, error } = useJobs();
+  const createJobMutation = useCreateJob();
+  const updateJobMutation = useUpdateJob();
+  const archiveJobMutation = useArchiveJob();
 
-  const [isModalOpen, setModalOpen] = useState(false)
-  const [editingJob, setEditingJob] = useState<Job | null>(null)
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [editingJob, setEditingJob] = useState<Job | null>(null);
 
   const openCreate = () => {
-    setEditingJob(null)
-    setModalOpen(true)
-  }
+    setEditingJob(null);
+    setModalOpen(true);
+  };
 
   const openEdit = (job: Job) => {
-    setEditingJob(job)
-    setModalOpen(true)
-  }
+    setEditingJob(job);
+    setModalOpen(true);
+  };
 
   const handleSubmit = async (
     data: {
-      title: string
-      department: string
-      job_description: string
-      llm_prompt?: string
+      title: string;
+      department: string;
+      job_description: string;
+      llm_prompt?: string;
     },
     id?: number
   ) => {
     if (id) {
-      await updateJobMutation.mutateAsync({ id, ...data })
+      await updateJobMutation.mutateAsync({ id, ...data });
     } else {
-      await createJobMutation.mutateAsync(data)
+      await createJobMutation.mutateAsync(data);
     }
-  }
+  };
 
   const handleArchive = async (job: Job) => {
-    await archiveJobMutation.mutateAsync(job.id)
-  }
+    await archiveJobMutation.mutateAsync(job.id);
+  };
 
   if (isError) {
     return (
-      <div className="rounded-xl border border-weak/20 bg-weak/10 p-4 text-sm text-weak">
-        Error loading jobs: {error instanceof Error ? error.message : "Unknown"}
+      <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="rounded-xl border border-[#F25C7C]/20 bg-[#F25C7C]/10 p-4 text-sm text-[#F25C7C]">
+          Error loading jobs: {error instanceof Error ? error.message : "Unknown"}
+        </div>
       </div>
-    )
+    );
   }
 
   return (
-    <section className="space-y-6">
-      {/* Header */}
-      <FadeIn
-        as="header"
-        className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
-      >
-        <div className="flex flex-col gap-1">
-          <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">
-            Jobs
-          </p>
-          <h1 className="font-display text-[30px] font-bold leading-none tracking-tight text-heading">
-            Jobs
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Create roles, tune prompts, and archive closed openings.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={openCreate} variant="default" size="sm">
-            <Plus className="mr-1 h-4 w-4" />
-            Create Job
-          </Button>
-        </div>
-      </FadeIn>
+    <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-heading">Job Openings</h1>
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 rounded-xl bg-[#1C99BF] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#3DAFCC] hover:shadow-[0_0_24px_rgba(28,153,191,0.4)]"
+        >
+          <Plus className="h-4 w-4" />
+          Post New Job
+        </button>
+      </div>
 
-      {/* Loading skeletons */}
+      {/* ── Loading skeletons ──────────────────────────────────────────────── */}
       {isLoading && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="glass-tile animate-pulse rounded-2xl p-5"
+              className="animate-pulse rounded-2xl p-5"
+              style={{
+                background: "rgba(8,34,52,0.7)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                backdropFilter: "blur(12px)",
+              }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="h-4 w-40 rounded bg-foreground/[0.08]" />
-                <div className="h-5 w-16 rounded-full bg-foreground/[0.06]" />
+              <div className="mb-3 flex items-start justify-between">
+                <div className="h-10 w-10 rounded-xl bg-white/[0.06]" />
+                <div className="h-5 w-16 rounded-full bg-white/[0.06]" />
               </div>
-              <div className="mt-2 h-3 w-24 rounded bg-foreground/[0.06]" />
-              <div className="my-3 border-t border-border" />
-              <div className="flex gap-6">
-                <div className="h-8 w-10 rounded bg-foreground/[0.08]" />
-                <div className="h-8 w-24 rounded bg-foreground/[0.06]" />
-              </div>
-              <div className="my-3 border-t border-border" />
-              <div className="flex gap-2">
-                <div className="h-7 w-28 rounded-lg bg-foreground/[0.08]" />
-                <div className="h-7 w-14 rounded-lg bg-foreground/[0.06]" />
+              <div className="h-4 w-40 rounded bg-white/[0.08]" />
+              <div className="mt-1 h-3 w-24 rounded bg-white/[0.06]" />
+              <div className="mt-1.5 h-3 w-full rounded bg-white/[0.04]" />
+              <div className="mt-3 h-3 w-28 rounded bg-white/[0.06]" />
+              <div className="mt-2 h-1.5 w-full rounded-full bg-white/[0.04]" />
+              <div className="mt-4 flex gap-2 border-t border-white/[0.05] pt-4">
+                <div className="h-8 flex-1 rounded-lg bg-white/[0.06]" />
+                <div className="h-8 w-8 rounded-lg bg-white/[0.06]" />
+                <div className="h-8 w-8 rounded-lg bg-white/[0.06]" />
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Empty state */}
+      {/* ── Empty state ────────────────────────────────────────────────────── */}
       {!isLoading && jobs.length === 0 && (
-        <FadeIn delay={0.08}>
-          <div className="glass flex flex-col items-center justify-center gap-4 rounded-2xl px-6 py-20 text-center">
-            <span
-              className="flex h-14 w-14 items-center justify-center rounded-2xl"
-              style={{
-                background: "color-mix(in srgb, var(--primary) 12%, transparent)",
-                color: "var(--primary)",
-              }}
-            >
-              <Briefcase className="h-6 w-6" strokeWidth={2} />
-            </span>
-            <div className="flex flex-col gap-1.5">
-              <p className="text-sm font-semibold text-heading">
-                No jobs yet — create your first opening
-              </p>
-              <p className="max-w-xs text-xs text-muted-foreground">
-                Add a role to start accepting candidates and running AI screening.
-              </p>
-            </div>
-            <Button onClick={openCreate} variant="default" size="sm">
-              <Plus className="mr-1 h-4 w-4" />
-              Create Job
-            </Button>
+        <div
+          className="flex flex-col items-center justify-center gap-4 rounded-2xl px-6 py-20 text-center"
+          style={{
+            background: "rgba(8,34,52,0.7)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            backdropFilter: "blur(12px)",
+          }}
+        >
+          <span
+            className="flex h-14 w-14 items-center justify-center rounded-2xl"
+            style={{ background: "rgba(28,153,191,0.1)", color: "#1C99BF" }}
+          >
+            <Briefcase className="h-6 w-6" strokeWidth={2} />
+          </span>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-semibold text-heading">
+              No jobs yet — create your first opening
+            </p>
+            <p className="max-w-xs text-xs text-muted-foreground">
+              Add a role to start accepting candidates and running AI screening.
+            </p>
           </div>
-        </FadeIn>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 rounded-xl bg-[#1C99BF] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#3DAFCC] hover:shadow-[0_0_24px_rgba(28,153,191,0.4)]"
+          >
+            <Plus className="h-4 w-4" />
+            Post New Job
+          </button>
+        </div>
       )}
 
-      {/* Jobs grid */}
+      {/* ── Jobs grid ──────────────────────────────────────────────────────── */}
       {!isLoading && jobs.length > 0 && (
-        <Stagger
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          delay={0.06}
-        >
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {jobs.map((job) => (
-            <StaggerItem key={job.id}>
-              <JobCard
-                job={job}
-                onEdit={openEdit}
-                onArchive={handleArchive}
-              />
-            </StaggerItem>
+            <JobCard
+              key={job.id}
+              job={job}
+              onEdit={openEdit}
+              onArchive={handleArchive}
+            />
           ))}
-        </Stagger>
+        </div>
       )}
 
       <JobFormModal
@@ -167,6 +160,6 @@ export default function AdminJobsPage() {
         onSubmit={handleSubmit}
         initialData={editingJob ?? undefined}
       />
-    </section>
-  )
+    </div>
+  );
 }

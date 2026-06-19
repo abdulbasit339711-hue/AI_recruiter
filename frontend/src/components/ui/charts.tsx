@@ -68,7 +68,7 @@ export function RadialGauge({
   max = 100,
   size = 132,
   stroke = 11,
-  color = "var(--primary)",
+  color,
   label,
   sublabel,
 }: {
@@ -86,27 +86,36 @@ export function RadialGauge({
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(1, value / max));
-  // 270° sweep gauge (gap at the bottom).
-  const sweep = 0.75;
-  const dash = c * sweep;
+
+  // 270° arc, rotated 135° so gap sits at the bottom-left/right.
+  const arcFraction = 0.75;
+  const arcLength = c * arcFraction;
+  const trackOffset = arcLength - pct * arcLength;
+
+  // Tier-based coloring when no explicit color is provided.
+  const resolvedColor =
+    color ??
+    (value >= 70 ? "#34C28A" : value >= 40 ? "#F5B544" : "#F25C7C");
 
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg ref={ref} width={size} height={size} className="block -rotate-[135deg]">
+      <svg ref={ref} width={size} height={size} className="block" style={{ transform: "rotate(135deg)" }}>
+        {/* Track (background arc) */}
         <circle
           cx={size / 2} cy={size / 2} r={r} fill="none"
-          stroke="color-mix(in srgb, var(--foreground) 12%, transparent)"
+          stroke="rgba(255,255,255,0.06)"
           strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={`${dash} ${c}`}
+          strokeDasharray={`${arcLength} ${c}`}
         />
+        {/* Animated fill arc */}
         <motion.circle
           cx={size / 2} cy={size / 2} r={r} fill="none"
-          stroke={color} strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={`${dash} ${c}`}
-          initial={{ strokeDashoffset: dash }}
-          animate={inView ? { strokeDashoffset: dash * (1 - pct) } : {}}
-          transition={{ duration: reduce ? 0 : 1.3, ease: EASE }}
-          style={{ filter: `drop-shadow(0 0 6px color-mix(in srgb, ${color} 45%, transparent))` }}
+          stroke={resolvedColor} strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={`${arcLength} ${c}`}
+          initial={{ strokeDashoffset: arcLength }}
+          animate={inView ? { strokeDashoffset: trackOffset } : {}}
+          transition={{ duration: reduce ? 0 : 1.4, ease: [0.22, 1, 0.36, 1], delay: reduce ? 0 : 0.1 }}
+          style={{ filter: `drop-shadow(0 0 6px ${resolvedColor}55)` }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -189,7 +198,10 @@ export function BarChart({
           <div className="h-2.5 overflow-hidden rounded-full bg-foreground/[0.07]">
             <motion.div
               className="h-full rounded-full"
-              style={{ background: d.color || "var(--primary)" }}
+              style={{
+                background: `linear-gradient(90deg, ${d.color || "var(--primary)"}, ${(d.color || "var(--primary)") + "cc"})`,
+                boxShadow: `0 0 12px ${(d.color || "var(--primary)") + "40"}`,
+              }}
               initial={{ width: 0 }}
               animate={inView ? { width: `${(d.value / max) * 100}%` } : {}}
               transition={{ duration: reduce ? 0 : 0.9, ease: EASE, delay: reduce ? 0 : i * 0.08 }}

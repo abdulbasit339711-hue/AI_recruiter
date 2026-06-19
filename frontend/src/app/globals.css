@@ -190,6 +190,14 @@
   --color-canvas-2:            #082234;
   --color-canvas-3:            #0B3146;
 
+  --color-canvas:    #04111B;
+  --color-elevated:  #0B3146;
+  --color-teal:      #1C99BF;
+  --color-teal-hover:#3DAFCC;
+  --color-emerald:   #34C28A;
+  --color-amber:     #F5B544;
+  --color-rose:      #F25C7C;
+
   --font-sans:    var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-display), var(--font-sans), sans-serif;
   --font-mono:    var(--font-mono), ui-monospace, monospace;
@@ -294,6 +302,12 @@
 .ozi-glow {
   box-shadow: var(--shadow-glow);
 }
+
+/* ============================================================
+   Agon design system utilities
+   ============================================================ */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.text-glow-teal { text-shadow: 0 0 18px rgba(28,153,191,0.45); }
 
 /* ============================================================
    Score chips — OZI Emerald / Amber / Rose

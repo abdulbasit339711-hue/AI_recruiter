@@ -1,29 +1,38 @@
-import React from "react";
+type StatusBadgeProps = {
+  status: string;
+};
 
-interface StatusBadgeProps {
-  status: string | null;
+function statusColor(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "hired" || s === "strong") return "#34C28A";
+  if (s === "processed" || s === "shortlisted" || s === "in interview") return "#1C99BF";
+  if (s === "pending" || s === "pending review" || s === "promising") return "#F5B544";
+  if (s === "failed" || s === "rejected" || s === "weak") return "#F25C7C";
+  if (s === "archived") return "#556070";
+  return "#9CA3B0";
 }
 
-const COLOR_MAP: Record<string, string> = {
-  Applied: "bg-foreground/5 text-muted-foreground border-border",
-  Screened: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20",
-  Interview: "bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20",
-  Offer: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20",
-  Hired: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20",
-  Rejected: "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20",
-};
-
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
-  const displayStatus = status || "Applied";
-  const colorClass = COLOR_MAP[displayStatus] || COLOR_MAP.Applied;
-
+export function StatusBadge({ status }: StatusBadgeProps) {
+  const color = statusColor(status);
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors duration-200 ${colorClass}`}
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+      style={{
+        background: `${color}26`,
+        color,
+        border: `1px solid ${color}33`,
+      }}
     >
-      {displayStatus}
+      <span
+        className="h-1.5 w-1.5 rounded-full shrink-0"
+        style={{
+          background: color,
+          boxShadow: `0 0 6px ${color}80`,
+        }}
+      />
+      {status}
     </span>
   );
-};
+}
 
 export default StatusBadge;

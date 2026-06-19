@@ -307,7 +307,7 @@ export const CandidateTable: React.FC<CandidateTableProps> = ({
                       >
                         {cand.status}
                       </span>
-                      <HRStatusBadge status={cand.hr_status} />
+                      {cand.hr_status && <HRStatusBadge status={cand.hr_status} />}
                     </div>
 
                     {/* Submitted */}
