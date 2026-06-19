@@ -243,7 +243,7 @@ Conversation Context:
 - Time Elapsed: {context.get('time_elapsed', 'N/A')}
 """
 
-        return f"""You are analyzing a candidate's response for interview goal progress.
+        return f"""You are analyzing a candidate's interview response for goal progress.
 
 CANDIDATE RESPONSE: {response_text}
 
@@ -252,26 +252,39 @@ ACTIVE GOALS TO ASSESS:
 
 {context_info}
 
-Analyze this response and return JSON with:
+SCORING RULES — two tiers of goals:
+
+OBSERVABLE GOALS (assess from HOW the candidate speaks, in EVERY response):
+  • Communication Skills, Confidence & Presentation, Behavioral Assessment,
+    Emotional Intelligence, Resume & Interview Consistency
+  → Award 0.1-0.2 delta based on tone, clarity, structure, and professionalism.
+    No targeted question required — these are visible in any response.
+
+CONTENT GOALS (assess only when the response contains explicit, role-relevant evidence):
+  • Technical Competency, Problem-Solving & Critical Thinking, Relevant Experience,
+    Skills Match Assessment, Cultural & Organizational Fit, Leadership & Ownership,
+    Learning Agility, Motivation & Career Alignment, Overall Performance Evaluation
+  → Award 0.2-0.3 delta only for clear, specific, substantial evidence.
+
+Return JSON:
 {{
     "goal_updates": [
         {{
-            "goal_title": "exact goal title",
-            "evidence_type": "specific_example|technical_detail|problem_solving|quantifiable_impact|best_practices",
-            "evidence_text": "exact quote showing evidence",
+            "goal_title": "exact goal title from the list above",
+            "evidence_type": "specific_example|technical_detail|problem_solving|quantifiable_impact|best_practices|communication_quality|behavioral_signal|emotional_signal",
+            "evidence_text": "exact quote or observation",
             "progress_delta": 0.0-0.3,
             "confidence": 0.0-1.0,
-            "reasoning": "why this shows progress"
+            "reasoning": "why this shows progress on this goal"
         }}
     ],
     "response_quality": "strong|moderate|weak",
     "topics_mentioned": ["topic1", "topic2"],
-    "follow_up_needed": boolean,
+    "follow_up_needed": true,
     "suggested_probe": "natural follow-up question if needed"
 }}
 
-Only award progress for clear, substantial evidence. Be conservative with progress_delta (max 0.3 per response).
-Focus on the most relevant goals that this response actually addresses."""
+Always include updates for observable goals (Communication, Confidence, Behavioral, Emotional Intelligence) when there is clear signal — even if small. Only skip them if the response is too short to assess."""
 
     async def _apply_goal_update(self, session_id: str, goal_update: Dict[str, Any],
                                response_text: str) -> bool:
