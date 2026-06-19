@@ -39,11 +39,9 @@ SILENCE_NUDGE_SECS: float = float(os.getenv("SILENCE_NUDGE_SECS", "30"))
 # Escalating lines: gentle check-in(s) first, wrap-up last. After the last one the
 # processor goes quiet (the hard idle timeout / disconnect handler ends the call).
 _DEFAULT_NUDGES = [
-    "Sorry, I want to make sure I haven't lost you — are you still there? "
-    "Take your time, or just let me know and we can continue.",
-    "I'm still here whenever you're ready. If now isn't a good time, that's okay.",
-    "It looks like we may have lost the connection, so I'll wrap up here for now. "
-    "Thank you for your time — we'll follow up about next steps.",
+    "Still there?",
+    "Take your time — I'm here.",
+    "Looks like we may have lost the connection. Thanks for your time — we'll follow up soon.",
 ]
 
 
