@@ -9,11 +9,11 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
 
 function LoginForm() {
-  const [token, setToken] = useState("");
-  const [actor, setActor] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showToken, setShowToken] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const params = useSearchParams();
   // Only allow internal redirects (block open-redirect via ?next=//evil.com).
@@ -28,10 +28,10 @@ function LoginForm() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        if (actor.trim()) setHrActor(actor); // attribute audit-trail changes to this operator
+        setHrActor(email); // attribute audit-trail changes to the logged-in user
         router.push(next);
         router.refresh();
       } else {
@@ -78,59 +78,58 @@ function LoginForm() {
 
                 {/* Fields */}
                 <StaggerItem className="space-y-4">
-                  {/* Access token */}
+                  {/* Email */}
                   <div className="space-y-1.5">
                     <label
-                      htmlFor="login-token"
+                      htmlFor="login-email"
                       className="block text-xs font-medium text-muted-foreground"
                     >
-                      Access token
+                      Email
+                    </label>
+                    <input
+                      id="login-email"
+                      type="email"
+                      autoFocus
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      className={inputClass}
+                    />
+                  </div>
+
+                  {/* Password */}
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="login-password"
+                      className="block text-xs font-medium text-muted-foreground"
+                    >
+                      Password
                     </label>
                     <div className="relative">
                       <input
-                        id="login-token"
-                        type={showToken ? "text" : "password"}
-                        autoFocus
+                        id="login-password"
+                        type={showPassword ? "text" : "password"}
                         autoComplete="current-password"
-                        value={token}
-                        onChange={(e) => setToken(e.target.value)}
-                        placeholder="Enter your access token"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
                         className={inputClass + " pr-10"}
                       />
                       <button
                         type="button"
-                        onClick={() => setShowToken((v) => !v)}
+                        onClick={() => setShowPassword((v) => !v)}
                         className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={showToken ? "Hide token" : "Show token"}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
                         tabIndex={-1}
                       >
-                        {showToken ? (
+                        {showPassword ? (
                           <EyeOff className="h-4 w-4" aria-hidden />
                         ) : (
                           <Eye className="h-4 w-4" aria-hidden />
                         )}
                       </button>
                     </div>
-                  </div>
-
-                  {/* Email / actor */}
-                  <div className="space-y-1.5">
-                    <label
-                      htmlFor="login-actor"
-                      className="block text-xs font-medium text-muted-foreground"
-                    >
-                      Your email{" "}
-                      <span className="opacity-50">(optional — audit trail)</span>
-                    </label>
-                    <input
-                      id="login-actor"
-                      type="email"
-                      autoComplete="email"
-                      value={actor}
-                      onChange={(e) => setActor(e.target.value)}
-                      placeholder="you@company.com"
-                      className={inputClass}
-                    />
                   </div>
                 </StaggerItem>
 
@@ -146,7 +145,7 @@ function LoginForm() {
                   )}
                   <button
                     type="submit"
-                    disabled={loading || !token}
+                    disabled={loading || !email || !password}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                     style={{ boxShadow: "0 10px 24px -10px var(--primary)" }}
                   >
