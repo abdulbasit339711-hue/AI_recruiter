@@ -222,6 +222,14 @@ class GoalTrackingProcessor(FrameProcessor):
             # Perform comprehensive analysis
             final_analysis = await self.goal_service.comprehensive_goal_analysis(self.session.session_id)
 
+            # Embed phase scores into the assessment so the backend can surface them.
+            if isinstance(final_analysis, dict):
+                boundary = getattr(getattr(self.session, "config", None), "phase1_boundary", 0)
+                if boundary > 0:
+                    final_analysis["phase1_score"] = getattr(self.session, "phase1_score", None)
+                    final_analysis["phase1_boundary"] = boundary
+                    final_analysis["current_phase"] = getattr(self.session, "current_phase", "initial")
+
             # Non-technical screening interview: also extract the structured qualifying
             # summary (experience, salary, stack, achievements, …) from the transcript
             # and attach it so HR reads it alongside (or instead of) the goal scores.

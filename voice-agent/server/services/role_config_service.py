@@ -22,12 +22,79 @@ from interview_session import (
     InterviewGoal,
     InterviewQuestion,
     AnswerDepth,
+    FollowUpPrompt,
 )
 from bot import compose_system_prompt
 from services.goal_tracking_service import _safe_json_loads
 from recruiter_shared import normalize_role_type
 
 _GEN_MODEL = "llama-3.1-8b-instant"
+
+# ── Fixed Phase 1 (behavioral) questions — role-agnostic ────────────────────────
+# Asked first in EVERY non-screening interview. Phase 2 (technical) starts only if
+# the Phase 1 score passes the threshold defined on RecruiterConfig.
+
+_PHASE1_GOALS = [
+    InterviewGoal(id="p1_background",  label="Background & Experience",
+                  description="Candidate's professional background and how it relates to this role.",
+                  weight=0.25),
+    InterviewGoal(id="p1_teamwork",    label="Teamwork & Collaboration",
+                  description="Ability to work effectively with others and navigate interpersonal dynamics.",
+                  weight=0.25),
+    InterviewGoal(id="p1_resilience",  label="Resilience & Problem-Handling",
+                  description="How the candidate handles setbacks, pressure, and workplace challenges.",
+                  weight=0.25),
+    InterviewGoal(id="p1_motivation",  label="Motivation & Role Fit",
+                  description="What drives the candidate and why they applied for this specific role.",
+                  weight=0.25),
+]
+
+_PHASE1_QUESTIONS = [
+    InterviewQuestion(
+        id="p1_q1",
+        text="Please walk me through your professional background and what led you to apply for this role.",
+        goal_id="p1_background",
+        expected_depth=AnswerDepth.LONG,
+        expected_theme="experience background role career",
+        follow_ups=[
+            FollowUpPrompt(text="What specific skills from your past experience are most relevant here?",
+                           trigger_reason="answer too general, no role connection"),
+        ],
+    ),
+    InterviewQuestion(
+        id="p1_q2",
+        text="Tell me about a time you worked on a team where there were different opinions or approaches. How did you handle it?",
+        goal_id="p1_teamwork",
+        expected_depth=AnswerDepth.MEDIUM,
+        expected_theme="team collaboration conflict resolution communication",
+        follow_ups=[
+            FollowUpPrompt(text="What was your specific role in resolving that situation?",
+                           trigger_reason="answer lacks concrete personal action"),
+        ],
+    ),
+    InterviewQuestion(
+        id="p1_q3",
+        text="Describe a significant challenge you faced at work and how you worked through it.",
+        goal_id="p1_resilience",
+        expected_depth=AnswerDepth.MEDIUM,
+        expected_theme="challenge problem overcome resilience solution",
+        follow_ups=[
+            FollowUpPrompt(text="What did you learn from that experience?",
+                           trigger_reason="no learning or growth mentioned"),
+        ],
+    ),
+    InterviewQuestion(
+        id="p1_q4",
+        text="What motivates you most in your work, and what specifically attracts you to this role?",
+        goal_id="p1_motivation",
+        expected_depth=AnswerDepth.MEDIUM,
+        expected_theme="motivation interest passion role fit",
+        follow_ups=[
+            FollowUpPrompt(text="Can you give an example of a project that really energized you?",
+                           trigger_reason="answer too vague or generic"),
+        ],
+    ),
+]
 
 
 def _as_list(value):
@@ -367,9 +434,15 @@ async def build_recruiter_config(job: dict, candidate: dict | None = None) -> Re
         ] + questions
         source += "+resume"
 
+    # Prepend Phase 1 behavioral questions before the role-specific technical questions.
+    all_goals = list(_PHASE1_GOALS) + goals
+    all_questions = list(_PHASE1_QUESTIONS) + questions
+    phase1_boundary = len(_PHASE1_QUESTIONS)  # 4
+
     logger.info(
         f"[RoleConfig] role='{job_role}' slug='{role_slug}' "
-        f"goals={len(goals)} questions={len(questions)} source={source}"
+        f"goals={len(all_goals)} questions={len(all_questions)} source={source} "
+        f"phase1_boundary={phase1_boundary}"
     )
     return RecruiterConfig(
         job_role=job_role,
@@ -378,6 +451,8 @@ async def build_recruiter_config(job: dict, candidate: dict | None = None) -> Re
         system_prompt=compose_system_prompt(
             job_role, company_name, "technical", job.get("llm_prompt"), bilingual=True)
         + _candidate_briefing(candidate),
-        questions=questions,
-        goals=goals,
+        questions=all_questions,
+        goals=all_goals,
+        phase1_boundary=phase1_boundary,
+        phase1_threshold=60.0,
     )

@@ -1447,6 +1447,20 @@ def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
         d["evidence"] = [e for e in d["evidence"] if e["text"]]
         return d
 
+    oa = session_dict.get("overall_assessment")
+    _oa_parsed = None
+    if oa:
+        try:
+            import json as _j
+            _oa_parsed = _j.loads(oa) if isinstance(oa, str) else oa
+        except Exception:
+            pass
+    phase1_score = (_oa_parsed or {}).get("phase1_score") if isinstance(_oa_parsed, dict) else None
+    current_phase = (_oa_parsed or {}).get("current_phase") if isinstance(_oa_parsed, dict) else None
+
+    session_dict["phase1_score"] = phase1_score
+    session_dict["current_phase"] = current_phase
+
     return {
         "has_interview": True,
         "has_audio": has_audio,

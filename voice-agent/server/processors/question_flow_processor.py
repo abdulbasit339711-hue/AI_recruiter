@@ -154,8 +154,14 @@ class QuestionFlowProcessor(FrameProcessor):
             session.mark_question_answered(current_q.id, GoalStatus.COVERED)
             session.advance_question()
             await self._persist_progress()
-            next_q = session.current_question
 
+            # Phase boundary check: if we just finished Phase 1, handle transition.
+            boundary = session.config.phase1_boundary
+            if boundary > 0 and session.current_question_index == boundary and session.current_phase == "initial":
+                await self._handle_phase_transition()
+                return
+
+            next_q = session.current_question
             if next_q:
                 await self._ask_question(next_q)
             else:
@@ -187,12 +193,94 @@ class QuestionFlowProcessor(FrameProcessor):
                 session.mark_question_answered(current_q.id, GoalStatus.WEAK)
                 session.advance_question()
                 await self._persist_progress()
-                next_q = session.current_question
 
+                # Phase boundary check
+                boundary = session.config.phase1_boundary
+                if boundary > 0 and session.current_question_index == boundary and session.current_phase == "initial":
+                    await self._handle_phase_transition()
+                    return
+
+                next_q = session.current_question
                 if next_q:
                     await self._ask_question(next_q)
                 else:
                     await self._close_interview()
+
+    def _compute_phase_score(self, start: int, end: int) -> float:
+        """Weighted score 0-100 for questions in index range [start, end)."""
+        session = self._session
+        weighted = 0.0
+        total_w = 0.0
+        for i in range(start, min(end, len(session.config.questions))):
+            q = session.config.questions[i]
+            goal = session.config.get_goal(q.goal_id)
+            w = goal.weight if goal else 1.0
+            qs = session.question_states.get(q.id)
+            status = qs.status if qs else GoalStatus.SKIPPED
+            if status == GoalStatus.COVERED:
+                s = 1.0
+            elif status == GoalStatus.WEAK:
+                s = 0.5
+            else:
+                s = 0.0
+            weighted += w * s
+            total_w += w
+        return round((weighted / total_w) * 100.0, 1) if total_w > 0 else 0.0
+
+    async def _handle_phase_transition(self):
+        """Called when Phase 1 is complete. Scores Phase 1 and decides whether to proceed."""
+        session = self._session
+        boundary = session.config.phase1_boundary
+        score = self._compute_phase_score(0, boundary)
+        session.phase1_score = score
+        threshold = session.config.phase1_threshold
+
+        logger.info(
+            f"[flow] Phase 1 complete. Score={score:.1f}, threshold={threshold}. "
+            f"Proceeding={'yes' if score >= threshold else 'no'}"
+        )
+
+        await broadcaster.broadcast("phase_transition", {
+            "phase": "evaluating",
+            "phase1_score": score,
+            "threshold": threshold,
+            "advancing": score >= threshold,
+        })
+
+        if score >= threshold:
+            session.current_phase = "technical"
+            # Gradual transition announcement
+            transition_msg = (
+                f"The candidate has completed the initial portion of the interview. "
+                f"Acknowledge their responses warmly and naturally. Then smoothly transition "
+                f"by saying something like: 'You've shared some great insights — let's now "
+                f"move into the technical part of the interview. I have a few more questions "
+                f"about your technical skills and problem-solving approach.' Then ask the "
+                f"next question: {session.current_question.text}"
+                if session.current_question else
+                "The initial portion is complete. Thank the candidate warmly and close the interview."
+            )
+            await self._inject_instruction(transition_msg)
+            if session.current_question:
+                session.mark_question_asked(session.current_question.id)
+        else:
+            session.current_phase = "complete"
+            instruction = (
+                "The initial screening portion of the interview is now complete. "
+                "Thank the candidate sincerely for their time and answers. "
+                "Let them know the recruitment team will carefully review their responses "
+                "and will be in touch regarding next steps. Close the conversation "
+                "warmly and professionally."
+            )
+            await self._inject_instruction(instruction)
+            session.end()
+            await broadcaster.broadcast("status", {"status": "completed", "phase": "initial_only"})
+            logger.info(f"[flow] Interview ended after Phase 1 (score {score:.1f} < threshold {threshold}).")
+            grace = float(os.getenv("INTERVIEW_CLOSE_GRACE_SECS", "14"))
+            async def _end_after_phase1():
+                await asyncio.sleep(grace)
+                await self.push_frame(EndTaskFrame(), FrameDirection.UPSTREAM)
+            asyncio.create_task(_end_after_phase1())
 
     async def _ask_question(
         self,
@@ -242,6 +330,18 @@ class QuestionFlowProcessor(FrameProcessor):
         session = self._session
         covered = len(session.covered_goals)
         total = len(session.config.goals)
+
+        # If we completed Phase 2, compute the Phase 2 score.
+        boundary = session.config.phase1_boundary
+        if boundary > 0 and session.current_phase == "technical":
+            n_total = len(session.config.questions)
+            phase2_score = self._compute_phase_score(boundary, n_total)
+            session.current_phase = "complete"
+            await broadcaster.broadcast("phase_transition", {
+                "phase": "complete",
+                "phase2_score": phase2_score,
+            })
+            logger.info(f"[flow] Phase 2 complete. Score={phase2_score:.1f}")
 
         instruction = (
             f"The interview is now complete. All {total} topics have been covered. "

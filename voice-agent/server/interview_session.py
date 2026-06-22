@@ -84,6 +84,8 @@ class RecruiterConfig:
     time_limit_seconds: int = 1800  # default 30 minutes
     max_follow_ups_per_question: int = 2
     language: str = "en"
+    phase1_boundary: int = 0       # questions[0:phase1_boundary] are Phase 1; 0 = no phases
+    phase1_threshold: float = 60.0  # min Phase 1 score (0-100) to enter Phase 2
 
     def get_question(self, question_id: str) -> Optional[InterviewQuestion]:
         return next((q for q in self.questions if q.id == question_id), None)
@@ -167,6 +169,8 @@ class InterviewSession:
     current_goal_id: Optional[str] = None
     session_timeout_seconds: int = 300  # 5 minutes default
     auto_kill_on_disconnect: bool = False
+    current_phase: str = "initial"           # "initial" | "technical" | "complete"
+    phase1_score: float | None = None
 
     # Service Status tracking
     service_status: Dict[str, str] = field(default_factory=lambda: {

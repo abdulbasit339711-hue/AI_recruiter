@@ -168,6 +168,8 @@ export interface InterviewResult {
     completed_goals: number;
     average_progress: number;
     overall_assessment: string | null;
+    phase1_score?: number | null;
+    current_phase?: string | null;
   };
   transcript?: {
     speaker: string;

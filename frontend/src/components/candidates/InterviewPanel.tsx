@@ -232,6 +232,16 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
             />
           </div>
 
+          {/* ── Phase Assessment card ── */}
+          {(session?.phase1_score != null || session?.current_phase) && (
+            <PhaseAssessmentCard
+              phase1Score={session.phase1_score ?? null}
+              currentPhase={session.current_phase ?? null}
+              goalsCompleted={session.completed_goals ?? 0}
+              totalGoals={session.total_goals ?? 0}
+            />
+          )}
+
           {/* ── B. Tab bar ── */}
           <div className="flex gap-0 border-b border-border">
             {(
@@ -1024,6 +1034,168 @@ function Stat({ label, value, mono = false }: { label: string; value: string; mo
         {value}
       </div>
     </div>
+  );
+}
+
+/** Two-phase interview progress indicator showing Phase 1 behavioral + Phase 2 technical. */
+function PhaseAssessmentCard({
+  phase1Score,
+  currentPhase,
+  goalsCompleted,
+  totalGoals,
+}: {
+  phase1Score: number | null;
+  currentPhase: string | null;
+  goalsCompleted: number;
+  totalGoals: number;
+}) {
+  const PHASE1_THRESHOLD = 60;
+
+  const p1Color =
+    phase1Score == null
+      ? "var(--muted-foreground)"
+      : phase1Score >= 75
+      ? "var(--strong)"
+      : phase1Score >= PHASE1_THRESHOLD
+      ? "var(--promising)"
+      : "var(--weak)";
+
+  const p1HexColor =
+    phase1Score == null
+      ? "#9CA3B0"
+      : phase1Score >= 75
+      ? "#34C28A"
+      : phase1Score >= PHASE1_THRESHOLD
+      ? "#F5B544"
+      : "#F25C7C";
+
+  const p1Rgb = p1HexColor
+    .slice(1)
+    .match(/.{2}/g)!
+    .map((h) => parseInt(h, 16))
+    .join(",");
+
+  const advancedToPhase2 =
+    currentPhase === "technical" || currentPhase === "complete";
+  const initialOnly = currentPhase === "initial_only";
+  const didNotAdvance =
+    initialOnly ||
+    (phase1Score != null &&
+      phase1Score < PHASE1_THRESHOLD &&
+      currentPhase !== "technical" &&
+      currentPhase !== "complete");
+
+  return (
+    <section className="rounded-xl glass-tile p-4">
+      <h4 className="mb-3 text-sm font-semibold text-heading">Phase Assessment</h4>
+
+      {/* Two phase step indicators */}
+      <div className="flex items-stretch gap-2">
+        {/* Phase 1 */}
+        <div
+          className="flex-1 rounded-xl p-3"
+          style={{
+            background: `rgba(${p1Rgb}, 0.10)`,
+            border: `1px solid rgba(${p1Rgb}, 0.28)`,
+          }}
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+            Phase 1
+          </div>
+          <div className="text-xs font-medium text-foreground mb-2">Behavioral</div>
+          {phase1Score != null ? (
+            <div
+              className="font-mono text-2xl font-bold tabular-nums leading-none"
+              style={{ color: p1Color }}
+            >
+              {Math.round(phase1Score)}
+              <span className="text-sm font-normal text-muted-foreground">/100</span>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">In progress</div>
+          )}
+          {phase1Score != null && (
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-foreground/10">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${Math.round(phase1Score)}%`, background: p1Color }}
+              />
+            </div>
+          )}
+          {phase1Score != null && (
+            <p className="mt-1.5 text-[10px]" style={{ color: p1Color }}>
+              {phase1Score >= 75
+                ? "Strong"
+                : phase1Score >= PHASE1_THRESHOLD
+                ? "Passed"
+                : "Below threshold"}
+            </p>
+          )}
+        </div>
+
+        {/* Arrow connector */}
+        <div className="flex items-center text-muted-foreground/50 text-lg select-none">
+          →
+        </div>
+
+        {/* Phase 2 */}
+        <div
+          className="flex-1 rounded-xl p-3"
+          style={
+            advancedToPhase2
+              ? {
+                  background: "rgba(28,153,191,0.10)",
+                  border: "1px solid rgba(28,153,191,0.28)",
+                }
+              : didNotAdvance
+              ? {
+                  background: "rgba(242,92,124,0.06)",
+                  border: "1px solid rgba(242,92,124,0.18)",
+                }
+              : {
+                  background: "var(--surface-card, rgba(255,255,255,0.03))",
+                  border: "1px solid var(--surface-border, rgba(255,255,255,0.06))",
+                }
+          }
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+            Phase 2
+          </div>
+          <div className="text-xs font-medium text-foreground mb-2">Technical</div>
+          {didNotAdvance ? (
+            <div className="text-sm font-semibold" style={{ color: "var(--weak)" }}>
+              Not reached
+            </div>
+          ) : advancedToPhase2 ? (
+            <div
+              className="text-sm font-semibold"
+              style={{ color: currentPhase === "complete" ? "var(--strong)" : "#1C99BF" }}
+            >
+              {currentPhase === "complete"
+                ? `${goalsCompleted}/${totalGoals} goals`
+                : "In Progress"}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">Pending</div>
+          )}
+        </div>
+      </div>
+
+      {/* Explanation line */}
+      {didNotAdvance && (
+        <p className="mt-3 rounded-lg border border-weak/20 bg-weak/5 px-3 py-2 text-xs text-weak">
+          Phase 1 only — candidate did not advance to the technical portion
+          {phase1Score != null
+            ? ` (score ${Math.round(phase1Score)}/100 was below the ${PHASE1_THRESHOLD}-point threshold).`
+            : "."}
+        </p>
+      )}
+      {advancedToPhase2 && currentPhase !== "complete" && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Candidate advanced to Phase 2 technical questions.
+        </p>
+      )}
+    </section>
   );
 }
 
