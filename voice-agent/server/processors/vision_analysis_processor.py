@@ -228,8 +228,11 @@ class VisionAnalysisProcessor(FrameProcessor):
                     f"people={obs.get('people_count')} engagement={obs.get('engagement')} "
                     f"avatar={is_avatar} bg_real={obs.get('background_real')}"
                 )
-                # Fire violation for second person OR detected avatar/deepfake
+                # Fire violations: absent candidate, second person, avatar/deepfake
                 violation_flags = []
+                if obs.get("present") is False:
+                    violation_flags.append("candidate_absent")
+                    logger.warning(f"[VisionAnalysis] candidate absent at t={obs['t']}s")
                 if obs.get("second_person"):
                     violation_flags.append("multiple_people")
                 if is_avatar:
