@@ -144,11 +144,22 @@ def health_check(db: Session = Depends(get_db)):
 
 
 @app.get("/metrics")
-def get_metrics(job_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+def get_metrics(
+    job_id: Optional[int] = Query(None),
+    from_date: Optional[str] = Query(None, description="ISO date string YYYY-MM-DD (inclusive)"),
+    to_date: Optional[str] = Query(None, description="ISO date string YYYY-MM-DD (inclusive)"),
+    db: Session = Depends(get_db),
+):
     def _q(model):
         q = db.query(model)
-        if job_id is not None and model is Candidate:
-            q = q.filter(Candidate.job_id == job_id)
+        if model is Candidate:
+            if job_id is not None:
+                q = q.filter(Candidate.job_id == job_id)
+            if from_date:
+                q = q.filter(Candidate.created_at >= from_date)
+            if to_date:
+                # Include the full to_date day by comparing against the day after
+                q = q.filter(Candidate.created_at <= to_date + "T23:59:59")
         return q
 
     total_jobs = 1 if job_id is not None else db.query(Job).count()

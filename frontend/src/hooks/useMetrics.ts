@@ -16,15 +16,24 @@ type Metrics = {
   topScore: number;
 };
 
-export const useMetrics = (jobId?: number | null) => {
+type MetricsFilters = {
+  jobId?: number | null;
+  fromDate?: string | null; // YYYY-MM-DD
+  toDate?: string | null;   // YYYY-MM-DD
+};
+
+export const useMetrics = ({ jobId, fromDate, toDate }: MetricsFilters = {}) => {
   return useQuery<Metrics, Error>({
-    queryKey: ['metrics', jobId ?? null],
+    queryKey: ["metrics", jobId ?? null, fromDate ?? null, toDate ?? null],
     queryFn: async () => {
-      const params = jobId != null ? { job_id: jobId } : {};
-      const { data } = await axios.get('/metrics', { params });
+      const params: Record<string, string | number> = {};
+      if (jobId != null) params.job_id = jobId;
+      if (fromDate) params.from_date = fromDate;
+      if (toDate) params.to_date = toDate;
+      const { data } = await axios.get("/metrics", { params });
       return data as Metrics;
     },
-    staleTime: 30_000, // 30 s — short so dashboard stays fresh
+    staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
 };

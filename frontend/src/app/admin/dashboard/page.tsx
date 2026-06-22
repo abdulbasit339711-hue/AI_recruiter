@@ -4,12 +4,38 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Briefcase, Users, Gauge, Clock, ChevronRight, Trophy, Filter, Loader2 } from "lucide-react";
+import { Briefcase, Users, Gauge, Clock, ChevronRight, Trophy, Filter, Loader2, CalendarDays, X } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Stat } from "@/components/ui/Stat";
 import { RadialGauge, CountUp } from "@/components/ui/charts";
 import { useMetrics } from "@/hooks/useMetrics";
 import { useJobs } from "@/hooks/useJobs";
+
+type DatePreset = "today" | "7d" | "30d" | "90d" | "custom" | "all";
+
+const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "7d",    label: "7 days" },
+  { key: "30d",   label: "30 days" },
+  { key: "90d",   label: "90 days" },
+  { key: "custom", label: "Custom" },
+  { key: "all",   label: "All time" },
+];
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function presetToDates(preset: DatePreset): { from: string | null; to: string | null } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (preset === "all" || preset === "custom") return { from: null, to: null };
+  if (preset === "today") return { from: isoDate(today), to: isoDate(today) };
+  const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 90;
+  const from = new Date(today);
+  from.setDate(from.getDate() - (days - 1));
+  return { from: isoDate(from), to: isoDate(today) };
+}
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -29,7 +55,19 @@ function Skeleton({ className = "" }: { className?: string }) {
 
 export default function DashboardPage() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
-  const { data: m, isLoading, isPlaceholderData } = useMetrics(selectedJobId);
+  const [preset, setPreset] = useState<DatePreset>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const { from: presetFrom, to: presetTo } = presetToDates(preset);
+  const fromDate = preset === "custom" ? (customFrom || null) : presetFrom;
+  const toDate   = preset === "custom" ? (customTo   || null) : presetTo;
+
+  const { data: m, isLoading, isPlaceholderData } = useMetrics({
+    jobId: selectedJobId,
+    fromDate,
+    toDate,
+  });
   const { data: jobs } = useJobs("Active");
 
   if (isLoading || !m) {
@@ -119,57 +157,118 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Page title + job filter */}
+      {/* Page title + filters */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE }}
-        className="mb-6 flex flex-wrap items-start justify-between gap-4"
+        className="mb-6 space-y-3"
       >
-        <div>
-          <h1 className="text-2xl font-bold text-heading">Recruitment Overview</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {selectedJobName
-              ? `Showing data for: ${selectedJobName}`
-              : "Real-time AI screening pipeline across all open roles."}
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-heading">Recruitment Overview</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {selectedJobName
+                ? `Showing data for: ${selectedJobName}`
+                : "Real-time AI screening pipeline across all open roles."}
+            </p>
+          </div>
+
+          {/* Job filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="relative">
+              <select
+                value={selectedJobId ?? ""}
+                onChange={(e) =>
+                  setSelectedJobId(e.target.value === "" ? null : Number(e.target.value))
+                }
+                className="appearance-none rounded-xl border px-3 py-2 pr-8 text-sm font-medium focus:outline-none focus:ring-1"
+                style={{
+                  background: "var(--surface-card)",
+                  borderColor: selectedJobId != null ? "rgba(28,153,191,0.5)" : "var(--surface-border)",
+                  color: "var(--color-heading)",
+                }}
+              >
+                <option value="">All Jobs</option>
+                {(jobs ?? []).map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.title}
+                  </option>
+                ))}
+              </select>
+              <ChevronRight className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-muted-foreground" />
+            </div>
+            {selectedJobId != null && (
+              <button
+                onClick={() => setSelectedJobId(null)}
+                className="rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Job filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <div className="relative">
-            <select
-              value={selectedJobId ?? ""}
-              onChange={(e) =>
-                setSelectedJobId(e.target.value === "" ? null : Number(e.target.value))
-              }
-              className="appearance-none rounded-xl border px-3 py-2 pr-8 text-sm font-medium focus:outline-none focus:ring-1"
-              style={{
-                background: "var(--surface-card)",
-                borderColor: selectedJobId != null ? "rgba(28,153,191,0.5)" : "var(--surface-border)",
-                color: "var(--color-heading)",
-              }}
-            >
-              <option value="">All Jobs</option>
-              {(jobs ?? []).map((job) => (
-                <option key={job.id} value={job.id}>
-                  {job.title}
-                </option>
-              ))}
-            </select>
-            <ChevronRight
-              className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-muted-foreground"
-            />
+        {/* Date range filter */}
+        <div className="flex flex-wrap items-center gap-2">
+          <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div
+            className="flex rounded-xl border p-0.5"
+            style={{ background: "var(--surface-card)", borderColor: "var(--surface-border)" }}
+          >
+            {DATE_PRESETS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setPreset(key)}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                style={
+                  preset === key
+                    ? { background: "rgba(28,153,191,0.2)", color: "#1C99BF" }
+                    : { color: "var(--muted-foreground)" }
+                }
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          {selectedJobId != null && (
-            <button
-              onClick={() => setSelectedJobId(null)}
-              className="rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-              title="Clear filter"
-            >
-              ✕ Clear
-            </button>
+
+          {/* Custom date pickers (shown only when "Custom" selected) */}
+          {preset === "custom" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="rounded-xl border px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#1C99BF]/40"
+                style={{ background: "var(--surface-card)", borderColor: "var(--surface-border)", color: "var(--color-heading)" }}
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="rounded-xl border px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#1C99BF]/40"
+                style={{ background: "var(--surface-card)", borderColor: "var(--surface-border)", color: "var(--color-heading)" }}
+              />
+              {(customFrom || customTo) && (
+                <button
+                  onClick={() => { setCustomFrom(""); setCustomTo(""); }}
+                  className="rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Active date range label */}
+          {(fromDate || toDate) && preset !== "custom" && (
+            <span className="text-xs text-muted-foreground">
+              {fromDate && toDate && fromDate === toDate
+                ? fromDate
+                : `${fromDate ?? "…"} → ${toDate ?? "…"}`}
+            </span>
           )}
         </div>
       </motion.div>
