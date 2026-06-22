@@ -84,6 +84,7 @@ export interface Candidate {
   availability_submitted_at?: string | null;
   interview_confirmed_slot?: string | null;
   interview_confirmed_at?: string | null;
+  interview_token?: string | null;
 }
 
 export interface TimelineEntry {

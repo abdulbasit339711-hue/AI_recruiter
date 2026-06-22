@@ -134,6 +134,7 @@ class CandidateResponse(BaseModel):
     availability_submitted_at: Optional[str] = None
     interview_confirmed_slot: Optional[str] = None
     interview_confirmed_at: Optional[str] = None
+    interview_token: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

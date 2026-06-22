@@ -1036,9 +1036,21 @@ export default function AdminCandidatesPage() {
                   <div className="space-y-2 border-t border-white/[0.06] pt-3">
                     <p className="text-xs uppercase text-muted-foreground">Interview Scheduling</p>
                     {selected.interview_confirmed_slot ? (
-                      <div className="rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-400">
-                        <p className="font-semibold">Confirmed</p>
-                        <p className="mt-0.5 text-green-300/80">{selected.interview_confirmed_slot}</p>
+                      <div className="space-y-2">
+                        <div className="rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-400">
+                          <p className="font-semibold">Confirmed</p>
+                          <p className="mt-0.5 text-green-300/80">{selected.interview_confirmed_slot}</p>
+                        </div>
+                        {selected.interview_token && (
+                          <a
+                            href={`/interview-room/${selected.interview_token}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full rounded-lg bg-white/[0.04] py-1.5 text-center text-xs text-muted-foreground transition-colors hover:text-[#1C99BF]"
+                          >
+                            View interview room ↗
+                          </a>
+                        )}
                       </div>
                     ) : selected.availability_response ? (
                       <div className="space-y-2">

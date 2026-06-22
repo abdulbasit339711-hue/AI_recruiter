@@ -520,6 +520,19 @@ export const api = {
     return response.data;
   },
 
+  async getInterviewRoom(token: string): Promise<{
+    candidate_name: string | null;
+    job_title: string;
+    org_name: string | null;
+    org_color: string;
+    org_logo_url: string | null;
+    confirmed_slot: string | null;
+    interview_token: string;
+  }> {
+    const response = await client.get(`/interview-room/${token}`);
+    return response.data;
+  },
+
   // Admin settings
   async getSettings(): Promise<Array<{ key: string; value: string | null; label: string; description: string; type: string; min?: number; max?: number }>> {
     const response = await client.get("/settings");

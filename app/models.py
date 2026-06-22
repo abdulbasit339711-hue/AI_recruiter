@@ -107,6 +107,7 @@ class Candidate(Base):
     availability_submitted_at = Column(String, nullable=True, default=None) # when candidate submitted
     interview_confirmed_slot = Column(String, nullable=True, default=None)  # HR-confirmed slot
     interview_confirmed_at = Column(String, nullable=True, default=None)    # when HR confirmed
+    interview_token = Column(String, nullable=True, default=None)           # minted when slot confirmed
 
     # Tier-3 (resume scoring) LLM token usage + estimated cost, surfaced to HR.
     llm_prompt_tokens = Column(Integer, nullable=True, default=None)

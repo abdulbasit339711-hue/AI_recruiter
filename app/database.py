@@ -115,6 +115,7 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN availability_submitted_at VARCHAR",
         "ALTER TABLE candidates ADD COLUMN interview_confirmed_slot VARCHAR",
         "ALTER TABLE candidates ADD COLUMN interview_confirmed_at VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN interview_token VARCHAR",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

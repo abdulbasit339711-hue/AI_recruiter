@@ -136,14 +136,22 @@ def send_availability_invite(*, to: str, candidate_name: str | None, job_title: 
     get_email_sender().send(to, subject, body)
 
 
-def send_slot_confirmation(*, to: str, candidate_name: str | None, job_title: str, slot: str) -> None:
+def send_slot_confirmation(
+    *, to: str, candidate_name: str | None, job_title: str, slot: str, room_url: str | None = None
+) -> None:
     subject = f"Interview Confirmed — {job_title}"
+    room_section = (
+        f"\nJoin your interview here:\n{room_url}\n"
+        f"\n(The link is valid for 7 days. Please open it a few minutes before your slot.)\n"
+        if room_url
+        else "\nOur team will send you a meeting link shortly before your interview.\n"
+    )
     body = (
         f"Hi {candidate_name or 'there'},\n\n"
         f"Your interview for the {job_title} role has been confirmed for:\n\n"
-        f"  {slot}\n\n"
-        f"Our team will reach out shortly before the interview with further details "
-        f"and the meeting link.\n\n"
+        f"  {slot}\n"
+        f"{room_section}\n"
+        f"Before joining, please make sure you're in a quiet space with a working microphone.\n\n"
         f"Best regards,\nThe Recruitment Team\n"
     )
     get_email_sender().send(to, subject, body)

@@ -40,8 +40,9 @@ _PUBLIC_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("POST", re.compile(r"^/upload/?$")),         # submit a resume
     ("GET",  re.compile(r"^/orgs/[^/]+/?$")),          # applicant portal: org branding by slug
     ("GET",  re.compile(r"^/orgs/[^/]+/jobs/?$")),     # applicant portal: org job listing
-    ("GET",  re.compile(r"^/availability/[^/]+/?$")),  # candidate availability form
-    ("POST", re.compile(r"^/availability/[^/]+/?$")),  # candidate submits availability
+    ("GET",  re.compile(r"^/availability/[^/]+/?$")),   # candidate availability form
+    ("POST", re.compile(r"^/availability/[^/]+/?$")),   # candidate submits availability
+    ("GET",  re.compile(r"^/interview-room/[^/]+/?$")), # candidate interview waiting room
 )
 
 

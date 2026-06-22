@@ -32,6 +32,8 @@ function isPublic(method: string, path: string): boolean {
   if (method === "GET" && /^orgs\/[^/]+\/jobs$/.test(path)) return true;
   // Candidate availability form (token-gated, no admin session needed)
   if (/^availability\/[^/]+$/.test(path)) return true;
+  // Candidate interview waiting room (token-gated)
+  if (method === "GET" && /^interview-room\/[^/]+$/.test(path)) return true;
   return false;
 }
 
