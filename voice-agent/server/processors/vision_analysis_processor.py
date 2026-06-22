@@ -312,7 +312,8 @@ class VisionAnalysisProcessor(FrameProcessor):
             agg["present_ratio"] = round(sum(1 for o in self.observations if o.get("present")) / len(self.observations), 2)
             agg["second_person_detected"] = any(o.get("second_person") for o in self.observations)
             agg["avatar_detected"] = any(o.get("is_avatar") for o in self.observations)
-            agg["background_always_real"] = all(o.get("background_real", True) for o in self.observations)
+            bg_vals = [o["background_real"] for o in self.observations if isinstance(o.get("background_real"), bool)]
+            agg["background_always_real"] = all(bg_vals) if bg_vals else True
             pc = [o["people_count"] for o in self.observations if isinstance(o.get("people_count"), int)]
             agg["max_people_count_semantic"] = max(pc) if pc else 0
         if self.detections:
