@@ -16,6 +16,7 @@ type Metrics = {
   topScore: number;
   pendingReviewCount: number;
   interviewReadyCount: number;
+  interviewPassedCount: number;
 };
 
 type MetricsFilters = {

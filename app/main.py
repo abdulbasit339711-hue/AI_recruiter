@@ -201,6 +201,12 @@ def get_metrics(
         .filter(Candidate.interview_token.is_(None))
         .count()
     )
+    # Completed AI interview and passed — ready for human 2nd-round.
+    interview_passed_count = (
+        _q(Candidate)
+        .filter(Candidate.interview_passed == True)  # noqa: E712
+        .count()
+    )
 
     return {
         "totalJobs": total_jobs,
@@ -214,6 +220,7 @@ def get_metrics(
         "topScore": top_score,
         "pendingReviewCount": pending_review,
         "interviewReadyCount": interview_ready,
+        "interviewPassedCount": interview_passed_count,
     }
 
 
@@ -239,6 +246,35 @@ def get_action_needed_candidates(
             "email": c.email,
             "job_id": c.job_id,
             "total_score": c.total_score,
+            "status": c.status,
+            "hr_status": c.hr_status,
+        }
+        for c in rows
+    ]
+
+
+@app.get("/candidates/interview-passed")
+def get_interview_passed_candidates(
+    job_id: Optional[int] = Query(None),
+    limit: int = Query(12, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Candidates who completed and passed the AI voice interview — ready for human 2nd round."""
+    q = db.query(Candidate).filter(Candidate.interview_passed == True)  # noqa: E712
+    if job_id is not None:
+        q = q.filter(Candidate.job_id == job_id)
+    rows = q.order_by(Candidate.interview_overall_score.desc().nullslast()).limit(limit).all()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "email": c.email,
+            "job_id": c.job_id,
+            "total_score": c.total_score,
+            "interview_phase1_score": c.interview_phase1_score,
+            "interview_phase2_score": c.interview_phase2_score,
+            "interview_overall_score": c.interview_overall_score,
+            "interview_completed_at": c.interview_completed_at,
             "status": c.status,
             "hr_status": c.hr_status,
         }
@@ -507,18 +543,52 @@ def list_jobs(request: Request, status: Optional[str] = "Active", db: Session = 
     else:
         query = query.filter(Job.status == "Active")
     jobs_list = query.all()
-    # Batch-count candidates per job in a single query (avoids N+1).
+    # Batch-aggregate candidate stats per job in a single query (avoids N+1).
     if jobs_list:
         job_ids = [j.id for j in jobs_list]
-        counts = dict(
-            db.query(Candidate.job_id, func.count(Candidate.id))
+        rows = (
+            db.query(
+                Candidate.job_id,
+                func.count(Candidate.id).label("total"),
+                func.avg(Candidate.total_score).label("avg_score"),
+                func.max(Candidate.total_score).label("top_score"),
+            )
             .filter(Candidate.job_id.in_(job_ids))
             .group_by(Candidate.job_id)
             .all()
         )
+        stats: dict = {
+            r.job_id: {
+                "candidate_count": r.total or 0,
+                "avg_score": round(float(r.avg_score), 1) if r.avg_score else None,
+                "top_score": round(float(r.top_score), 1) if r.top_score else None,
+                "shortlisted_count": 0,
+            }
+            for r in rows
+        }
+        # Shortlisted count — separate filtered query (cross-DB safe)
+        sl_rows = (
+            db.query(Candidate.job_id, func.count(Candidate.id))
+            .filter(Candidate.job_id.in_(job_ids), Candidate.status == "Shortlisted")
+            .group_by(Candidate.job_id)
+            .all()
+        )
+        for job_id, cnt in sl_rows:
+            if job_id in stats:
+                stats[job_id]["shortlisted_count"] = cnt
     else:
-        counts = {}
-    return [dict(**_serialize_job(j, is_admin), candidate_count=counts.get(j.id, 0)) for j in jobs_list]
+        stats = {}
+
+    return [
+        dict(
+            **_serialize_job(j, is_admin),
+            candidate_count=stats.get(j.id, {}).get("candidate_count", 0),
+            avg_score=stats.get(j.id, {}).get("avg_score"),
+            top_score=stats.get(j.id, {}).get("top_score"),
+            shortlisted_count=stats.get(j.id, {}).get("shortlisted_count", 0),
+        )
+        for j in jobs_list
+    ]
 
 
 @app.get("/jobs/{job_id}")
@@ -2032,6 +2102,45 @@ def send_interview_invite_api(candidate_id: int, db: Session = Depends(get_db)):
     from .services.interview_invite import invite_candidate
     url = invite_candidate(db, cand, job, force=True)
     return {"status": "sent", "candidate_id": candidate_id, "link": url}
+
+
+@app.post("/candidates/{candidate_id}/interview-result")
+def record_interview_result(
+    candidate_id: int,
+    body: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Internal — called by the voice agent after a session ends to store interview scores.
+
+    Expected body keys (all optional):
+        phase1_score    float   behavioral phase score (0–60)
+        phase2_score    float   technical phase score (0–100)
+        overall_score   float   combined final score
+        passed          bool    whether the candidate cleared both gates
+        completed_at    str     ISO timestamp (defaults to now)
+    """
+    # Accept calls from the voice agent (uses the same admin token) or an internal
+    # service token.  Unauthenticated callers are rejected.
+    if not token_is_valid(request.headers.get("authorization")):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+
+    cand.interview_completed_at = body.get("completed_at") or _utcnow().isoformat()
+    if body.get("phase1_score") is not None:
+        cand.interview_phase1_score = float(body["phase1_score"])
+    if body.get("phase2_score") is not None:
+        cand.interview_phase2_score = float(body["phase2_score"])
+    if body.get("overall_score") is not None:
+        cand.interview_overall_score = float(body["overall_score"])
+    if body.get("passed") is not None:
+        cand.interview_passed = bool(body["passed"])
+
+    db.commit()
+    db.refresh(cand)
+    return {"status": "ok", "candidate_id": candidate_id}
 
 
 @app.post("/jobs/{job_id}/email")

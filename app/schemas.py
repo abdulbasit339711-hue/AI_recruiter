@@ -142,6 +142,13 @@ class CandidateResponse(BaseModel):
     projects: Optional[str] = None       # JSON list of project names
     certifications: Optional[str] = None  # JSON list of certifications
 
+    # Voice AI interview result
+    interview_completed_at: Optional[str] = None
+    interview_phase1_score: Optional[float] = None
+    interview_phase2_score: Optional[float] = None
+    interview_overall_score: Optional[float] = None
+    interview_passed: Optional[bool] = None
+
     model_config = {"from_attributes": True}
 
 

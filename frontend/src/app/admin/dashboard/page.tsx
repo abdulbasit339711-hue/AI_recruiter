@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Briefcase, Users, Gauge, Clock, ChevronRight, Filter,
   Loader2, CalendarDays, X, Video, CheckCircle2, AlertCircle,
-  Send, TrendingUp, Star, Zap,
+  Send, TrendingUp, Star, Zap, Trophy,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { RadialGauge, CountUp } from "@/components/ui/charts";
@@ -61,6 +61,20 @@ type ActionCandidate = {
   email: string | null;
   job_id: number;
   total_score: number;
+  status: string;
+  hr_status: string | null;
+};
+
+type PassedCandidate = {
+  id: number;
+  name: string | null;
+  email: string | null;
+  job_id: number;
+  total_score: number;
+  interview_phase1_score: number | null;
+  interview_phase2_score: number | null;
+  interview_overall_score: number | null;
+  interview_completed_at: string | null;
   status: string;
   hr_status: string | null;
 };
@@ -139,6 +153,7 @@ export default function DashboardPage() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [actionCandidates, setActionCandidates] = useState<ActionCandidate[]>([]);
+  const [passedCandidates, setPassedCandidates] = useState<PassedCandidate[]>([]);
   const [inviting, setInviting] = useState<Record<number, "loading" | "done" | "error">>({});
 
   const { from: presetFrom, to: presetTo } = presetToDates(preset);
@@ -155,7 +170,14 @@ export default function DashboardPage() {
     } catch { /* non-fatal */ }
   }, [selectedJobId]);
 
-  useEffect(() => { loadActionCandidates(); }, [loadActionCandidates]);
+  const loadPassedCandidates = useCallback(async () => {
+    try {
+      const rows = await api.getInterviewPassedCandidates(selectedJobId);
+      setPassedCandidates(rows);
+    } catch { /* non-fatal */ }
+  }, [selectedJobId]);
+
+  useEffect(() => { loadActionCandidates(); loadPassedCandidates(); }, [loadActionCandidates, loadPassedCandidates]);
 
   async function inviteOne(candidateId: number) {
     setInviting((p) => ({ ...p, [candidateId]: "loading" }));
@@ -197,7 +219,8 @@ export default function DashboardPage() {
   const failedCount        = m.failedCount;
   const topScore           = m.topScore ?? 0;
   const pendingReviewCount = m.pendingReviewCount ?? 0;
-  const interviewReadyCount = m.interviewReadyCount ?? 0;
+  const interviewReadyCount  = m.interviewReadyCount ?? 0;
+  const interviewPassedCount = m.interviewPassedCount ?? 0;
   const scoreDistribution  = m.scoreDistribution ?? [
     { label: "0–20", count: 0 }, { label: "21–40", count: 0 }, { label: "41–60", count: 0 },
     { label: "61–80", count: 0 }, { label: "81–100", count: 0 },
@@ -208,10 +231,11 @@ export default function DashboardPage() {
 
   // Funnel stages with conversion between each
   const funnelStages = [
-    { label: "Total Applied",   value: totalCandidates, color: "#3DAFCC" },
-    { label: "Processed by AI", value: processedCount,  color: "#1C99BF" },
-    { label: "Shortlisted",     value: shortlistedCount, color: "#34C28A" },
-    { label: "Interview Ready", value: interviewReadyCount, color: "#8B5CF6" },
+    { label: "Total Applied",   value: totalCandidates,    color: "#3DAFCC" },
+    { label: "Processed by AI", value: processedCount,     color: "#1C99BF" },
+    { label: "Shortlisted",     value: shortlistedCount,   color: "#34C28A" },
+    { label: "AI Interview",    value: interviewReadyCount, color: "#8B5CF6" },
+    { label: "AI Passed",       value: interviewPassedCount, color: "#F5B544" },
   ];
   const funnelMax = Math.max(...funnelStages.map((s) => s.value), 1);
 
@@ -340,7 +364,7 @@ export default function DashboardPage() {
         <KpiTile label="Shortlisted"      value={shortlistedCount}   color="#34C28A" icon={<Star      className="h-3.5 w-3.5" />} delay={0.1}  subtitle="passed AI screen" />
         <KpiTile label="Avg Score"        value={avgScore}           color={scoreColor(avgScore)} icon={<Gauge className="h-3.5 w-3.5" />} delay={0.15} decimals={1} suffix="/100" />
         <KpiTile label="Pending Review"   value={pendingReviewCount} color="#F5B544" icon={<Clock     className="h-3.5 w-3.5" />} delay={0.2}  subtitle="awaiting HR action" />
-        <KpiTile label="Interview Ready"  value={interviewReadyCount} color="#8B5CF6" icon={<Zap      className="h-3.5 w-3.5" />} delay={0.25} subtitle="invites auto-sent" />
+        <KpiTile label="AI Passed"        value={interviewPassedCount} color="#F5B544" icon={<Trophy  className="h-3.5 w-3.5" />} delay={0.25} subtitle="ready for 2nd round" />
       </div>
 
       {/* ── Row 2: Histogram + Funnel ── */}
@@ -597,7 +621,8 @@ export default function DashboardPage() {
                   { label: "Shortlisted",     value: shortlistedCount,    color: "#34C28A", of: totalCandidates },
                   { label: "In Pipeline",     value: processedCount,      color: "#1C99BF", of: totalCandidates },
                   { label: "Pending",         value: pendingCount,        color: "#F5B544", of: null },
-                  { label: "Interview Ready", value: interviewReadyCount, color: "#8B5CF6", of: shortlistedCount },
+                  { label: "AI Interview Sent", value: interviewReadyCount, color: "#8B5CF6", of: shortlistedCount },
+                  { label: "AI Passed",         value: interviewPassedCount, color: "#F5B544", of: interviewReadyCount },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-2.5">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -742,6 +767,102 @@ export default function DashboardPage() {
                                               <><Send className="h-3 w-3" /> Re-send</>}
                       </button>
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </GlassCard>
+      </motion.div>
+
+      {/* ── Row 5: AI Interview — 2nd round panel ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.4, ease: EASE }}
+        className="mt-4"
+      >
+        <GlassCard className="p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg"
+                style={{ background: "rgba(245,181,68,0.15)", border: "1px solid rgba(245,181,68,0.2)" }}>
+                <Trophy className="h-4 w-4" style={{ color: "#F5B544" }} />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-heading">Passed AI Interview — Ready for 2nd Round</h2>
+                <p className="text-[11px] text-muted-foreground">
+                  Cleared both behavioral (Phase 1 ≥ 60) and technical (Phase 2) gates. Schedule a human interview.
+                </p>
+              </div>
+            </div>
+            {interviewPassedCount > 0 && (
+              <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                style={{ background: "rgba(245,181,68,0.15)", color: "#F5B544", border: "1px solid rgba(245,181,68,0.25)" }}>
+                {interviewPassedCount} ready
+              </span>
+            )}
+          </div>
+
+          {passedCandidates.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl py-7 text-sm text-muted-foreground"
+              style={{ background: "var(--surface-card)", border: "1px dashed var(--surface-border)" }}>
+              <Trophy className="h-4 w-4 text-muted-foreground/40" />
+              No candidates have completed the AI interview yet
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {passedCandidates.map((c) => {
+                const sc = scoreColor(c.total_score);
+                const p1 = c.interview_phase1_score;
+                const p2 = c.interview_phase2_score;
+                const overall = c.interview_overall_score;
+                return (
+                  <div key={c.id}
+                    className="flex items-start gap-3 rounded-xl px-3 py-3"
+                    style={{ background: "var(--surface-card)", border: "1px solid rgba(245,181,68,0.2)" }}
+                  >
+                    {/* AI score badge */}
+                    <div className="flex shrink-0 flex-col items-center gap-1">
+                      <span className="rounded-lg px-2 py-1 font-mono text-xs font-bold tabular-nums"
+                        style={{ background: `${sc}18`, color: sc, border: `1px solid ${sc}30` }}>
+                        {Math.round(c.total_score)}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground">resume</span>
+                    </div>
+
+                    {/* Name + phases */}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-heading">
+                        {c.name || "Unknown Candidate"}
+                      </p>
+                      <p className="truncate text-[11px] text-muted-foreground">{c.email ?? "—"}</p>
+                      {/* Phase scores */}
+                      <div className="mt-1.5 flex flex-wrap gap-2">
+                        {p1 != null && (
+                          <span className="font-mono text-[10px] font-semibold"
+                            style={{ color: p1 >= 60 ? "#34C28A" : "#F25C7C" }}>
+                            P1: {p1.toFixed(0)}
+                          </span>
+                        )}
+                        {p2 != null && (
+                          <span className="font-mono text-[10px] font-semibold text-[#1C99BF]">
+                            P2: {p2.toFixed(0)}
+                          </span>
+                        )}
+                        {overall != null && (
+                          <span className="font-mono text-[10px] font-bold text-[#F5B544]">
+                            Total: {overall.toFixed(0)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* View link */}
+                    <Link href={`/admin/candidates?candidateId=${c.id}`}
+                      className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-all hover:bg-[#F5B544]/10 hover:text-[#F5B544]"
+                      style={{ border: "1px solid var(--surface-border)" }}>
+                      View
+                    </Link>
                   </div>
                 );
               })}

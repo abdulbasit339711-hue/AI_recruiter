@@ -643,6 +643,38 @@ class BotManager:
             except Exception as e:
                 logger.error(f"[BotManager] Failed to stamp session status: {e}")
 
+        # Post interview result back to the main FastAPI backend so HR can see scores.
+        if self.session and (graceful or terminal):
+            try:
+                import httpx
+                backend_url = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
+                admin_token = os.getenv("ADMIN_API_TOKEN", "")
+                # session_id format: "{candidate_id}-{jti_prefix}"
+                cand_id_str = self.session.session_id.split("-")[0]
+                if cand_id_str.isdigit():
+                    phase1 = getattr(self.session, "phase1_score", None)
+                    phase2 = getattr(self.session, "phase2_score", None)
+                    overall = round((phase1 or 0) + (phase2 or 0), 1) if (phase1 is not None) else None
+                    passed  = (phase1 is not None and phase1 >= 60 and phase2 is not None)
+                    payload = {
+                        "phase1_score": phase1,
+                        "phase2_score": phase2,
+                        "overall_score": overall,
+                        "passed": passed,
+                    }
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        r = await client.post(
+                            f"{backend_url}/candidates/{cand_id_str}/interview-result",
+                            json=payload,
+                            headers={"Authorization": f"Bearer {admin_token}"},
+                        )
+                    if r.status_code == 200:
+                        logger.info(f"[BotManager] Interview result posted for candidate {cand_id_str}: passed={passed}")
+                    else:
+                        logger.warning(f"[BotManager] Interview result callback HTTP {r.status_code}: {r.text[:200]}")
+            except Exception as e:
+                logger.error(f"[BotManager] Failed to post interview result to backend: {e}")
+
         # Persist the per-service token breakdown (STT/LLM-in/LLM-out/TTS).
         if self.metrics_processor:
             try:

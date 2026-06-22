@@ -550,6 +550,18 @@ export const api = {
     return response.data;
   },
 
+  async getInterviewPassedCandidates(jobId?: number | null): Promise<Array<{
+    id: number; name: string | null; email: string | null; job_id: number;
+    total_score: number; interview_phase1_score: number | null;
+    interview_phase2_score: number | null; interview_overall_score: number | null;
+    interview_completed_at: string | null; status: string; hr_status: string | null;
+  }>> {
+    const params: Record<string, number> = {};
+    if (jobId != null) params.job_id = jobId;
+    const response = await client.get("/candidates/interview-passed", { params });
+    return response.data;
+  },
+
   // Admin settings
   async getSettings(): Promise<Array<{ key: string; value: string | null; label: string; description: string; type: string; min?: number; max?: number }>> {
     const response = await client.get("/settings");

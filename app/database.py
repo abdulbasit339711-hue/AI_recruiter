@@ -121,6 +121,12 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN linkedin_url VARCHAR",
         "ALTER TABLE candidates ADD COLUMN projects TEXT",
         "ALTER TABLE candidates ADD COLUMN certifications TEXT",
+        # Voice AI interview result — written back by the voice agent on session end
+        "ALTER TABLE candidates ADD COLUMN interview_completed_at VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN interview_phase1_score FLOAT",
+        "ALTER TABLE candidates ADD COLUMN interview_phase2_score FLOAT",
+        "ALTER TABLE candidates ADD COLUMN interview_overall_score FLOAT",
+        "ALTER TABLE candidates ADD COLUMN interview_passed BOOLEAN",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

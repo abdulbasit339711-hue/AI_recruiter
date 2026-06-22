@@ -371,6 +371,7 @@ class QuestionFlowProcessor(FrameProcessor):
         if boundary > 0 and session.current_phase == "technical":
             n_total = len(session.config.questions)
             phase2_score = self._compute_phase_score(boundary, n_total)
+            session.phase2_score = phase2_score  # stored so bot_manager can read it
             session.current_phase = "complete"
             await broadcaster.broadcast("phase_transition", {
                 "phase": "complete",

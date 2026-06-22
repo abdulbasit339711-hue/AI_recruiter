@@ -171,6 +171,7 @@ class InterviewSession:
     auto_kill_on_disconnect: bool = False
     current_phase: str = "initial"           # "initial" | "technical" | "complete"
     phase1_score: float | None = None
+    phase2_score: float | None = None
 
     # Service Status tracking
     service_status: Dict[str, str] = field(default_factory=lambda: {

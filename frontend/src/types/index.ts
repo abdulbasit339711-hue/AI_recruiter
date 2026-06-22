@@ -23,9 +23,26 @@ export interface Job {
   org_slug: string | null;
   org_name: string | null;
   candidate_count?: number;
+  shortlisted_count?: number;
+  avg_score?: number | null;
+  top_score?: number | null;
   resume_deadline: string | null;
   interview_deadline: string | null;
 }
+
+export type InterviewPassedCandidate = {
+  id: number;
+  name: string | null;
+  email: string | null;
+  job_id: number;
+  total_score: number;
+  interview_phase1_score: number | null;
+  interview_phase2_score: number | null;
+  interview_overall_score: number | null;
+  interview_completed_at: string | null;
+  status: string;
+  hr_status: string | null;
+};
 
 export type CandidateStatus =
   | "Queued"

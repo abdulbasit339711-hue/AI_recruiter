@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, Float, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -135,5 +135,12 @@ class Candidate(Base):
     linkedin_url = Column(String, nullable=True, default=None)
     projects = Column(Text, nullable=True, default=None)        # JSON list of project names
     certifications = Column(Text, nullable=True, default=None)  # JSON list of certifications
+
+    # Voice AI interview result — written back by the voice agent after the session ends
+    interview_completed_at = Column(String, nullable=True, default=None)  # ISO timestamp
+    interview_phase1_score = Column(Float, nullable=True, default=None)   # behavioral phase (0-60 gate)
+    interview_phase2_score = Column(Float, nullable=True, default=None)   # technical phase
+    interview_overall_score = Column(Float, nullable=True, default=None)  # combined 0-100
+    interview_passed = Column(Boolean, nullable=True, default=None)        # cleared both phases
 
     job = relationship("Job", back_populates="candidates")
