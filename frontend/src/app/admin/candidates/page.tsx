@@ -93,6 +93,10 @@ function formatDate(iso: string): string {
   });
 }
 
+function scoreColor(s: number): string {
+  return s >= 70 ? "#34C28A" : s >= 40 ? "#F5B544" : "#F25C7C";
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS: Array<CandidateStatus | ""> = [
@@ -261,13 +265,14 @@ export default function AdminCandidatesPage() {
 
       {/* ── Controls card ──────────────────────────────────────────────────── */}
       <GlassCard className="mb-4 p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        {/* Primary row */}
+        <div className="flex items-center gap-2.5">
           {/* Search */}
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
-              placeholder="Search by name, email, or file…"
+              placeholder="Search name, email, file…"
               className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-2.5 pl-10 pr-4 text-sm text-heading placeholder:text-muted-foreground focus:border-[#1C99BF]/40 focus:outline-none"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -276,141 +281,135 @@ export default function AdminCandidatesPage() {
 
           {/* Job select */}
           <select
-            className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-sm text-muted-foreground focus:outline-none"
+            className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-sm text-muted-foreground focus:outline-none max-w-[180px] truncate"
             value={activeJobId ?? ""}
             disabled={jobsLoading || jobs.length === 0}
-            onChange={(e) => {
-              setSelectedJobId(Number(e.target.value));
-              setPage(1);
-            }}
+            onChange={(e) => { setSelectedJobId(Number(e.target.value)); setPage(1); }}
           >
-            <option value="" disabled hidden>
-              Select role…
-            </option>
+            <option value="" disabled hidden>Role…</option>
             {jobs.map((job) => (
-              <option key={job.id} value={job.id}>
-                {job.title}
-              </option>
+              <option key={job.id} value={job.id}>{job.title}</option>
             ))}
           </select>
 
-          {/* Status select */}
-          <select
-            className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-sm text-muted-foreground focus:outline-none"
-            value={status ?? ""}
-            onChange={(e) => {
-              setStatus((e.target.value || undefined) as CandidateStatus | undefined);
-              setPage(1);
-            }}
+          {/* Filters toggle with active-count badge */}
+          {(() => {
+            const activeFilters = [status, hrStatus].filter(Boolean).length;
+            return (
+              <button
+                onClick={() => setFiltersOpen((v) => !v)}
+                className="relative flex h-10 items-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 text-sm text-muted-foreground transition-colors hover:text-heading"
+                style={filtersOpen ? { borderColor: "rgba(28,153,191,0.4)", color: "#1C99BF" } : {}}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+                {activeFilters > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: "#1C99BF" }}>
+                    {activeFilters}
+                  </span>
+                )}
+              </button>
+            );
+          })()}
+
+          {/* Sort dir */}
+          <button
+            onClick={toggleSortOrder}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02] text-muted-foreground transition-colors hover:text-heading"
+            title={order === "desc" ? "Highest first" : "Lowest first"}
           >
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option || "all"} value={option}>
-                {option || "All Statuses"}
-              </option>
-            ))}
-          </select>
-
-          {/* HR Status select */}
-          <select
-            className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-sm text-muted-foreground focus:outline-none"
-            value={hrStatus ?? ""}
-            onChange={(e) => {
-              setHrStatus(e.target.value || undefined);
-              setPage(1);
-            }}
-          >
-            {HR_STATUS_OPTIONS.map((option) => (
-              <option key={option || "all"} value={option}>
-                {option || "All Stages"}
-              </option>
-            ))}
-          </select>
-
-          {/* Sort + view toggles */}
-          <div className="flex items-center gap-2">
-            <select
-              className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 text-sm text-muted-foreground focus:outline-none"
-              value={sortBy}
-              onChange={(e) => {
-                setSortBy(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="total_score">Score</option>
-              <option value="created_at">Date</option>
-              <option value="hr_status">Stage</option>
-            </select>
-            <button
-              onClick={toggleSortOrder}
-              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 text-muted-foreground hover:text-heading transition-colors"
-              title={`Currently ${order === "desc" ? "descending" : "ascending"}`}
-            >
-              <ArrowUpDown className="h-4 w-4" />
-            </button>
-          </div>
+            <ArrowUpDown className="h-4 w-4" />
+          </button>
 
           {/* View mode */}
           <div className="flex items-center rounded-xl border border-white/[0.06] bg-white/[0.02] p-1 gap-0.5">
             <button
               onClick={() => setViewMode("table")}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${
-                viewMode === "table"
-                  ? "bg-[#1C99BF] text-white"
-                  : "text-muted-foreground hover:text-heading"
-              }`}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${viewMode === "table" ? "bg-[#1C99BF] text-white" : "text-muted-foreground hover:text-heading"}`}
             >
-              <List className="h-3.5 w-3.5" />
-              Table
+              <List className="h-3.5 w-3.5" /> Table
             </button>
             <button
               onClick={() => setViewMode("kanban")}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${
-                viewMode === "kanban"
-                  ? "bg-[#1C99BF] text-white"
-                  : "text-muted-foreground hover:text-heading"
-              }`}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${viewMode === "kanban" ? "bg-[#1C99BF] text-white" : "text-muted-foreground hover:text-heading"}`}
             >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Kanban
+              <LayoutGrid className="h-3.5 w-3.5" /> Kanban
             </button>
           </div>
         </div>
+
+        {/* Secondary filters — visible when filtersOpen OR any filter is active */}
+        {(filtersOpen || status || hrStatus) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3">
+            <select
+              className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-sm text-muted-foreground focus:outline-none"
+              value={status ?? ""}
+              onChange={(e) => { setStatus((e.target.value || undefined) as CandidateStatus | undefined); setPage(1); }}
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option || "all"} value={option}>{option || "All AI statuses"}</option>
+              ))}
+            </select>
+            <select
+              className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-sm text-muted-foreground focus:outline-none"
+              value={hrStatus ?? ""}
+              onChange={(e) => { setHrStatus(e.target.value || undefined); setPage(1); }}
+            >
+              {HR_STATUS_OPTIONS.map((option) => (
+                <option key={option || "all"} value={option}>{option || "All HR stages"}</option>
+              ))}
+            </select>
+            <select
+              className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-sm text-muted-foreground focus:outline-none"
+              value={sortBy}
+              onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+            >
+              <option value="total_score">Sort: Score</option>
+              <option value="created_at">Sort: Date</option>
+              <option value="hr_status">Sort: Stage</option>
+            </select>
+            {(status || hrStatus) && (
+              <button
+                onClick={() => { setStatus(undefined); setHrStatus(undefined); setPage(1); }}
+                className="flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:text-[#F25C7C]"
+              >
+                <X className="h-3.5 w-3.5" /> Clear filters
+              </button>
+            )}
+          </div>
+        )}
       </GlassCard>
 
       {/* ── Stat tiles ─────────────────────────────────────────────────────── */}
       {activeJobId && data && (
         <Stagger className="mb-4 grid grid-cols-2 gap-3.5 lg:grid-cols-4" gap={0.06}>
           {[
-            { label: "Total applicants", value: data.total },
-            { label: "Shortlisted", value: shortlisted, accent: true },
-            {
-              label: "Avg. aptitude",
-              value: avgIq ?? 0,
-              suffix: "%",
-              placeholder: avgIq == null ? "—" : undefined,
-            },
-            { label: "In interview", value: interviews },
+            { label: "Total applicants", value: data.total, icon: <Users className="h-4 w-4" />, color: "#9CA3B0" },
+            { label: "Shortlisted", value: shortlisted, icon: <Check className="h-4 w-4" />, color: "#1C99BF", accent: true },
+            { label: "Avg. aptitude", value: avgIq ?? 0, suffix: "%", placeholder: avgIq == null ? "—" : undefined, icon: <Brain className="h-4 w-4" />, color: "#8B5CF6" },
+            { label: "In interview", value: interviews, icon: <Filter className="h-4 w-4" />, color: "#34C28A" },
           ].map((t) => (
             <StaggerItem key={t.label}>
               <div
-                className="h-full rounded-2xl p-[18px]"
+                className="relative h-full overflow-hidden rounded-2xl p-5"
                 style={{
                   background: "var(--surface-card)",
                   border: "1px solid var(--surface-border)",
                   backdropFilter: "blur(12px)",
                 }}
               >
-                <p className="text-xs font-medium text-muted-foreground">
-                  {t.label}
-                </p>
-                <div
-                  className={`mt-1.5 font-mono text-[26px] font-semibold tabular-nums ${
-                    t.accent ? "text-[#1C99BF]" : "text-heading"
-                  }`}
-                >
-                  {t.placeholder ?? (
-                    <CountUp value={t.value} suffix={t.suffix ?? ""} />
-                  )}
+                {/* Subtle glow accent */}
+                <div className="absolute -right-4 -top-4 h-16 w-16 rounded-full opacity-[0.06]"
+                  style={{ background: t.color }} />
+                <div className="flex items-start justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">{t.label}</p>
+                  <span className="rounded-lg p-1.5" style={{ background: `${t.color}18`, color: t.color }}>
+                    {t.icon}
+                  </span>
+                </div>
+                <div className={`mt-2 font-mono text-[28px] font-bold tabular-nums leading-none ${t.accent ? "" : "text-heading"}`}
+                  style={t.accent ? { color: t.color } : {}}>
+                  {t.placeholder ?? <CountUp value={t.value} suffix={t.suffix ?? ""} />}
                 </div>
               </div>
             </StaggerItem>
@@ -512,26 +511,22 @@ export default function AdminCandidatesPage() {
             </div>
           </div>
 
-          {/* Agon-style candidates card */}
+          {/* Candidates card */}
           <GlassCard className="overflow-hidden">
             {/* Header row */}
-            <div className="hidden md:grid grid-cols-12 gap-4 border-b border-white/[0.06] px-5 py-3.5 text-xs uppercase tracking-wider text-muted-foreground/60">
+            <div className="hidden md:grid grid-cols-12 gap-4 border-b border-white/[0.06] px-5 py-3 text-[10px] uppercase tracking-widest text-muted-foreground/50">
               <div className="col-span-4">Candidate</div>
-              <div className="col-span-3">Role</div>
-              <div className="col-span-1">Score</div>
-              <div className="col-span-2">Status</div>
-              <div className="col-span-1">Applied</div>
+              <div className="col-span-2">Role</div>
+              <div className="col-span-3">Score breakdown</div>
+              <div className="col-span-2">Stage</div>
               <div className="col-span-1 text-right">Actions</div>
             </div>
 
             {/* Rows */}
             <div className="divide-y divide-white/[0.04]">
-              {isLoading && (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="grid grid-cols-12 gap-4 items-center px-5 py-4 animate-pulse"
-                  >
+              {isLoading &&
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-4 items-center px-5 py-4 animate-pulse">
                     <div className="col-span-4 flex items-center gap-3">
                       <div className="h-9 w-9 rounded-full bg-white/[0.06]" />
                       <div className="space-y-1.5">
@@ -539,106 +534,161 @@ export default function AdminCandidatesPage() {
                         <div className="h-2.5 w-20 rounded bg-white/[0.04]" />
                       </div>
                     </div>
-                    <div className="col-span-3 h-3 w-24 rounded bg-white/[0.06]" />
-                    <div className="col-span-1 h-5 w-10 rounded-full bg-white/[0.06]" />
-                    <div className="col-span-2 h-5 w-16 rounded-full bg-white/[0.06]" />
-                    <div className="col-span-1 h-3 w-10 rounded bg-white/[0.06]" />
+                    <div className="col-span-2 h-3 w-20 rounded bg-white/[0.06]" />
+                    <div className="col-span-3 space-y-1.5">
+                      <div className="h-1.5 w-full rounded bg-white/[0.06]" />
+                      <div className="h-1.5 w-3/4 rounded bg-white/[0.06]" />
+                      <div className="h-1.5 w-1/2 rounded bg-white/[0.06]" />
+                    </div>
+                    <div className="col-span-2 h-5 w-20 rounded-full bg-white/[0.06]" />
                     <div className="col-span-1 flex justify-end gap-1">
                       <div className="h-8 w-8 rounded-lg bg-white/[0.06]" />
                     </div>
                   </div>
-                ))
-              )}
+                ))}
 
-              {!isLoading && filteredCandidates.map((candidate, index) => {
-                const displayName =
-                  candidate.name || candidate.filename || "Unknown";
-                const color = avatarColor(displayName);
-                const jobTitle =
-                  jobs.find((j) => j.id === candidate.job_id)?.title ?? "—";
+              {!isLoading &&
+                filteredCandidates.map((candidate, index) => {
+                  const displayName = candidate.name || candidate.filename || "Unknown";
+                  const avatarBg = avatarColor(displayName);
+                  const jobTitle = jobs.find((j) => j.id === candidate.job_id)?.title ?? "—";
+                  const score = candidate.hr_score_override ?? candidate.total_score ?? 0;
+                  const sc = scoreColor(score);
+                  const rank = (page - 1) * 50 + index + 1;
+                  const hasToken = !!candidate.interview_token;
 
-                return (
-                  <motion.div
-                    key={candidate.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: index * 0.03 }}
-                    className="grid grid-cols-12 gap-4 items-center px-5 py-4 hover:bg-white/[0.02] transition-colors cursor-pointer"
-                    onClick={() => router.push(`/admin/candidates/${candidate.id}/interview`)}
-                  >
-                    {/* Candidate */}
-                    <div className="col-span-4 flex items-center gap-3">
-                      <div
-                        className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                        style={{ background: color }}
-                      >
-                        {candidateInitials(displayName)}
+                  const tiers = [
+                    { label: "T1", value: candidate.tier1 ?? 0, max: 30 },
+                    { label: "T2", value: candidate.tier2 ?? 0, max: 40 },
+                    { label: "T3", value: candidate.tier3 ?? 0, max: 30 },
+                  ];
+
+                  return (
+                    <motion.div
+                      key={candidate.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: Math.min(index * 0.025, 0.3) }}
+                      className="group grid grid-cols-12 gap-4 items-center px-5 py-3.5 hover:bg-white/[0.025] transition-colors cursor-pointer"
+                      onClick={() => router.push(`/admin/candidates/${candidate.id}/interview`)}
+                    >
+                      {/* ── Candidate col ── */}
+                      <div className="col-span-4 flex items-center gap-3 min-w-0">
+                        {/* Rank */}
+                        <span className="w-5 shrink-0 text-center font-mono text-[11px] text-muted-foreground/40 tabular-nums">
+                          {rank}
+                        </span>
+                        {/* Avatar */}
+                        <div
+                          className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold text-white ring-1 ring-white/10"
+                          style={{ background: avatarBg }}
+                        >
+                          {candidateInitials(displayName)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-heading group-hover:text-[#1C99BF] transition-colors">
+                            {displayName}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">
+                            {candidate.email ?? formatDate(candidate.created_at)}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
+
+                      {/* ── Role col ── */}
+                      <div className="col-span-2 min-w-0">
+                        <p className="truncate text-xs text-muted-foreground">{jobTitle}</p>
+                      </div>
+
+                      {/* ── Score breakdown col ── */}
+                      <div className="col-span-3 flex items-center gap-3">
+                        {/* Big score number */}
+                        <span
+                          className="shrink-0 w-8 font-mono text-base font-bold tabular-nums leading-none"
+                          style={{ color: sc }}
+                        >
+                          {Math.round(score)}
+                        </span>
+                        {/* Tier mini-bars + IQ */}
+                        <div className="flex-1 min-w-0 space-y-[5px]">
+                          {tiers.map((t) => {
+                            const pct = t.max ? (t.value / t.max) * 100 : 0;
+                            const tc = scoreColor(pct);
+                            return (
+                              <div key={t.label} className="flex items-center gap-1.5">
+                                <span className="w-3.5 shrink-0 text-[9px] text-muted-foreground/50">
+                                  {t.label}
+                                </span>
+                                <div className="flex-1 h-[5px] rounded-full" style={{ background: "var(--surface-subtle)" }}>
+                                  <div
+                                    className="h-full rounded-full transition-all"
+                                    style={{ width: `${pct}%`, background: tc, opacity: 0.85 }}
+                                  />
+                                </div>
+                                <span className="w-5 shrink-0 text-right font-mono text-[9px] tabular-nums" style={{ color: tc }}>
+                                  {Math.round(t.value)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {candidate.iq_score != null && (
+                            <div className="flex items-center gap-1 pt-0.5">
+                              <Brain className="h-2.5 w-2.5 text-[#8B5CF6] shrink-0" />
+                              <span className="text-[9px] font-mono text-[#8B5CF6]">
+                                IQ {Math.round(candidate.iq_score)}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── Stage + interview indicator col ── */}
+                      <div className="col-span-2 flex items-center gap-2">
+                        <StatusBadge status={candidate.hr_status ?? candidate.status} />
+                        {/* Interview dot: green = invited, gray = not yet */}
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ring-1 ${hasToken ? "ring-green-500/30" : "ring-white/10"}`}
+                          title={hasToken ? "Interview invite sent" : "No interview invite"}
+                          style={{ background: hasToken ? "#34C28A" : "rgba(255,255,255,0.12)" }}
+                        />
+                      </div>
+
+                      {/* ── Actions col ── */}
+                      <div
+                        className="col-span-1 flex items-center justify-end gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Link
                           href={`/admin/candidates/${candidate.id}/interview`}
-                          className="text-sm font-medium text-heading hover:text-[#1C99BF] transition-colors truncate block"
+                          className="p-2 rounded-lg text-muted-foreground hover:bg-[#1C99BF]/10 hover:text-[#1C99BF] transition-colors"
+                          title="Interview results"
                         >
-                          {displayName}
+                          <Eye className="h-4 w-4" />
                         </Link>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {candidate.email ?? formatDate(candidate.created_at)}
-                        </p>
+                        <button
+                          onClick={() => handleView(candidate)}
+                          className="p-2 rounded-lg text-muted-foreground hover:bg-white/[0.06] hover:text-heading transition-colors"
+                          title="Candidate details"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </button>
                       </div>
-                    </div>
-
-                    {/* Role */}
-                    <div className="col-span-3 text-sm text-muted-foreground truncate">
-                      {jobTitle}
-                    </div>
-
-                    {/* Score */}
-                    <div className="col-span-1">
-                      <ScoreChip
-                        score={candidate.hr_score_override ?? candidate.total_score}
-                        size="sm"
-                      />
-                    </div>
-
-                    {/* Status */}
-                    <div className="col-span-2">
-                      <StatusBadge
-                        status={candidate.hr_status ?? candidate.status}
-                      />
-                    </div>
-
-                    {/* Applied date */}
-                    <div className="col-span-1 text-[11px] text-muted-foreground">
-                      {formatDate(candidate.created_at)}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="col-span-1 flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                      <Link
-                        href={`/admin/candidates/${candidate.id}/interview`}
-                        className="p-2 rounded-lg text-muted-foreground hover:bg-[#1C99BF]/10 hover:text-[#1C99BF] transition-colors"
-                        title="View interview"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Link>
-                      <button
-                        onClick={() => handleView(candidate)}
-                        className="p-2 rounded-lg text-muted-foreground hover:bg-[#F25C7C]/10 hover:text-[#F25C7C] transition-colors"
-                        title="View details"
-                      >
-                        <FileText className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </motion.div>
-                );
-              })}
+                    </motion.div>
+                  );
+                })}
 
               {/* Empty state */}
               {!isLoading && filteredCandidates.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Users className="h-10 w-10 text-muted-foreground/40 mb-3" />
-                  <p className="text-sm text-muted-foreground">
-                    No candidates yet
+                <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+                  <div
+                    className="flex h-14 w-14 items-center justify-center rounded-2xl"
+                    style={{ background: "rgba(28,153,191,0.08)" }}
+                  >
+                    <Users className="h-7 w-7 text-muted-foreground/30" />
+                  </div>
+                  <p className="text-sm font-medium text-heading">No candidates found</p>
+                  <p className="max-w-xs text-xs text-muted-foreground">
+                    {query ? "Try a different search term or clear filters." : "Upload a resume to get started."}
                   </p>
                 </div>
               )}
