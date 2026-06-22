@@ -1,3 +1,16 @@
+export interface Org {
+  id: number;
+  slug: string;
+  name: string;
+  primary_color: string;
+  logo_url: string | null;
+  tagline: string | null;
+  about: string | null;
+  contact_email: string | null;
+  social_links: { website?: string; linkedin?: string; twitter?: string };
+  created_at: string;
+}
+
 export interface Job {
   id: number;
   title: string;
@@ -6,6 +19,9 @@ export interface Job {
   llm_prompt: string | null;
   status: "Active" | "Archived";
   created_at: string;
+  org_id: number | null;
+  org_slug: string | null;
+  org_name: string | null;
 }
 
 export type CandidateStatus =

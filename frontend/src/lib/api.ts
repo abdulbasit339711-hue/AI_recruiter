@@ -2,6 +2,7 @@ import axios from "axios";
 import { JobSchema, CandidateSchema, validate, validateEach } from "@/lib/schemas";
 import {
   Job,
+  Org,
   Candidate,
   UploadResponse,
   PaginatedCandidates,
@@ -436,6 +437,59 @@ export const api = {
 
   async getHealth(): Promise<Record<string, unknown>> {
     const response = await client.get("/health");
+    return response.data;
+  },
+
+  // ── Orgs ──────────────────────────────────────────────────────────────────
+  async getOrgs(): Promise<Org[]> {
+    const response = await client.get<Org[]>("/orgs");
+    return response.data;
+  },
+
+  async getOrgBySlug(slug: string): Promise<Org> {
+    const response = await client.get<Org>(`/orgs/${slug}`);
+    return response.data;
+  },
+
+  async getOrgJobs(slug: string): Promise<Job[]> {
+    const response = await client.get<Job[]>(`/orgs/${slug}/jobs`);
+    return response.data;
+  },
+
+  async createOrg(params: {
+    slug: string;
+    name: string;
+    primary_color?: string;
+    logo_url?: string;
+    tagline?: string;
+    about?: string;
+    contact_email?: string;
+    social_links?: string;
+  }): Promise<Org> {
+    const response = await client.post<Org>("/orgs", null, { params });
+    return response.data;
+  },
+
+  async updateOrg(
+    orgId: number,
+    params: Partial<{
+      name: string;
+      primary_color: string;
+      logo_url: string;
+      tagline: string;
+      about: string;
+      contact_email: string;
+      social_links: string;
+    }>
+  ): Promise<Org> {
+    const response = await client.patch<Org>(`/orgs/${orgId}`, null, { params });
+    return response.data;
+  },
+
+  async deleteOrg(orgId: number): Promise<{ message: string; org_id: number }> {
+    const response = await client.delete<{ message: string; org_id: number }>(
+      `/orgs/${orgId}`
+    );
     return response.data;
   },
 };

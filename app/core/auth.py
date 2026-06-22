@@ -38,6 +38,8 @@ _PUBLIC_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GET", re.compile(r"^/iq-test/?$")),         # fetch the pre-application IQ test
     ("POST", re.compile(r"^/iq-test/submit/?$")), # submit IQ answers (scored server-side)
     ("POST", re.compile(r"^/upload/?$")),         # submit a resume
+    ("GET",  re.compile(r"^/orgs/[^/]+/?$")),     # applicant portal: org branding by slug
+    ("GET",  re.compile(r"^/orgs/[^/]+/jobs/?$")),# applicant portal: org job listing
 )
 
 

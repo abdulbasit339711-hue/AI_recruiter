@@ -10,12 +10,14 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Job } from "@/types";
+import { useOrgs } from "@/hooks/useOrgs";
 
 const jobSchema = z.object({
   title: z.string().min(3, "Title is required"),
   department: z.string().min(2, "Department is required"),
   job_description: z.string().min(10, "Description is required"),
   llm_prompt: z.string().optional(),
+  org_id: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof jobSchema>;
@@ -23,11 +25,13 @@ type FormValues = z.infer<typeof jobSchema>;
 interface JobFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: FormValues, id?: number) => void; // if id provided, treat as edit
-  initialData?: Job; // optional for editing
+  onSubmit: (data: Omit<FormValues, "org_id"> & { org_id?: number | null }, id?: number) => void;
+  initialData?: Job;
 }
 
 export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSubmit, initialData }) => {
+  const { data: orgs } = useOrgs();
+
   const {
     register,
     handleSubmit,
@@ -41,6 +45,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
           department: initialData.department,
           job_description: initialData.job_description,
           llm_prompt: initialData.llm_prompt ?? "",
+          org_id: initialData.org_id?.toString() ?? "",
         }
       : undefined,
   });
@@ -52,14 +57,16 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
         department: initialData.department,
         job_description: initialData.job_description,
         llm_prompt: initialData.llm_prompt ?? "",
+        org_id: initialData.org_id?.toString() ?? "",
       });
     } else {
-      reset();
+      reset({ org_id: "" });
     }
   }, [initialData, reset]);
 
   const submitHandler = async (data: FormValues) => {
-    await onSubmit(data, initialData?.id);
+    const { org_id, ...rest } = data;
+    await onSubmit({ ...rest, org_id: org_id ? Number(org_id) : null }, initialData?.id);
     onClose();
   };
 
@@ -74,23 +81,34 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
         </DialogHeader>
         <form onSubmit={handleSubmit(submitHandler)} className="space-y-4">
           <div className="space-y-1.5">
-            <label htmlFor="job-title" className="text-sm font-medium">
-              Title
+            <label htmlFor="job-org" className="text-sm font-medium">
+              Organization <span className="text-muted-foreground font-normal">(optional)</span>
             </label>
+            <select
+              id="job-org"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
+              {...register("org_id")}
+            >
+              <option value="">— No organization —</option>
+              {orgs?.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name} ({o.slug})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="job-title" className="text-sm font-medium">Title</label>
             <Input id="job-title" placeholder="e.g. Senior Python Developer" {...register("title")} />
             {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="job-department" className="text-sm font-medium">
-              Department
-            </label>
+            <label htmlFor="job-department" className="text-sm font-medium">Department</label>
             <Input id="job-department" placeholder="e.g. Engineering" {...register("department")} />
             {errors.department && <p className="text-sm text-red-500">{errors.department.message}</p>}
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="job-description" className="text-sm font-medium">
-              Job Description
-            </label>
+            <label htmlFor="job-description" className="text-sm font-medium">Job Description</label>
             <Textarea
               id="job-description"
               placeholder="Describe the role, responsibilities, and required skills"

@@ -3,6 +3,23 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
+class Org(Base):
+    __tablename__ = "orgs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    primary_color = Column(String, default="#1C99BF")
+    logo_url = Column(String, nullable=True)
+    tagline = Column(String, nullable=True)
+    about = Column(Text, nullable=True)
+    contact_email = Column(String, nullable=True)
+    social_links = Column(Text, nullable=True)  # JSON: {"website":…, "linkedin":…, "twitter":…}
+    created_at = Column(String, nullable=False)
+
+    jobs = relationship("Job", back_populates="org")
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
@@ -22,6 +39,9 @@ class Job(Base):
     tier1_weight = Column(Float, default=1.0)
     tier2_weight = Column(Float, default=1.0)
     tier3_weight = Column(Float, default=1.0)
+
+    org_id = Column(Integer, ForeignKey("orgs.id", ondelete="SET NULL"), nullable=True)
+    org = relationship("Org", back_populates="jobs")
 
     candidates = relationship("Candidate", back_populates="job", cascade="all, delete-orphan")
 

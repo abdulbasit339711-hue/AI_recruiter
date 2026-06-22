@@ -25,7 +25,7 @@ from .core.ratelimit import upload_rate_limit, jobs_rate_limit, iq_rate_limit
 from .core.jd_embedding_cache import invalidate_job, cache_stats
 from .core.model_registry import models_loaded
 from .database import engine, Base, get_db, config, run_migrations, DATABASE_URL
-from .models import Candidate, Job
+from .models import Candidate, Job, Org
 from .intake.upload import validate_and_extract, IngestionError
 from .schemas import (
     StatusUpdateRequest,
@@ -188,6 +188,121 @@ def get_metrics(job_id: Optional[int] = Query(None), db: Session = Depends(get_d
 
 
 # ==========================================
+# ORGS CRUD
+# ==========================================
+
+@app.post("/orgs")
+def create_org(
+    slug: str = Query(..., min_length=1, max_length=80),
+    name: str = Query(..., min_length=1, max_length=200),
+    primary_color: Optional[str] = Query("#1C99BF", max_length=20),
+    logo_url: Optional[str] = Query(None, max_length=500),
+    tagline: Optional[str] = Query(None, max_length=300),
+    about: Optional[str] = Query(None, max_length=5000),
+    contact_email: Optional[str] = Query(None, max_length=200),
+    social_links: Optional[str] = Query(None, max_length=1000),
+    db: Session = Depends(get_db),
+):
+    import json as _json, re as _re
+    if not _re.match(r'^[a-z0-9-]+$', slug):
+        raise HTTPException(status_code=422, detail="Slug must be lowercase letters, digits, and hyphens only.")
+    if db.query(Org).filter(Org.slug == slug).first():
+        raise HTTPException(status_code=409, detail="An org with this slug already exists.")
+    try:
+        _json.loads(social_links) if social_links else {}
+    except Exception:
+        raise HTTPException(status_code=422, detail="social_links must be valid JSON.")
+    org = Org(
+        slug=slug,
+        name=name,
+        primary_color=primary_color or "#1C99BF",
+        logo_url=logo_url,
+        tagline=tagline,
+        about=about,
+        contact_email=contact_email,
+        social_links=social_links,
+        created_at=_utcnow().isoformat(),
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return _serialize_org(org)
+
+
+@app.get("/orgs")
+def list_orgs(db: Session = Depends(get_db)):
+    return [_serialize_org(o) for o in db.query(Org).order_by(Org.name).all()]
+
+
+@app.get("/orgs/{slug}")
+def get_org(slug: str, db: Session = Depends(get_db)):
+    org = db.query(Org).filter(Org.slug == slug).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found.")
+    return _serialize_org(org)
+
+
+@app.get("/orgs/{slug}/jobs")
+def get_org_jobs(slug: str, db: Session = Depends(get_db)):
+    org = db.query(Org).filter(Org.slug == slug).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found.")
+    jobs = db.query(Job).filter(Job.org_id == org.id, Job.status == "Active").all()
+    return [_serialize_job(j, False) for j in jobs]
+
+
+@app.patch("/orgs/{org_id}")
+def update_org(
+    org_id: int,
+    name: Optional[str] = Query(None, max_length=200),
+    primary_color: Optional[str] = Query(None, max_length=20),
+    logo_url: Optional[str] = Query(None, max_length=500),
+    tagline: Optional[str] = Query(None, max_length=300),
+    about: Optional[str] = Query(None, max_length=5000),
+    contact_email: Optional[str] = Query(None, max_length=200),
+    social_links: Optional[str] = Query(None, max_length=1000),
+    db: Session = Depends(get_db),
+):
+    import json as _json
+    org = db.query(Org).filter(Org.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found.")
+    if name is not None:
+        org.name = name
+    if primary_color is not None:
+        org.primary_color = primary_color
+    if logo_url is not None:
+        org.logo_url = logo_url or None
+    if tagline is not None:
+        org.tagline = tagline or None
+    if about is not None:
+        org.about = about or None
+    if contact_email is not None:
+        org.contact_email = contact_email or None
+    if social_links is not None:
+        try:
+            _json.loads(social_links) if social_links else {}
+        except Exception:
+            raise HTTPException(status_code=422, detail="social_links must be valid JSON.")
+        org.social_links = social_links or None
+    db.commit()
+    db.refresh(org)
+    return _serialize_org(org)
+
+
+@app.delete("/orgs/{org_id}")
+def delete_org(org_id: int, db: Session = Depends(get_db)):
+    org = db.query(Org).filter(Org.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found.")
+    # Detach jobs before deletion so they're not orphaned
+    db.query(Job).filter(Job.org_id == org_id).update({"org_id": None})
+    db.delete(org)
+    db.commit()
+    return {"message": "Organization deleted.", "org_id": org_id}
+
+
+# ==========================================
 # JOBS CRUD
 # ==========================================
 
@@ -197,6 +312,7 @@ def create_job(
     department: str = Query(..., min_length=1, max_length=200),
     job_description: str = Query(..., min_length=1, max_length=20000),
     llm_prompt: Optional[str] = Query(None, max_length=10000),
+    org_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
     try:
@@ -205,6 +321,7 @@ def create_job(
             department=department,
             job_description=job_description,
             llm_prompt=llm_prompt,
+            org_id=org_id,
             status="Active",
             created_at=_utcnow().isoformat(),
         )
@@ -218,6 +335,22 @@ def create_job(
         raise HTTPException(status_code=500, detail="Database write failed.")
 
 
+def _serialize_org(org: Org) -> dict:
+    import json as _json
+    return {
+        "id": org.id,
+        "slug": org.slug,
+        "name": org.name,
+        "primary_color": org.primary_color or "#1C99BF",
+        "logo_url": org.logo_url,
+        "tagline": org.tagline,
+        "about": org.about,
+        "contact_email": org.contact_email,
+        "social_links": _json.loads(org.social_links) if org.social_links else {},
+        "created_at": org.created_at,
+    }
+
+
 def _serialize_job(job: Job, include_private: bool) -> dict:
     """Job payload. `llm_prompt` (the scoring prompt) is admin-only — never expose
     it to unauthenticated applicants, who could otherwise game Tier-3 scoring."""
@@ -229,6 +362,9 @@ def _serialize_job(job: Job, include_private: bool) -> dict:
         "role_type": job.role_type,
         "status": job.status,
         "created_at": job.created_at,
+        "org_id": job.org_id,
+        "org_slug": job.org.slug if job.org else None,
+        "org_name": job.org.name if job.org else None,
     }
     if include_private:
         data["llm_prompt"] = job.llm_prompt

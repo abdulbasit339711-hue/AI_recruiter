@@ -27,6 +27,9 @@ function isPublic(method: string, path: string): boolean {
   if (method === "GET" && path === "iq-test") return true; // fetch pre-application IQ test
   if (method === "POST" && path === "iq-test/submit") return true; // submit IQ answers
   if (method === "POST" && path === "upload") return true; // submit a resume
+  // Org whitelabel: public branding + job listing per org slug
+  if (method === "GET" && /^orgs\/[^/]+$/.test(path)) return true;
+  if (method === "GET" && /^orgs\/[^/]+\/jobs$/.test(path)) return true;
   return false;
 }
 
@@ -47,6 +50,9 @@ function isAdminOnly(method: string, path: string): boolean {
   if (method === "POST" && /^candidates\/\d+\/reprocess$/.test(path)) return true;
   if (method === "PATCH" && /^candidates\/\d+\/score-override$/.test(path)) return true;
   if (method === "POST" && /^candidates\/\d+\/annotate-video$/.test(path)) return true;
+  // Org management: only admin can create or delete orgs
+  if (method === "POST" && path === "orgs") return true;
+  if (method === "DELETE" && /^orgs\/\d+$/.test(path)) return true;
   return false;
 }
 

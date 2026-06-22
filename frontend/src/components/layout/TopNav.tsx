@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
-import { Bell, Briefcase, LayoutDashboard, Users, Sun, Moon } from "lucide-react";
+import { Bell, Briefcase, Building2, LayoutDashboard, Users, Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/jobs", label: "Jobs", icon: Briefcase },
   { to: "/admin/candidates", label: "Candidates", icon: Users },
+  { to: "/admin/orgs", label: "Organizations", icon: Building2 },
 ];
 
 export function TopNav() {

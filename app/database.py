@@ -102,6 +102,8 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN iq_attempted_at VARCHAR",
         "ALTER TABLE candidates ADD COLUMN iq_details TEXT",
         "ALTER TABLE candidates ADD COLUMN iq_result_jti VARCHAR",
+        # Orgs: multi-company whitelabel support
+        "ALTER TABLE jobs ADD COLUMN org_id INTEGER",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
