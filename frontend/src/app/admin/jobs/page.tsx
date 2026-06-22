@@ -12,6 +12,21 @@ import { Plus, Briefcase } from "lucide-react";
 import type { Job } from "@/types";
 import { useIsAdmin } from "@/hooks/useRole";
 
+type DeadlineFilter = "all" | "closing-soon" | "overdue";
+
+function matchesDeadlineFilter(job: Job, filter: DeadlineFilter): boolean {
+  if (filter === "all") return true;
+  const deadline = job.resume_deadline;
+  if (!deadline) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(deadline);
+  const diffDays = Math.ceil((d.getTime() - today.getTime()) / 86_400_000);
+  if (filter === "overdue") return diffDays < 0;
+  if (filter === "closing-soon") return diffDays >= 0 && diffDays <= 7;
+  return false;
+}
+
 export default function AdminJobsPage() {
   const { data: jobs = [], isLoading, isError, error } = useJobs();
   const createJobMutation = useCreateJob();
@@ -21,6 +36,7 @@ export default function AdminJobsPage() {
 
   const [isModalOpen, setModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
+  const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>("all");
 
   const openCreate = () => {
     setEditingJob(null);
@@ -32,12 +48,16 @@ export default function AdminJobsPage() {
     setModalOpen(true);
   };
 
+  const filteredJobs = jobs.filter((j) => matchesDeadlineFilter(j, deadlineFilter));
+
   const handleSubmit = async (
     data: {
       title: string;
       department: string;
       job_description: string;
       llm_prompt?: string;
+      resume_deadline?: string;
+      interview_deadline?: string;
     },
     id?: number
   ) => {
@@ -65,17 +85,36 @@ export default function AdminJobsPage() {
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-heading">Job Openings</h1>
-        {isAdmin && (
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 rounded-xl bg-[#1C99BF] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#3DAFCC] hover:shadow-[0_0_24px_rgba(28,153,191,0.4)]"
-          >
-            <Plus className="h-4 w-4" />
-            Post New Job
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Deadline filter */}
+          <div className="flex rounded-xl border border-white/[0.08] bg-white/[0.03] p-0.5 text-xs">
+            {(["all", "closing-soon", "overdue"] as DeadlineFilter[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setDeadlineFilter(f)}
+                className="rounded-lg px-3 py-1.5 font-medium transition-colors"
+                style={
+                  deadlineFilter === f
+                    ? { background: "rgba(28,153,191,0.2)", color: "#1C99BF" }
+                    : { color: "var(--muted-foreground)" }
+                }
+              >
+                {f === "all" ? "All" : f === "closing-soon" ? "Closing soon" : "Overdue"}
+              </button>
+            ))}
+          </div>
+          {isAdmin && (
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 rounded-xl bg-[#1C99BF] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#3DAFCC] hover:shadow-[0_0_24px_rgba(28,153,191,0.4)]"
+            >
+              <Plus className="h-4 w-4" />
+              Post New Job
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Loading skeletons ──────────────────────────────────────────────── */}
@@ -148,17 +187,24 @@ export default function AdminJobsPage() {
 
       {/* ── Jobs grid ──────────────────────────────────────────────────────── */}
       {!isLoading && jobs.length > 0 && (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {jobs.map((job) => (
-            <JobCard
-              key={job.id}
-              job={job}
-              candidateCount={job.candidate_count}
-              onEdit={isAdmin ? openEdit : undefined}
-              onArchive={isAdmin ? handleArchive : undefined}
-            />
-          ))}
-        </div>
+        <>
+          {filteredJobs.length === 0 && (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No jobs match the selected filter.
+            </p>
+          )}
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredJobs.map((job) => (
+              <JobCard
+                key={job.id}
+                job={job}
+                candidateCount={job.candidate_count}
+                onEdit={isAdmin ? openEdit : undefined}
+                onArchive={isAdmin ? handleArchive : undefined}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       <JobFormModal

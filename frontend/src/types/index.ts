@@ -23,6 +23,8 @@ export interface Job {
   org_slug: string | null;
   org_name: string | null;
   candidate_count?: number;
+  resume_deadline: string | null;
+  interview_deadline: string | null;
 }
 
 export type CandidateStatus =
@@ -75,6 +77,13 @@ export interface Candidate {
   iq_time_seconds?: number | null; // server-measured time taken
   iq_attempted_at?: string | null; // ISO timestamp when submitted
   iq_details?: string | null;      // JSON: IqQuestionDetail[]
+
+  // Availability scheduling
+  availability_invited_at?: string | null;
+  availability_response?: string | null;
+  availability_submitted_at?: string | null;
+  interview_confirmed_slot?: string | null;
+  interview_confirmed_at?: string | null;
 }
 
 export interface TimelineEntry {

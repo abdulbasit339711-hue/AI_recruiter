@@ -119,3 +119,31 @@ def send_interview_invite(*, to: str, candidate_name: str | None, job_title: str
         f"Good luck!\n"
     )
     get_email_sender().send(to, subject, body)
+
+
+def send_availability_invite(*, to: str, candidate_name: str | None, job_title: str, link: str) -> None:
+    subject = f"Schedule Your Interview — {job_title}"
+    body = (
+        f"Hi {candidate_name or 'there'},\n\n"
+        f"Congratulations! Your application for the {job_title} role has cleared our initial "
+        f"screening and we'd like to schedule a formal interview with you.\n\n"
+        f"Please select your preferred interview time using the link below:\n\n"
+        f"{link}\n\n"
+        f"The link is valid for 72 hours. You can choose from our available slots or "
+        f"specify a custom time that works best for you.\n\n"
+        f"Best regards,\nThe Recruitment Team\n"
+    )
+    get_email_sender().send(to, subject, body)
+
+
+def send_slot_confirmation(*, to: str, candidate_name: str | None, job_title: str, slot: str) -> None:
+    subject = f"Interview Confirmed — {job_title}"
+    body = (
+        f"Hi {candidate_name or 'there'},\n\n"
+        f"Your interview for the {job_title} role has been confirmed for:\n\n"
+        f"  {slot}\n\n"
+        f"Our team will reach out shortly before the interview with further details "
+        f"and the meeting link.\n\n"
+        f"Best regards,\nThe Recruitment Team\n"
+    )
+    get_email_sender().send(to, subject, body)

@@ -3,7 +3,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { Briefcase, Users, Archive, Edit } from "lucide-react";
+import { Briefcase, Users, Archive, Edit, Calendar } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import type { Job } from "@/types";
 
@@ -12,6 +12,19 @@ interface JobCardProps {
   candidateCount?: number;
   onEdit?: (job: Job) => void;
   onArchive?: (job: Job) => void;
+}
+
+function deadlineBadge(date: string | null | undefined): { text: string; bg: string; color: string } | null {
+  if (!date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(date);
+  const diffDays = Math.ceil((d.getTime() - today.getTime()) / 86_400_000);
+  if (diffDays < 0) return { text: "Closed", bg: "rgba(100,110,125,0.15)", color: "#6B7280" };
+  if (diffDays === 0) return { text: "Closes today", bg: "rgba(239,68,68,0.15)", color: "#EF4444" };
+  if (diffDays <= 3) return { text: `Closes in ${diffDays}d`, bg: "rgba(234,179,8,0.15)", color: "#EAB308" };
+  if (diffDays <= 7) return { text: `Closes in ${diffDays}d`, bg: "rgba(59,130,246,0.15)", color: "#60A5FA" };
+  return null;
 }
 
 function StatusChip({ status }: { status: Job["status"] }) {
@@ -45,6 +58,8 @@ export const JobCard: React.FC<JobCardProps> = ({
   onArchive,
 }) => {
   const snippet = (job.job_description ?? "").slice(0, 160);
+  const resumeBadge = deadlineBadge(job.resume_deadline);
+  const interviewBadge = deadlineBadge(job.interview_deadline);
 
   return (
     <GlassCard
@@ -79,11 +94,33 @@ export const JobCard: React.FC<JobCardProps> = ({
       )}
 
       {/* Stats row */}
-      <div className="mt-3 flex items-center gap-3">
-        <Users className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs text-muted-foreground">
-          {candidateCount != null ? candidateCount : "—"} candidates
-        </span>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">
+            {candidateCount != null ? candidateCount : "—"} candidates
+          </span>
+        </div>
+        {resumeBadge && (
+          <span
+            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+            style={{ background: resumeBadge.bg, color: resumeBadge.color }}
+            title={`Resume deadline: ${job.resume_deadline}`}
+          >
+            <Calendar className="h-3 w-3" />
+            {resumeBadge.text}
+          </span>
+        )}
+        {interviewBadge && (
+          <span
+            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+            style={{ background: interviewBadge.bg, color: interviewBadge.color }}
+            title={`Interview deadline: ${job.interview_deadline}`}
+          >
+            <Calendar className="h-3 w-3" />
+            Interview {interviewBadge.text.toLowerCase()}
+          </span>
+        )}
       </div>
 
       {/* Bottom actions */}

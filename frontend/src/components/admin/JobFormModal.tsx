@@ -18,6 +18,8 @@ const jobSchema = z.object({
   job_description: z.string().min(10, "Description is required"),
   llm_prompt: z.string().optional(),
   org_id: z.string().optional(),
+  resume_deadline: z.string().optional(),
+  interview_deadline: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof jobSchema>;
@@ -25,7 +27,10 @@ type FormValues = z.infer<typeof jobSchema>;
 interface JobFormModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: Omit<FormValues, "org_id"> & { org_id?: number | null }, id?: number) => void;
+  onSubmit: (
+    data: Omit<FormValues, "org_id"> & { org_id?: number | null },
+    id?: number
+  ) => void;
   initialData?: Job;
 }
 
@@ -46,6 +51,8 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
           job_description: initialData.job_description,
           llm_prompt: initialData.llm_prompt ?? "",
           org_id: initialData.org_id?.toString() ?? "",
+          resume_deadline: initialData.resume_deadline ?? "",
+          interview_deadline: initialData.interview_deadline ?? "",
         }
       : undefined,
   });
@@ -58,9 +65,11 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
         job_description: initialData.job_description,
         llm_prompt: initialData.llm_prompt ?? "",
         org_id: initialData.org_id?.toString() ?? "",
+        resume_deadline: initialData.resume_deadline ?? "",
+        interview_deadline: initialData.interview_deadline ?? "",
       });
     } else {
-      reset({ org_id: "" });
+      reset({ org_id: "", resume_deadline: "", interview_deadline: "" });
     }
   }, [initialData, reset]);
 
@@ -129,6 +138,28 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
               rows={2}
               {...register("llm_prompt")}
             />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor="job-resume-deadline" className="text-sm font-medium">
+                Resume Deadline <span className="text-muted-foreground font-normal">(optional)</span>
+              </label>
+              <Input
+                id="job-resume-deadline"
+                type="date"
+                {...register("resume_deadline")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="job-interview-deadline" className="text-sm font-medium">
+                Interview Deadline <span className="text-muted-foreground font-normal">(optional)</span>
+              </label>
+              <Input
+                id="job-interview-deadline"
+                type="date"
+                {...register("interview_deadline")}
+              />
+            </div>
           </div>
           <DialogFooter className="flex justify-end space-x-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>

@@ -30,6 +30,8 @@ function isPublic(method: string, path: string): boolean {
   // Org whitelabel: public branding + job listing per org slug
   if (method === "GET" && /^orgs\/[^/]+$/.test(path)) return true;
   if (method === "GET" && /^orgs\/[^/]+\/jobs$/.test(path)) return true;
+  // Candidate availability form (token-gated, no admin session needed)
+  if (/^availability\/[^/]+$/.test(path)) return true;
   return false;
 }
 

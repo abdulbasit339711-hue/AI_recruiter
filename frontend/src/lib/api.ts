@@ -239,6 +239,8 @@ export const api = {
       llm_prompt?: string | null;
       role_type?: string | null;
       status?: "Active" | "Archived";
+      resume_deadline?: string | null;
+      interview_deadline?: string | null;
     }
   ): Promise<Job> {
     const response = await client.put<Job>(`/jobs/${jobId}`, null, { params });
@@ -490,6 +492,31 @@ export const api = {
     const response = await client.delete<{ message: string; org_id: number }>(
       `/orgs/${orgId}`
     );
+    return response.data;
+  },
+
+  // Availability scheduling
+  async getAvailabilityForm(token: string): Promise<{
+    candidate_name: string | null;
+    job_title: string;
+    org_name: string | null;
+    org_color: string;
+    slots: string[];
+    already_submitted: boolean;
+    submitted_slot: string | null;
+    confirmed_slot: string | null;
+  }> {
+    const response = await client.get(`/availability/${token}`);
+    return response.data;
+  },
+
+  async submitAvailability(token: string, data: { selected_slot?: string; custom_time?: string }): Promise<{ ok: boolean; slot: string }> {
+    const response = await client.post(`/availability/${token}`, data);
+    return response.data;
+  },
+
+  async confirmInterviewSlot(candidateId: number, slot: string): Promise<Candidate> {
+    const response = await client.patch<Candidate>(`/candidates/${candidateId}/confirm-slot`, { slot });
     return response.data;
   },
 };

@@ -1031,6 +1031,46 @@ export default function AdminCandidatesPage() {
                   </p>
                 </div>
 
+                {/* ── Availability scheduling ─────────────────────── */}
+                {selected && (selected.availability_invited_at || selected.availability_response || selected.interview_confirmed_slot) && (
+                  <div className="space-y-2 border-t border-white/[0.06] pt-3">
+                    <p className="text-xs uppercase text-muted-foreground">Interview Scheduling</p>
+                    {selected.interview_confirmed_slot ? (
+                      <div className="rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-400">
+                        <p className="font-semibold">Confirmed</p>
+                        <p className="mt-0.5 text-green-300/80">{selected.interview_confirmed_slot}</p>
+                      </div>
+                    ) : selected.availability_response ? (
+                      <div className="space-y-2">
+                        <div className="rounded-lg bg-yellow-500/10 px-3 py-2 text-xs text-yellow-400">
+                          <p className="font-semibold">Candidate available</p>
+                          <p className="mt-0.5 text-yellow-300/80">{selected.availability_response}</p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const updated = await api.confirmInterviewSlot(selected.id, selected.availability_response!);
+                              setSelected(updated);
+                              refetch();
+                              toast.success("Interview slot confirmed!");
+                            } catch {
+                              toast.error("Failed to confirm slot.");
+                            }
+                          }}
+                          className="w-full rounded-lg bg-green-600/20 py-1.5 text-xs font-semibold text-green-400 transition-colors hover:bg-green-600/30"
+                        >
+                          Confirm this slot
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Availability form sent.{" "}
+                        <span className="text-muted-foreground/60">Waiting for candidate response.</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2 border-t border-white/[0.06] pt-3">
                   {selected && (
                     <Button

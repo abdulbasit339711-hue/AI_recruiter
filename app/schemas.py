@@ -128,4 +128,20 @@ class CandidateResponse(BaseModel):
     iq_attempted_at: Optional[str] = None
     iq_details: Optional[str] = None  # JSON: per-question breakdown
 
+    # Availability scheduling fields
+    availability_invited_at: Optional[str] = None
+    availability_response: Optional[str] = None
+    availability_submitted_at: Optional[str] = None
+    interview_confirmed_slot: Optional[str] = None
+    interview_confirmed_at: Optional[str] = None
+
     model_config = {"from_attributes": True}
+
+
+class AvailabilitySubmit(BaseModel):
+    selected_slot: Optional[str] = None
+    custom_time: Optional[str] = None
+
+
+class SlotConfirm(BaseModel):
+    slot: Optional[str] = None

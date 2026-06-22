@@ -43,6 +43,10 @@ class Job(Base):
     org_id = Column(Integer, ForeignKey("orgs.id", ondelete="SET NULL"), nullable=True)
     org = relationship("Org", back_populates="jobs")
 
+    # Soft deadline dates (ISO date string, e.g. "2025-03-31"); informational only.
+    resume_deadline = Column(String, nullable=True)
+    interview_deadline = Column(String, nullable=True)
+
     candidates = relationship("Candidate", back_populates="job", cascade="all, delete-orphan")
 
 
@@ -88,6 +92,13 @@ class Candidate(Base):
     # Timestamp (ISO string) when the interview invite email was sent; used to
     # avoid re-sending on reprocess.
     interview_invited_at = Column(String, nullable=True, default=None)
+
+    # Availability scheduling: sent when candidate clears the score threshold.
+    availability_invited_at = Column(String, nullable=True, default=None)
+    availability_response = Column(String, nullable=True, default=None)     # chosen slot text
+    availability_submitted_at = Column(String, nullable=True, default=None) # when candidate submitted
+    interview_confirmed_slot = Column(String, nullable=True, default=None)  # HR-confirmed slot
+    interview_confirmed_at = Column(String, nullable=True, default=None)    # when HR confirmed
 
     # Tier-3 (resume scoring) LLM token usage + estimated cost, surfaced to HR.
     llm_prompt_tokens = Column(Integer, nullable=True, default=None)

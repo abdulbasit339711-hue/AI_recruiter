@@ -37,6 +37,8 @@ from .schemas import (
     IqTestResponse,
     IqSubmitRequest,
     IqSubmitResponse,
+    AvailabilitySubmit,
+    SlotConfirm,
 )
 from .iq import (
     sample_questions,
@@ -323,6 +325,8 @@ def create_job(
     job_description: str = Query(..., min_length=1, max_length=20000),
     llm_prompt: Optional[str] = Query(None, max_length=10000),
     org_id: Optional[int] = Query(None),
+    resume_deadline: Optional[str] = Query(None, max_length=20),
+    interview_deadline: Optional[str] = Query(None, max_length=20),
     db: Session = Depends(get_db),
 ):
     try:
@@ -332,6 +336,8 @@ def create_job(
             job_description=job_description,
             llm_prompt=llm_prompt,
             org_id=org_id,
+            resume_deadline=resume_deadline,
+            interview_deadline=interview_deadline,
             status="Active",
             created_at=_utcnow().isoformat(),
         )
@@ -375,6 +381,8 @@ def _serialize_job(job: Job, include_private: bool) -> dict:
         "org_id": job.org_id,
         "org_slug": job.org.slug if job.org else None,
         "org_name": job.org.name if job.org else None,
+        "resume_deadline": job.resume_deadline,
+        "interview_deadline": job.interview_deadline,
     }
     if include_private:
         data["llm_prompt"] = job.llm_prompt
@@ -464,6 +472,8 @@ def update_job(
     job_description: Optional[str] = Query(None, min_length=1, max_length=20000),
     llm_prompt: Optional[str] = Query(None, max_length=10000),
     status: Optional[str] = Query(None, pattern="^(Active|Archived)$"),
+    resume_deadline: Optional[str] = Query(None, max_length=20),
+    interview_deadline: Optional[str] = Query(None, max_length=20),
     db: Session = Depends(get_db),
 ):
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -482,6 +492,10 @@ def update_job(
             job.llm_prompt = llm_prompt
         if status is not None:
             job.status = status
+        if resume_deadline is not None:
+            job.resume_deadline = resume_deadline or None
+        if interview_deadline is not None:
+            job.interview_deadline = interview_deadline or None
         db.commit()
         db.refresh(job)
         return job
@@ -1759,6 +1773,88 @@ def candidate_report(candidate_id: int, format: str = Query("md", pattern="^(md|
     return PlainTextResponse(
         md, headers={"Content-Disposition": f'attachment; filename="{stem}.md"'}
     )
+
+
+# ==========================================
+# AVAILABILITY SCHEDULING
+# ==========================================
+
+@app.get("/availability/{token}")
+def get_availability_form(token: str, db: Session = Depends(get_db)):
+    """Public — candidate fetches their availability form via a signed token."""
+    from .availability_tokens import verify_availability_token, generate_availability_slots
+    try:
+        candidate_id = verify_availability_token(token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    job = cand.job
+    return {
+        "candidate_name": cand.name,
+        "job_title": job.title if job else "Position",
+        "org_name": job.org.name if job and job.org else None,
+        "org_color": job.org.primary_color if job and job.org else "#1C99BF",
+        "slots": generate_availability_slots(),
+        "already_submitted": cand.availability_submitted_at is not None,
+        "submitted_slot": cand.availability_response,
+        "confirmed_slot": cand.interview_confirmed_slot,
+    }
+
+
+@app.post("/availability/{token}")
+def submit_availability(token: str, body: AvailabilitySubmit, db: Session = Depends(get_db)):
+    """Public — candidate submits their preferred interview time."""
+    from .availability_tokens import verify_availability_token
+    try:
+        candidate_id = verify_availability_token(token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    if cand.availability_submitted_at:
+        raise HTTPException(status_code=409, detail="Availability already submitted.")
+    chosen = (body.selected_slot or body.custom_time or "").strip()
+    if not chosen:
+        raise HTTPException(status_code=422, detail="No time slot provided.")
+    cand.availability_response = chosen
+    cand.availability_submitted_at = _utcnow().isoformat()
+    db.commit()
+    return {"ok": True, "slot": chosen}
+
+
+@app.patch("/candidates/{candidate_id}/confirm-slot", response_model=CandidateResponse)
+def confirm_interview_slot(
+    candidate_id: int,
+    body: SlotConfirm,
+    db: Session = Depends(get_db),
+):
+    """HR action: confirm a specific interview slot for a candidate (sends confirmation email)."""
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    slot = (body.slot or cand.availability_response or "").strip()
+    if not slot:
+        raise HTTPException(status_code=422, detail="No slot to confirm.")
+    cand.interview_confirmed_slot = slot
+    cand.interview_confirmed_at = _utcnow().isoformat()
+    db.commit()
+    if cand.email:
+        job = cand.job
+        try:
+            from .services.email import send_slot_confirmation
+            send_slot_confirmation(
+                to=cand.email,
+                candidate_name=cand.name,
+                job_title=job.title if job else "the position",
+                slot=slot,
+            )
+        except Exception as e_mail:
+            logger.error("Failed to send slot confirmation to %s: %s", cand.email, e_mail)
+    db.refresh(cand)
+    return cand
 
 
 @app.post("/candidates/{candidate_id}/interview-invite")

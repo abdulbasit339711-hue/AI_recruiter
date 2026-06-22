@@ -104,6 +104,15 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN iq_result_jti VARCHAR",
         # Orgs: multi-company whitelabel support
         "ALTER TABLE jobs ADD COLUMN org_id INTEGER",
+        # Deadline fields on jobs (soft, informational only)
+        "ALTER TABLE jobs ADD COLUMN resume_deadline VARCHAR",
+        "ALTER TABLE jobs ADD COLUMN interview_deadline VARCHAR",
+        # Availability scheduling on candidates
+        "ALTER TABLE candidates ADD COLUMN availability_invited_at VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN availability_response VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN availability_submitted_at VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN interview_confirmed_slot VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN interview_confirmed_at VARCHAR",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

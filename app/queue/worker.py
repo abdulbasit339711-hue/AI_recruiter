@@ -1,4 +1,5 @@
 """Background evaluation queue — in-process worker (MVP); swap for Celery/Redis later."""
+import datetime
 import logging
 import os
 import queue
@@ -11,6 +12,8 @@ from ..database import SessionLocal
 from ..events import publish_candidate_event
 from ..models import Candidate
 from ..scoring.engine import evaluate_candidate_pipeline
+
+_AVAILABILITY_THRESHOLD = float(os.getenv("AVAILABILITY_THRESHOLD", "60"))
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +78,37 @@ def _worker_loop() -> None:
             if cand.status == S.QUEUED:
                 publish_candidate_event(candidate_id, S.QUEUED, job_id=cand.job_id, event="queued")
             evaluate_candidate_pipeline(candidate_id, db)
+
+            # Auto-send availability form if the candidate clears the score threshold.
+            try:
+                cand_after = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+                if (
+                    cand_after
+                    and cand_after.total_score >= _AVAILABILITY_THRESHOLD
+                    and cand_after.email
+                    and not cand_after.availability_invited_at
+                ):
+                    from ..availability_tokens import mint_availability_token
+                    from ..services.email import send_availability_invite
+                    job_obj = cand_after.job
+                    _, url = mint_availability_token(cand_after.id)
+                    try:
+                        send_availability_invite(
+                            to=cand_after.email,
+                            candidate_name=cand_after.name,
+                            job_title=job_obj.title if job_obj else "the position",
+                            link=url,
+                        )
+                    except Exception as e_mail:
+                        logger.error("Failed to send availability invite to %s: %s", cand_after.email, e_mail)
+                    cand_after.availability_invited_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    db.commit()
+                    logger.info(
+                        "Availability invite sent to candidate %d (score=%.1f)",
+                        candidate_id, cand_after.total_score,
+                    )
+            except Exception as e_avail:
+                logger.error("Availability auto-invite failed for candidate %d: %s", candidate_id, e_avail)
 
             # No interview invite is minted here. Invites are sent only when HR
             # explicitly triggers POST /candidates/{id}/interview-invite after review —
