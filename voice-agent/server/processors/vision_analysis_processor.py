@@ -73,6 +73,14 @@ _PROMPT = (
     ' "gestures": str,           // visible hand/arm gestures or "none" if hands not moving/visible\n'
     ' "facial_expression": str,  // neutral/smiling/frowning/concentrating/etc.\n'
     ' "eye_contact": str,        // direct/intermittent/avoidant\n'
+    ' "is_avatar": bool,         // true if the person appears to be an AI-generated avatar, deepfake, or '
+    'virtual presenter rather than a real human — look for: unnaturally smooth or texture-less skin, '
+    'perfectly symmetric features, hair that looks rendered/painted, lighting inconsistent with the '
+    'background, uncanny-valley expression, lip movements that do not match natural speech, or the '
+    'face sitting inside a digital frame / virtual set instead of a real room\n'
+    ' "background_real": bool,   // true if the background looks like a genuine physical space '
+    '(room, office, outdoors) rather than a virtual/green-screen background, gradient, or studio asset\n'
+    ' "liveness_notes": str,     // one factual sentence on any synthetic/avatar indicators, or "none" if the person appears genuine\n'
     ' "delivery_notes": str,     // brief factual note on how they are presenting (posture, gestures, expression)\n'
     ' "summary": str}            // one neutral factual sentence about the frame'
 )
@@ -214,11 +222,25 @@ class VisionAnalysisProcessor(FrameProcessor):
                 obs["t"] = self._elapsed()
                 obs["backend"] = self._backend
                 self.observations.append(obs)
-                logger.info(f"[VisionAnalysis] semantic t={obs['t']}s present={obs.get('present')} people={obs.get('people_count')} engagement={obs.get('engagement')}")
-                # Trigger violation callback when VLM sees a second person
-                if obs.get("second_person") and self.on_violation:
+                is_avatar = obs.get("is_avatar")
+                logger.info(
+                    f"[VisionAnalysis] semantic t={obs['t']}s present={obs.get('present')} "
+                    f"people={obs.get('people_count')} engagement={obs.get('engagement')} "
+                    f"avatar={is_avatar} bg_real={obs.get('background_real')}"
+                )
+                # Fire violation for second person OR detected avatar/deepfake
+                violation_flags = []
+                if obs.get("second_person"):
+                    violation_flags.append("multiple_people")
+                if is_avatar:
+                    violation_flags.append("avatar_detected")
+                    logger.warning(
+                        f"[VisionAnalysis] avatar/deepfake detected at t={obs['t']}s — "
+                        f"liveness_notes: {obs.get('liveness_notes', 'n/a')}"
+                    )
+                if violation_flags and self.on_violation:
                     try:
-                        await self.on_violation(["multiple_people"])
+                        await self.on_violation(violation_flags)
                     except Exception as cb_err:
                         logger.warning(f"[VisionAnalysis] on_violation (semantic) error: {cb_err}")
                 await self._broadcaster.broadcast("vision_analysis", {
@@ -289,6 +311,8 @@ class VisionAnalysisProcessor(FrameProcessor):
             agg["avg_engagement"] = round(sum(eng) / len(eng), 2) if eng else None
             agg["present_ratio"] = round(sum(1 for o in self.observations if o.get("present")) / len(self.observations), 2)
             agg["second_person_detected"] = any(o.get("second_person") for o in self.observations)
+            agg["avatar_detected"] = any(o.get("is_avatar") for o in self.observations)
+            agg["background_always_real"] = all(o.get("background_real", True) for o in self.observations)
             pc = [o["people_count"] for o in self.observations if isinstance(o.get("people_count"), int)]
             agg["max_people_count_semantic"] = max(pc) if pc else 0
         if self.detections:

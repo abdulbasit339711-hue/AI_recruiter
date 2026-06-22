@@ -146,6 +146,23 @@ BASE_INTERVIEWER_PERSONA = (
     "Base each question on what the candidate just said, and assess them against the role's goals."
 )
 
+# Injected when interview_type == "technical" so the LLM follows the scripted Phase 1 sequence.
+# Phase 2 technical questions are deliberately NOT listed here — adding them causes the LLM
+# to jump to technical questions before Phase 1 is complete.
+_PHASE1_SEQUENCE = (
+    "\n\nPHASE 1 — BEHAVIORAL SCREENING (MANDATORY, in this exact order):\n"
+    "You MUST ask all four of the following questions before moving to any technical topic. "
+    "Ask them one at a time. After the candidate answers, briefly acknowledge, then ask the next.\n"
+    "1. Please walk me through your professional background and what led you to apply for this role.\n"
+    "2. Tell me about a time you worked on a team where there were different opinions or approaches. "
+    "How did you handle it?\n"
+    "3. Describe a significant challenge you faced at work and how you worked through it.\n"
+    "4. What motivates you most in your work, and what specifically attracts you to this role?\n\n"
+    "Once you have received a substantive answer to all four questions above, say something like "
+    "'Great — let's now move into the technical part of the interview.' "
+    "Then begin asking the role-specific technical and competency questions."
+)
+
 BILINGUAL_ADDENDUM = (
     "\n\nBILINGUAL UNDERSTANDING MODE:\n"
     "- YOU always speak in English only — no Urdu words, no Roman Urdu, no mixed phrases.\n"
@@ -176,6 +193,8 @@ def compose_system_prompt(
         job_role=job_role or "this role",
         company_name=company_name or "the company",
     )
+    if (interview_type or "technical") == "technical":
+        prompt += _PHASE1_SEQUENCE
     if bilingual:
         prompt += BILINGUAL_ADDENDUM
     if job_llm_prompt:
