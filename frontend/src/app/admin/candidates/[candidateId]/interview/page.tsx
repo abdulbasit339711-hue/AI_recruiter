@@ -65,9 +65,9 @@ function parseAssessment(
 
 // Merge consecutive same-speaker fragments (Deepgram fires multiple events per utterance)
 function mergeTranscriptTurns(
-  turns: { speaker?: string; text?: string; evaluation?: { score?: number } }[]
+  turns: { speaker: string; text: string; sequence_number?: number; evaluation?: { score?: number } | null }[]
 ) {
-  const merged: { speaker: string; text: string; evaluation?: { score?: number } }[] = [];
+  const merged: { speaker: string; text: string; evaluation?: { score?: number } | null }[] = [];
   for (const t of turns) {
     const spk = (t.speaker ?? "").toLowerCase();
     const prev = merged[merged.length - 1];
