@@ -119,8 +119,11 @@ services:
       # Server-only: the /api/admin proxy forwards here with the admin token injected.
       BACKEND_URL: http://backend:8000
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
-      # Optional: set this to allow HR users to log in with read/limited-write access.
-      HR_API_TOKEN: ${HR_API_TOKEN:-}
+      # Login credentials (email/password). HR_EMAIL/HR_PASSWORD are optional.
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      HR_EMAIL: ${HR_EMAIL:-}
+      HR_PASSWORD: ${HR_PASSWORD:-}
       # Server-only: where the same-origin /voice proxy forwards (the voice container).
       VOICE_PROXY_TARGET: http://voice:7860
     ports:
