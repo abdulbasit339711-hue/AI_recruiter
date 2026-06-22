@@ -535,6 +535,21 @@ export const api = {
     return response.data;
   },
 
+  async getActionNeededCandidates(jobId?: number | null): Promise<Array<{
+    id: number;
+    name: string | null;
+    email: string | null;
+    job_id: number;
+    total_score: number;
+    status: string;
+    hr_status: string | null;
+  }>> {
+    const params: Record<string, number> = {};
+    if (jobId != null) params.job_id = jobId;
+    const response = await client.get("/candidates/action-needed", { params });
+    return response.data;
+  },
+
   // Admin settings
   async getSettings(): Promise<Array<{ key: string; value: string | null; label: string; description: string; type: string; min?: number; max?: number }>> {
     const response = await client.get("/settings");

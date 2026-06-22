@@ -1,15 +1,16 @@
 // src/app/admin/dashboard/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Briefcase, Users, Gauge, Clock, ChevronRight, Trophy, Filter, Loader2, CalendarDays, X } from "lucide-react";
+import { Briefcase, Users, Gauge, Clock, ChevronRight, Trophy, Filter, Loader2, CalendarDays, X, Video, CheckCircle2, AlertCircle, Send } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Stat } from "@/components/ui/Stat";
 import { RadialGauge, CountUp } from "@/components/ui/charts";
 import { useMetrics } from "@/hooks/useMetrics";
 import { useJobs } from "@/hooks/useJobs";
+import { api } from "@/lib/api";
 
 type DatePreset = "today" | "7d" | "30d" | "90d" | "custom" | "all";
 
@@ -53,11 +54,23 @@ function Skeleton({ className = "" }: { className?: string }) {
   );
 }
 
+type ActionCandidate = {
+  id: number;
+  name: string | null;
+  email: string | null;
+  job_id: number;
+  total_score: number;
+  status: string;
+  hr_status: string | null;
+};
+
 export default function DashboardPage() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [preset, setPreset] = useState<DatePreset>("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [actionCandidates, setActionCandidates] = useState<ActionCandidate[]>([]);
+  const [inviting, setInviting] = useState<Record<number, "loading" | "done" | "error">>({});
 
   const { from: presetFrom, to: presetTo } = presetToDates(preset);
   const fromDate = preset === "custom" ? (customFrom || null) : presetFrom;
@@ -69,6 +82,29 @@ export default function DashboardPage() {
     toDate,
   });
   const { data: jobs } = useJobs("Active");
+
+  const loadActionCandidates = useCallback(async () => {
+    try {
+      const rows = await api.getActionNeededCandidates(selectedJobId);
+      setActionCandidates(rows);
+    } catch {
+      // non-fatal; panel stays empty
+    }
+  }, [selectedJobId]);
+
+  useEffect(() => { loadActionCandidates(); }, [loadActionCandidates]);
+
+  async function inviteOne(candidateId: number) {
+    setInviting((p) => ({ ...p, [candidateId]: "loading" }));
+    try {
+      await api.triggerInterviewInvite(candidateId);
+      setInviting((p) => ({ ...p, [candidateId]: "done" }));
+      // Refresh panel after invite sent
+      setTimeout(loadActionCandidates, 1200);
+    } catch {
+      setInviting((p) => ({ ...p, [candidateId]: "error" }));
+    }
+  }
 
   if (isLoading || !m) {
     return (
@@ -102,6 +138,8 @@ export default function DashboardPage() {
   const shortlistedCount = m.shortlistedCount ?? 0;
   const failedCount = m.failedCount;
   const topScore = m.topScore ?? 0;
+  const pendingReviewCount = m.pendingReviewCount ?? 0;
+  const interviewReadyCount = m.interviewReadyCount ?? 0;
   const scoreDistribution = m.scoreDistribution ?? [
     { label: "0-20", count: 0 },
     { label: "21-40", count: 0 },
@@ -300,7 +338,7 @@ export default function DashboardPage() {
         />
         <Stat
           label="Pending Review"
-          value={pendingCount}
+          value={pendingReviewCount}
           accentColor="#F5B544"
           icon={<Clock className="h-4 w-4" />}
           delay={0.24}
@@ -703,6 +741,128 @@ export default function DashboardPage() {
           </GlassCard>
         </motion.div>
       </div>
+
+      {/* Run Mock Interviews Panel */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.32, ease: EASE }}
+        className="mt-4"
+      >
+        <GlassCard className="p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span
+                className="flex h-8 w-8 items-center justify-center rounded-lg"
+                style={{ background: "rgba(28,153,191,0.15)", border: "1px solid rgba(28,153,191,0.2)" }}
+              >
+                <Video className="h-4 w-4" style={{ color: "#1C99BF" }} />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-heading">Run Interviews</h2>
+                <p className="text-xs text-muted-foreground">
+                  Shortlisted candidates awaiting interview invitation
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {interviewReadyCount > 0 && (
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                  style={{ background: "rgba(245,181,68,0.15)", color: "#F5B544", border: "1px solid rgba(245,181,68,0.25)" }}
+                >
+                  {interviewReadyCount} ready
+                </span>
+              )}
+              <Link
+                href="/admin/candidates"
+                className="flex items-center gap-1 text-xs text-primary transition-colors hover:text-primary/80"
+              >
+                View all <ChevronRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+
+          {actionCandidates.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl py-8 text-sm text-muted-foreground"
+              style={{ background: "var(--surface-card)", border: "1px dashed var(--surface-border)" }}>
+              <CheckCircle2 className="h-4 w-4 text-[#34C28A]" />
+              All shortlisted candidates have been invited
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {actionCandidates.map((c) => {
+                const state = inviting[c.id];
+                const scoreColor =
+                  c.total_score >= 70 ? "#34C28A" : c.total_score >= 40 ? "#F5B544" : "#F25C7C";
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3"
+                    style={{ background: "var(--surface-card)", border: "1px solid var(--surface-border)" }}
+                  >
+                    {/* Score badge */}
+                    <span
+                      className="shrink-0 rounded-lg px-2 py-1 font-mono text-xs font-bold tabular-nums"
+                      style={{ background: `${scoreColor}18`, color: scoreColor, border: `1px solid ${scoreColor}30` }}
+                    >
+                      {Math.round(c.total_score)}
+                    </span>
+
+                    {/* Name + email */}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-heading">
+                        {c.name || "Unknown Candidate"}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{c.email ?? "—"}</p>
+                    </div>
+
+                    {/* HR status */}
+                    {c.hr_status && c.hr_status !== "Applied" && (
+                      <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{ background: "rgba(28,153,191,0.12)", color: "#1C99BF" }}>
+                        {c.hr_status}
+                      </span>
+                    )}
+
+                    {/* View link */}
+                    <Link
+                      href={`/admin/candidates?candidateId=${c.id}`}
+                      className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                      View
+                    </Link>
+
+                    {/* Invite button */}
+                    <button
+                      onClick={() => inviteOne(c.id)}
+                      disabled={state === "loading" || state === "done"}
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                      style={
+                        state === "done"
+                          ? { background: "rgba(52,194,138,0.15)", color: "#34C28A", border: "1px solid rgba(52,194,138,0.3)" }
+                          : state === "error"
+                          ? { background: "rgba(242,92,124,0.12)", color: "#F25C7C", border: "1px solid rgba(242,92,124,0.25)" }
+                          : { background: "rgba(28,153,191,0.15)", color: "#1C99BF", border: "1px solid rgba(28,153,191,0.25)" }
+                      }
+                    >
+                      {state === "loading" ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : state === "done" ? (
+                        <><CheckCircle2 className="h-3 w-3" /> Invited</>
+                      ) : state === "error" ? (
+                        <><AlertCircle className="h-3 w-3" /> Retry</>
+                      ) : (
+                        <><Send className="h-3 w-3" /> Invite</>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </GlassCard>
+      </motion.div>
     </div>
   );
 }

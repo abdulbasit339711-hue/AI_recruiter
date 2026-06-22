@@ -14,6 +14,8 @@ type Metrics = {
   scoreDistribution: { label: string; count: number }[];
   shortlistedCount: number;
   topScore: number;
+  pendingReviewCount: number;
+  interviewReadyCount: number;
 };
 
 type MetricsFilters = {

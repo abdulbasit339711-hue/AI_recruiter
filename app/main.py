@@ -187,6 +187,21 @@ def get_metrics(
     ).count()
     top_score = float(_q(Candidate).with_entities(func.max(Candidate.total_score)).scalar() or 0.0)
 
+    # Shortlisted by AI but HR hasn't taken any action yet (no status change beyond "Applied" or null).
+    pending_review = (
+        _q(Candidate)
+        .filter(Candidate.status.in_([S.SHORTLISTED, S.REVIEWED, "Shortlisted", "Reviewed"]))
+        .filter(Candidate.hr_status.in_(["Applied", None]))
+        .count()
+    )
+    # Shortlisted but no interview token — ready to be invited.
+    interview_ready = (
+        _q(Candidate)
+        .filter(Candidate.status.in_([S.SHORTLISTED, "Shortlisted"]))
+        .filter(Candidate.interview_token.is_(None))
+        .count()
+    )
+
     return {
         "totalJobs": total_jobs,
         "totalCandidates": total_candidates,
@@ -197,7 +212,38 @@ def get_metrics(
         "scoreDistribution": score_distribution,
         "shortlistedCount": shortlisted_count,
         "topScore": top_score,
+        "pendingReviewCount": pending_review,
+        "interviewReadyCount": interview_ready,
     }
+
+
+@app.get("/candidates/action-needed")
+def get_action_needed_candidates(
+    job_id: Optional[int] = Query(None),
+    limit: int = Query(8, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Shortlisted candidates without an interview token — ready to be invited."""
+    q = (
+        db.query(Candidate)
+        .filter(Candidate.status.in_([S.SHORTLISTED, "Shortlisted"]))
+        .filter(Candidate.interview_token.is_(None))
+    )
+    if job_id is not None:
+        q = q.filter(Candidate.job_id == job_id)
+    rows = q.order_by(Candidate.total_score.desc()).limit(limit).all()
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "email": c.email,
+            "job_id": c.job_id,
+            "total_score": c.total_score,
+            "status": c.status,
+            "hr_status": c.hr_status,
+        }
+        for c in rows
+    ]
 
 
 # ==========================================
