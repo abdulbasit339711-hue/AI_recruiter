@@ -191,9 +191,51 @@ class BotManager:
         # Optional video analysis: samples the same camera frames and asks a vision
         # model for advisory presence/integrity/delivery observations (SSE + sidecar).
         self.vision_processor = None
+        self._proctor_violation_count = 0
         if ANALYZE_VIDEO:
             from processors.vision_analysis_processor import VisionAnalysisProcessor
             self.vision_processor = VisionAnalysisProcessor(self.broadcaster)
+
+            async def _handle_proctor_violation(flags: list) -> None:
+                if "multiple_people" not in flags:
+                    return
+                self._proctor_violation_count += 1
+                count = self._proctor_violation_count
+                if count == 1:
+                    msg = (
+                        "PROCTORING ALERT: The system has detected more than one person visible "
+                        "on camera. You MUST pause and address this immediately. Say to the "
+                        "candidate: 'I can see there is someone else on camera with you. For the "
+                        "fairness and integrity of this interview, I need you to be in the room "
+                        "alone. Could you please ask them to step out? Let me know when you're "
+                        "ready and we'll continue.'"
+                    )
+                elif count == 2:
+                    msg = (
+                        "PROCTORING ALERT: Multiple people on camera detected AGAIN (2nd time). "
+                        "Issue a firm final warning: 'I'm seeing another person on camera again — "
+                        "this is your final warning. You must be completely alone for this "
+                        "interview. If I detect this one more time, I will need to end the session.'"
+                    )
+                else:
+                    msg = (
+                        "PROCTORING VIOLATION: Multiple people on camera detected 3 times. "
+                        "End the interview immediately. Say: 'I've now detected multiple people "
+                        "on camera three times. I'm required to end this session to ensure "
+                        "fairness for all candidates. The recruitment team will follow up with "
+                        "you directly about next steps.' Then close the interview gracefully."
+                    )
+                    if hasattr(self, "session") and self.session:
+                        self.session.end()
+
+                self.context.add_message({
+                    "role": "user",
+                    "content": f"[SYSTEM INSTRUCTION — not from candidate]: {msg}",
+                })
+                if hasattr(self, "worker") and self.worker:
+                    await self.worker.queue_frames([LLMRunFrame()])
+
+            self.vision_processor.on_violation = _handle_proctor_violation
 
         # Silence nudge: if the candidate goes quiet, the bot checks in and then wraps
         # up instead of sitting in dead air. Sits upstream of the TTS so it can speak.

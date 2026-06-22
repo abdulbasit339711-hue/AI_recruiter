@@ -13,6 +13,9 @@ PHONE_REGEX = re.compile(
     r'\d{2,4}[-.\s]?\d{3,4}'       # Local digits
     r'(?:[-.\s]?\d{3,4})?'         # Optional remaining digits
 )
+GITHUB_REGEX = re.compile(r'(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_.-]+)', re.IGNORECASE)
+LINKEDIN_REGEX = re.compile(r'(?:https?://)?(?:www\.)?linkedin\.com/in/([A-Za-z0-9_.-]+)', re.IGNORECASE)
+PORTFOLIO_REGEX = re.compile(r'(?:https?://)?(?:www\.)?(?:portfolio|site|personal)?\.?([A-Za-z0-9_.-]+\.[a-z]{2,})/[^\s]*', re.IGNORECASE)
 
 def extract_name(text: str) -> str | None:
     """Return the first PERSON entity found by spaCy, or None if not detected."""
@@ -24,9 +27,11 @@ def extract_name(text: str) -> str | None:
     return None
 
 # ── Section keyword sets ──────────────────────────────────────────────────────
-EDUCATION_KEYWORDS  = {'education', 'academic', 'degree', 'university', 'college', 'school', 'qualifications', 'graduation'}
-EXPERIENCE_KEYWORDS = {'experience', 'employment', 'history', 'work', 'career', 'job', 'professional', 'internship', 'responsibilities'}
-SKILLS_KEYWORDS     = {'skills', 'technologies', 'tools', 'languages', 'expertise', 'competencies', 'proficiencies', 'technical'}
+EDUCATION_KEYWORDS      = {'education', 'academic', 'degree', 'university', 'college', 'school', 'qualifications', 'graduation'}
+EXPERIENCE_KEYWORDS     = {'experience', 'employment', 'history', 'work', 'career', 'job', 'professional', 'internship', 'responsibilities'}
+SKILLS_KEYWORDS         = {'skills', 'technologies', 'tools', 'languages', 'expertise', 'competencies', 'proficiencies', 'technical'}
+PROJECTS_KEYWORDS       = {'projects', 'project', 'portfolio', 'personal projects', 'side projects', 'open source', 'contributions', 'github projects'}
+CERTIFICATIONS_KEYWORDS = {'certifications', 'certification', 'certificates', 'certificate', 'licenses', 'accreditations', 'credentials', 'aws certified', 'google certified', 'microsoft certified'}
 
 # ── Rejection thresholds ──────────────────────────────────────────────────────
 DEFAULT_MIN_LENGTH       = 100   # chars
@@ -175,6 +180,87 @@ def detect_sections(text: str) -> dict:
     return found
 
 
+# ── Profile link / project extraction ────────────────────────────────────────
+
+def extract_github_url(text: str) -> str | None:
+    m = GITHUB_REGEX.search(text)
+    return m.group(0) if m else None
+
+
+def extract_linkedin_url(text: str) -> str | None:
+    m = LINKEDIN_REGEX.search(text)
+    return m.group(0) if m else None
+
+
+def extract_projects(text: str) -> list[str]:
+    """Extract project names from a projects/portfolio section."""
+    lines = text.split("\n")
+    in_section = False
+    projects: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        lower = stripped.lower()
+
+        # Detect section header
+        if any(kw in lower for kw in PROJECTS_KEYWORDS) and len(stripped.split()) <= 4:
+            in_section = True
+            continue
+
+        # Stop when we hit another major section
+        if in_section and stripped and any(
+            kw in lower for kw in (
+                EDUCATION_KEYWORDS | EXPERIENCE_KEYWORDS | SKILLS_KEYWORDS | CERTIFICATIONS_KEYWORDS
+            )
+        ) and len(stripped.split()) <= 4:
+            break
+
+        if in_section and stripped:
+            # First line of each bullet/block is typically the project name
+            # Strip common bullets/numbers
+            name = re.sub(r'^[\-•*·▪◦\d]+[\.\)]\s*', '', stripped)
+            # Skip lines that look like descriptions (long sentences)
+            if name and len(name.split()) <= 10 and not name.endswith(('.', ',', ';')):
+                projects.append(name)
+
+    return projects[:10]  # cap at 10
+
+
+def extract_certifications(text: str) -> list[str]:
+    """Extract certification names from a certifications section."""
+    lines = text.split("\n")
+    in_section = False
+    certs: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        lower = stripped.lower()
+
+        if any(kw in lower for kw in CERTIFICATIONS_KEYWORDS) and len(stripped.split()) <= 5:
+            in_section = True
+            continue
+
+        if in_section and stripped and any(
+            kw in lower for kw in (EDUCATION_KEYWORDS | EXPERIENCE_KEYWORDS | PROJECTS_KEYWORDS)
+        ) and len(stripped.split()) <= 4:
+            break
+
+        if in_section and stripped:
+            cert = re.sub(r'^[\-•*·▪◦\d]+[\.\)]\s*', '', stripped)
+            if cert and 2 <= len(cert.split()) <= 12:
+                certs.append(cert)
+
+    # Also catch inline cert patterns (e.g. "AWS Certified Solutions Architect")
+    inline = re.findall(
+        r'(?:AWS|Google|Microsoft|Azure|GCP|Cisco|Oracle|CompTIA|PMI|PMP|CISSP|CPA|CFA|'
+        r'Kubernetes|Docker|Terraform)\s+[Cc]ertif\w*(?:\s+\w+){0,4}',
+        text,
+    )
+    certs.extend(c.strip() for c in inline if c.strip() not in certs)
+
+    return certs[:10]
+
+
 # ── Public exception ──────────────────────────────────────────────────────────
 
 class IrrelevantDocumentError(ValueError):
@@ -257,4 +343,9 @@ def score_tier1(text: str) -> dict:
         "skills_score":     skills_score,
         "is_valid":         True,
         "warnings":         warnings,
+        # Enriched profile fields
+        "github_url":       extract_github_url(text),
+        "linkedin_url":     extract_linkedin_url(text),
+        "projects":         extract_projects(text),
+        "certifications":   extract_certifications(text),
     }

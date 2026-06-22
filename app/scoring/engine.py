@@ -55,6 +55,15 @@ def _apply_tier1_contact(candidate: Candidate, t1: dict) -> None:
         name = t1.get("name")
     if name and not candidate.name:
         candidate.name = name
+    # Enriched profile fields from Tier 1 extraction
+    if t1.get("github_url") and not candidate.github_url:
+        candidate.github_url = t1["github_url"]
+    if t1.get("linkedin_url") and not candidate.linkedin_url:
+        candidate.linkedin_url = t1["linkedin_url"]
+    if t1.get("projects"):
+        candidate.projects = json.dumps(t1["projects"])
+    if t1.get("certifications"):
+        candidate.certifications = json.dumps(t1["certifications"])
 
 
 def _apply_tier3_fields(candidate: Candidate, t3: dict) -> None:

@@ -116,6 +116,11 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN interview_confirmed_slot VARCHAR",
         "ALTER TABLE candidates ADD COLUMN interview_confirmed_at VARCHAR",
         "ALTER TABLE candidates ADD COLUMN interview_token VARCHAR",
+        # Resume profile enrichment — extracted during Tier 1 scoring
+        "ALTER TABLE candidates ADD COLUMN github_url VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN linkedin_url VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN projects TEXT",
+        "ALTER TABLE candidates ADD COLUMN certifications TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

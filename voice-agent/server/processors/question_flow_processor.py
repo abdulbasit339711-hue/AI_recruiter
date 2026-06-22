@@ -20,11 +20,13 @@ from interview_session import (
 from events.broadcaster import broadcaster
 
 # ── Answer quality thresholds ──────────────────────────────────────────────────
+# Voice answers are naturally shorter than written ones — 40 words spoken aloud
+# is a solid paragraph. Keep thresholds realistic for live speech.
 
 DEPTH_MIN_WORDS = {
     AnswerDepth.SHORT:  3,
-    AnswerDepth.MEDIUM: 15,
-    AnswerDepth.LONG:   40,
+    AnswerDepth.MEDIUM: 10,
+    AnswerDepth.LONG:   20,
 }
 
 FILLER_WORDS = {
@@ -32,9 +34,23 @@ FILLER_WORDS = {
     "kind of", "basically", "literally", "actually"
 }
 
+# One-word or near-empty "no/don't know" dismissals
+_EVASIVE_PATTERNS = {
+    "no", "nope", "nah", "dont know", "don't know", "idk",
+    "i don't know", "i dont know", "not sure", "no idea",
+    "kiyun btaon", "kyon btaon", "kyun btaon", "nahi pata",
+    "nahi", "nhi", "pata nahi", "nai pata",
+}
+
 
 def _word_count(text: str) -> int:
     return len(text.split())
+
+
+def _is_evasive(text: str) -> bool:
+    """True when the candidate dismisses the question with a short negative."""
+    cleaned = text.lower().strip().rstrip("?!.,")
+    return cleaned in _EVASIVE_PATTERNS or len(text.split()) <= 2
 
 
 def _filler_ratio(text: str) -> float:
@@ -59,6 +75,11 @@ def _answer_is_sufficient(text: str, question) -> bool:
     """
     Returns True if the answer passes basic quality gates.
     """
+    # Evasive one-liners always fail regardless of depth
+    if _is_evasive(text):
+        logger.debug(f"[flow] evasive/dismissive answer detected: {text!r}")
+        return False
+
     wc = _word_count(text)
     min_words = DEPTH_MIN_WORDS[question.expected_depth]
 
@@ -67,7 +88,7 @@ def _answer_is_sufficient(text: str, question) -> bool:
         return False
 
     fr = _filler_ratio(text)
-    if fr > 0.35:
+    if fr > 0.40:
         logger.debug(f"[flow] filler ratio too high: {fr:.0%}")
         return False
 
@@ -179,11 +200,25 @@ class QuestionFlowProcessor(FrameProcessor):
                     f"for {current_q.id}: {follow_up.trigger_reason}"
                 )
                 session.increment_follow_up(current_q.id)
-                await self._inject_instruction(
-                    f"The candidate's answer was insufficient. "
-                    f"Reason: {follow_up.trigger_reason}. "
-                    f"Ask this follow-up naturally: {follow_up.text}"
-                )
+
+                # Tailor the instruction based on WHY the answer was insufficient
+                if _is_evasive(text):
+                    inject_msg = (
+                        f"The candidate gave a dismissive or very brief response ('{text}'). "
+                        f"Do NOT simply accept this and move on. Instead, gently re-engage: "
+                        f"acknowledge that the question might feel broad, then rephrase it or "
+                        f"ask what experience they DO have in this area. "
+                        f"If they answered 'no' to a specific technology, ask which alternative "
+                        f"tools or approaches they use for the same purpose. "
+                        f"Suggested follow-up: {follow_up.text}"
+                    )
+                else:
+                    inject_msg = (
+                        f"The candidate's answer was insufficient. "
+                        f"Reason: {follow_up.trigger_reason}. "
+                        f"Ask this follow-up naturally: {follow_up.text}"
+                    )
+                await self._inject_instruction(inject_msg)
             else:
                 # Follow-up budget exhausted — mark weak and move on
                 logger.info(

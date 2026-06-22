@@ -100,6 +100,7 @@ class VisionAnalysisProcessor(FrameProcessor):
 
         self.observations: list[dict] = []   # semantic VLM stream
         self.detections: list[dict] = []      # proctoring stream
+        self.on_violation = None              # async callable(flags: list[str]) — set by BotManager
 
     def set_session(self, session):
         self._session = session
@@ -169,8 +170,14 @@ class VisionAnalysisProcessor(FrameProcessor):
                 d = r.json()
                 d["t"] = self._elapsed()
                 self.detections.append(d)
-                if d.get("integrity_flags"):
-                    logger.info(f"[VisionAnalysis] proctoring t={d['t']}s flags={d['integrity_flags']} objects={d.get('objects')}")
+                flags = d.get("integrity_flags") or []
+                if flags:
+                    logger.info(f"[VisionAnalysis] proctoring t={d['t']}s flags={flags} objects={d.get('objects')}")
+                    if self.on_violation:
+                        try:
+                            await self.on_violation(flags)
+                        except Exception as cb_err:
+                            logger.warning(f"[VisionAnalysis] on_violation callback error: {cb_err}")
                 await self._broadcaster.broadcast("vision_proctoring", {
                     "session_id": self._session.session_id if self._session else None,
                     **d,

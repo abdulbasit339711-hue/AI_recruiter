@@ -130,4 +130,10 @@ class Candidate(Base):
     # same signed score can't be replayed onto multiple candidate uploads.
     iq_result_jti = Column(String, nullable=True, default=None)
 
+    # Enriched resume profile — extracted during Tier 1 scoring
+    github_url = Column(String, nullable=True, default=None)
+    linkedin_url = Column(String, nullable=True, default=None)
+    projects = Column(Text, nullable=True, default=None)        # JSON list of project names
+    certifications = Column(Text, nullable=True, default=None)  # JSON list of certifications
+
     job = relationship("Job", back_populates="candidates")

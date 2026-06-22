@@ -136,6 +136,12 @@ class CandidateResponse(BaseModel):
     interview_confirmed_at: Optional[str] = None
     interview_token: Optional[str] = None
 
+    # Enriched resume profile (extracted during Tier 1 scoring)
+    github_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    projects: Optional[str] = None       # JSON list of project names
+    certifications: Optional[str] = None  # JSON list of certifications
+
     model_config = {"from_attributes": True}
 
 

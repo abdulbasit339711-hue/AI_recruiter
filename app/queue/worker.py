@@ -79,7 +79,8 @@ def _worker_loop() -> None:
                 publish_candidate_event(candidate_id, S.QUEUED, job_id=cand.job_id, event="queued")
             evaluate_candidate_pipeline(candidate_id, db)
 
-            # Auto-send availability form if the candidate clears the score threshold.
+            # Auto-send interview invite when the candidate clears the score threshold.
+            # No HR action required — invite goes out automatically.
             try:
                 from ..database import get_setting
                 threshold = float(
@@ -91,33 +92,23 @@ def _worker_loop() -> None:
                     cand_after
                     and cand_after.total_score >= threshold
                     and cand_after.email
-                    and not cand_after.availability_invited_at
+                    and not cand_after.interview_invited_at
                 ):
-                    from ..availability_tokens import mint_availability_token
-                    from ..services.email import send_availability_invite
+                    from ..services.interview_invite import invite_candidate
                     job_obj = cand_after.job
-                    _, url = mint_availability_token(cand_after.id)
-                    try:
-                        send_availability_invite(
-                            to=cand_after.email,
-                            candidate_name=cand_after.name,
-                            job_title=job_obj.title if job_obj else "the position",
-                            link=url,
+                    if job_obj:
+                        url = invite_candidate(db, cand_after, job_obj)
+                        if url:
+                            logger.info(
+                                "Interview invite auto-sent to candidate %d (score=%.1f, email=%s)",
+                                candidate_id, cand_after.total_score, cand_after.email,
+                            )
+                    else:
+                        logger.warning(
+                            "Candidate %d has no linked job; skipping auto-invite", candidate_id
                         )
-                    except Exception as e_mail:
-                        logger.error("Failed to send availability invite to %s: %s", cand_after.email, e_mail)
-                    cand_after.availability_invited_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                    db.commit()
-                    logger.info(
-                        "Availability invite sent to candidate %d (score=%.1f)",
-                        candidate_id, cand_after.total_score,
-                    )
-            except Exception as e_avail:
-                logger.error("Availability auto-invite failed for candidate %d: %s", candidate_id, e_avail)
-
-            # No interview invite is minted here. Invites are sent only when HR
-            # explicitly triggers POST /candidates/{id}/interview-invite after review —
-            # never automatically as a side effect of an applicant's upload.
+            except Exception as e_invite:
+                logger.error("Auto-interview-invite failed for candidate %d: %s", candidate_id, e_invite)
 
             elapsed_ms = (time.perf_counter() - started) * 1000
             logger.info(

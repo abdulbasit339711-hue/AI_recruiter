@@ -85,6 +85,12 @@ export interface Candidate {
   interview_confirmed_slot?: string | null;
   interview_confirmed_at?: string | null;
   interview_token?: string | null;
+
+  // Enriched resume profile (extracted during scoring)
+  github_url?: string | null;
+  linkedin_url?: string | null;
+  projects?: string | null;       // JSON list of project names
+  certifications?: string | null; // JSON list of certifications
 }
 
 export interface TimelineEntry {
