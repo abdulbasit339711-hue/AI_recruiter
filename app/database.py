@@ -107,6 +107,8 @@ def run_migrations() -> None:
         # Deadline fields on jobs (soft, informational only)
         "ALTER TABLE jobs ADD COLUMN resume_deadline VARCHAR",
         "ALTER TABLE jobs ADD COLUMN interview_deadline VARCHAR",
+        # Settings table (key/value store for admin-configurable values)
+        "CREATE TABLE IF NOT EXISTS settings (key VARCHAR PRIMARY KEY, value TEXT NOT NULL, description TEXT)",
         # Availability scheduling on candidates
         "ALTER TABLE candidates ADD COLUMN availability_invited_at VARCHAR",
         "ALTER TABLE candidates ADD COLUMN availability_response VARCHAR",
@@ -129,3 +131,30 @@ def run_migrations() -> None:
                     logger.debug("Migration already applied: %s", stmt)
                 else:
                     logger.warning("Migration failed (%s): %s", stmt, e)
+
+    # Seed default settings (INSERT OR IGNORE so existing values are never overwritten).
+    defaults = [
+        ("availability_threshold", "60",
+         "Minimum total score (0–100) required to auto-send the availability scheduling form to a candidate."),
+    ]
+    with engine.connect() as conn:
+        for key, value, description in defaults:
+            try:
+                conn.execute(
+                    text(
+                        "INSERT INTO settings (key, value, description) VALUES (:k, :v, :d) "
+                        "ON CONFLICT (key) DO NOTHING"
+                    ),
+                    {"k": key, "v": value, "d": description},
+                )
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                logger.warning("Settings seed failed for %s: %s", key, e)
+
+
+def get_setting(db, key: str, default: str | None = None) -> str | None:
+    """Read a setting from the DB; fall back to *default* if not set."""
+    from sqlalchemy import text as _text
+    row = db.execute(_text("SELECT value FROM settings WHERE key = :k"), {"k": key}).first()
+    return row[0] if row else default

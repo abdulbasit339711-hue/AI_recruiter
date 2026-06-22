@@ -3,6 +3,14 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
+class Setting(Base):
+    __tablename__ = "settings"
+
+    key = Column(String, primary_key=True, nullable=False)
+    value = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+
+
 class Org(Base):
     __tablename__ = "orgs"
 

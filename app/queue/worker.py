@@ -13,7 +13,7 @@ from ..events import publish_candidate_event
 from ..models import Candidate
 from ..scoring.engine import evaluate_candidate_pipeline
 
-_AVAILABILITY_THRESHOLD = float(os.getenv("AVAILABILITY_THRESHOLD", "60"))
+_AVAILABILITY_THRESHOLD_DEFAULT = float(os.getenv("AVAILABILITY_THRESHOLD", "60"))
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +81,15 @@ def _worker_loop() -> None:
 
             # Auto-send availability form if the candidate clears the score threshold.
             try:
+                from ..database import get_setting
+                threshold = float(
+                    get_setting(db, "availability_threshold", str(_AVAILABILITY_THRESHOLD_DEFAULT))
+                    or _AVAILABILITY_THRESHOLD_DEFAULT
+                )
                 cand_after = db.query(Candidate).filter(Candidate.id == candidate_id).first()
                 if (
                     cand_after
-                    and cand_after.total_score >= _AVAILABILITY_THRESHOLD
+                    and cand_after.total_score >= threshold
                     and cand_after.email
                     and not cand_after.availability_invited_at
                 ):

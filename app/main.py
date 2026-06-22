@@ -24,8 +24,8 @@ from .core.auth import admin_token_guard, token_is_valid
 from .core.ratelimit import upload_rate_limit, jobs_rate_limit, iq_rate_limit
 from .core.jd_embedding_cache import invalidate_job, cache_stats
 from .core.model_registry import models_loaded
-from .database import engine, Base, get_db, config, run_migrations, DATABASE_URL
-from .models import Candidate, Job, Org
+from .database import engine, Base, get_db, config, run_migrations, DATABASE_URL, get_setting
+from .models import Candidate, Job, Org, Setting
 from .intake.upload import validate_and_extract, IngestionError
 from .schemas import (
     StatusUpdateRequest,
@@ -312,6 +312,53 @@ def delete_org(org_id: int, db: Session = Depends(get_db)):
     db.delete(org)
     db.commit()
     return {"message": "Organization deleted.", "org_id": org_id}
+
+
+# ==========================================
+# ADMIN SETTINGS
+# ==========================================
+
+_SETTING_DEFS: dict[str, dict] = {
+    "availability_threshold": {
+        "label": "Availability Invite Threshold",
+        "description": "Minimum total score (0–100) a candidate must reach before the system auto-sends them the interview availability form.",
+        "type": "number",
+        "min": 0,
+        "max": 100,
+    },
+}
+
+
+@app.get("/settings")
+def list_settings(db: Session = Depends(get_db)):
+    rows = db.query(Setting).all()
+    by_key = {r.key: r.value for r in rows}
+    return [
+        {
+            "key": key,
+            "value": by_key.get(key),
+            "description": meta["description"],
+            "label": meta["label"],
+            "type": meta.get("type", "string"),
+            "min": meta.get("min"),
+            "max": meta.get("max"),
+        }
+        for key, meta in _SETTING_DEFS.items()
+    ]
+
+
+@app.patch("/settings/{key}")
+def update_setting(key: str, value: str = Query(...), db: Session = Depends(get_db)):
+    if key not in _SETTING_DEFS:
+        raise HTTPException(status_code=404, detail=f"Unknown setting: {key}")
+    row = db.query(Setting).filter(Setting.key == key).first()
+    if row:
+        row.value = value
+    else:
+        row = Setting(key=key, value=value, description=_SETTING_DEFS[key]["description"])
+        db.add(row)
+    db.commit()
+    return {"key": key, "value": value}
 
 
 # ==========================================

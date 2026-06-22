@@ -519,6 +519,17 @@ export const api = {
     const response = await client.patch<Candidate>(`/candidates/${candidateId}/confirm-slot`, { slot });
     return response.data;
   },
+
+  // Admin settings
+  async getSettings(): Promise<Array<{ key: string; value: string | null; label: string; description: string; type: string; min?: number; max?: number }>> {
+    const response = await client.get("/settings");
+    return response.data;
+  },
+
+  async updateSetting(key: string, value: string): Promise<{ key: string; value: string }> {
+    const response = await client.patch(`/settings/${key}`, null, { params: { value } });
+    return response.data;
+  },
 };
 
 export default client;
