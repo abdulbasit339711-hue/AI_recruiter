@@ -1,9 +1,10 @@
 // src/app/admin/dashboard/page.tsx
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Briefcase, Users, Gauge, Clock, ChevronRight, Trophy } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Briefcase, Users, Gauge, Clock, ChevronRight, Trophy, Filter, Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Stat } from "@/components/ui/Stat";
 import { RadialGauge, CountUp } from "@/components/ui/charts";
@@ -27,7 +28,8 @@ function Skeleton({ className = "" }: { className?: string }) {
 }
 
 export default function DashboardPage() {
-  const { data: m, isLoading } = useMetrics();
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const { data: m, isLoading, isPlaceholderData } = useMetrics(selectedJobId);
   const { data: jobs } = useJobs("Active");
 
   if (isLoading || !m) {
@@ -55,7 +57,7 @@ export default function DashboardPage() {
   }
 
   const avgScore = m.avgScore;
-  const totalJobs = jobs?.length ?? m.totalJobs; // active jobs only
+  const totalJobs = selectedJobId != null ? 1 : (jobs?.length ?? m.totalJobs);
   const totalCandidates = m.totalCandidates;
   const pendingCount = m.pendingCount;
   const processedCount = m.processedCount;
@@ -86,21 +88,90 @@ export default function DashboardPage() {
     { label: "Failed", value: failedCount, color: "#F25C7C" },
   ];
 
-  const activeJobs = jobs ?? [];
+  const allActiveJobs = jobs ?? [];
+  const activeJobs = selectedJobId != null
+    ? allActiveJobs.filter((j) => j.id === selectedJobId)
+    : allActiveJobs;
+  const selectedJobName = selectedJobId != null
+    ? (allActiveJobs.find((j) => j.id === selectedJobId)?.title ?? "")
+    : null;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
-      {/* Page title */}
+    <div className="relative mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+      {/* Dim overlay while job-specific data is loading */}
+      <AnimatePresence>
+        {isPlaceholderData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="pointer-events-none absolute inset-0 z-20 flex items-start justify-center pt-40"
+            style={{ background: "rgba(0,0,0,0.25)", backdropFilter: "blur(1px)", borderRadius: 16 }}
+          >
+            <div
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-heading"
+              style={{ background: "var(--surface-card)", border: "1px solid var(--surface-border)" }}
+            >
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              Updating…
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Page title + job filter */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE }}
-        className="mb-6"
+        className="mb-6 flex flex-wrap items-start justify-between gap-4"
       >
-        <h1 className="text-2xl font-bold text-heading">Recruitment Overview</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Real-time AI screening pipeline across all open roles.
-        </p>
+        <div>
+          <h1 className="text-2xl font-bold text-heading">Recruitment Overview</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {selectedJobName
+              ? `Showing data for: ${selectedJobName}`
+              : "Real-time AI screening pipeline across all open roles."}
+          </p>
+        </div>
+
+        {/* Job filter */}
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="relative">
+            <select
+              value={selectedJobId ?? ""}
+              onChange={(e) =>
+                setSelectedJobId(e.target.value === "" ? null : Number(e.target.value))
+              }
+              className="appearance-none rounded-xl border px-3 py-2 pr-8 text-sm font-medium focus:outline-none focus:ring-1"
+              style={{
+                background: "var(--surface-card)",
+                borderColor: selectedJobId != null ? "rgba(28,153,191,0.5)" : "var(--surface-border)",
+                color: "var(--color-heading)",
+              }}
+            >
+              <option value="">All Jobs</option>
+              {(jobs ?? []).map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.title}
+                </option>
+              ))}
+            </select>
+            <ChevronRight
+              className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-muted-foreground"
+            />
+          </div>
+          {selectedJobId != null && (
+            <button
+              onClick={() => setSelectedJobId(null)}
+              className="rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              title="Clear filter"
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
       </motion.div>
 
       {/* KPI Cards */}

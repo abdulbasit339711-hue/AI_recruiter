@@ -142,32 +142,37 @@ def health_check(db: Session = Depends(get_db)):
 
 
 @app.get("/metrics")
-def get_metrics(db: Session = Depends(get_db)):
-    total_jobs = db.query(Job).count()
-    total_candidates = db.query(Candidate).count()
-    avg_score = db.query(func.avg(Candidate.total_score)).scalar() or 0.0
-    queued = db.query(Candidate).filter(Candidate.status.in_([S.QUEUED, S.PROCESSING, "Pending"])).count()
+def get_metrics(job_id: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    def _q(model):
+        q = db.query(model)
+        if job_id is not None and model is Candidate:
+            q = q.filter(Candidate.job_id == job_id)
+        return q
+
+    total_jobs = 1 if job_id is not None else db.query(Job).count()
+    total_candidates = _q(Candidate).count()
+    avg_score = _q(Candidate).with_entities(func.avg(Candidate.total_score)).scalar() or 0.0
+    queued = _q(Candidate).filter(Candidate.status.in_([S.QUEUED, S.PROCESSING, "Pending"])).count()
     processed = (
-        db.query(Candidate)
+        _q(Candidate)
         .filter(Candidate.status.in_([S.SHORTLISTED, S.REVIEWED, S.REJECTED, S.UNGRADED, "Processed"]))
         .count()
     )
-    failed = db.query(Candidate).filter(Candidate.status.in_([S.ERROR, "Failed"])).count()
-    # Score distribution buckets
+    failed = _q(Candidate).filter(Candidate.status.in_([S.ERROR, "Failed"])).count()
     buckets = [("0–20", 0, 20), ("21–40", 21, 40), ("41–60", 41, 60), ("61–80", 61, 80), ("81–100", 81, 100)]
     score_distribution = []
     for label, lo, hi in buckets:
         count = (
-            db.query(Candidate)
+            _q(Candidate)
             .filter(Candidate.total_score >= lo, Candidate.total_score <= hi)
             .count()
         )
         score_distribution.append({"label": label, "count": count})
 
-    shortlisted_count = db.query(Candidate).filter(
+    shortlisted_count = _q(Candidate).filter(
         Candidate.status.in_([S.SHORTLISTED, "Shortlisted"])
     ).count()
-    top_score = float(db.query(func.max(Candidate.total_score)).scalar() or 0.0)
+    top_score = float(_q(Candidate).with_entities(func.max(Candidate.total_score)).scalar() or 0.0)
 
     return {
         "totalJobs": total_jobs,

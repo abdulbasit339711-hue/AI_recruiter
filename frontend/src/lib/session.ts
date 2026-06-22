@@ -8,6 +8,8 @@
 // expiry check instead (see middleware.ts) — the proxy is the authoritative gate.
 import { createHmac, timingSafeEqual, randomBytes } from "crypto";
 
+export type SessionRole = "admin" | "hr";
+
 const TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 // Prefer a dedicated SESSION_SECRET; fall back to ADMIN_API_TOKEN so no new config is
@@ -21,9 +23,9 @@ function sign(body: string): Buffer {
 }
 
 /** Mint a signed session token: base64url(payload).base64url(hmac). */
-export function mintSession(): string {
+export function mintSession(role: SessionRole = "admin"): string {
   const body = Buffer.from(
-    JSON.stringify({ sid: randomBytes(9).toString("base64url"), exp: Date.now() + TTL_MS })
+    JSON.stringify({ sid: randomBytes(9).toString("base64url"), exp: Date.now() + TTL_MS, role })
   ).toString("base64url");
   return `${body}.${sign(body).toString("base64url")}`;
 }
@@ -49,6 +51,19 @@ export function verifySession(token?: string | null): boolean {
   }
 }
 
+/** Extract the role from a verified session token (without re-verifying). */
+export function getSessionRole(token?: string | null): SessionRole {
+  if (!token) return "admin";
+  const body = token.split(".")[0];
+  if (!body) return "admin";
+  try {
+    const { role } = JSON.parse(Buffer.from(body, "base64url").toString());
+    return role === "hr" ? "hr" : "admin";
+  } catch {
+    return "admin";
+  }
+}
+
 /** Constant-time string equality (lengths hashed first so they never leak). */
 export function safeEqual(a: string, b: string): boolean {
   const ha = createHmac("sha256", "cmp").update(a).digest();
@@ -57,4 +72,5 @@ export function safeEqual(a: string, b: string): boolean {
 }
 
 export const SESSION_COOKIE = "admin_session";
+export const ROLE_COOKIE = "user_role";
 export const SESSION_MAX_AGE_S = TTL_MS / 1000;

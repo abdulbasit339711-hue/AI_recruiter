@@ -78,13 +78,13 @@ function LoginForm() {
 
                 {/* Fields */}
                 <StaggerItem className="space-y-4">
-                  {/* Admin token */}
+                  {/* Access token */}
                   <div className="space-y-1.5">
                     <label
                       htmlFor="login-token"
                       className="block text-xs font-medium text-muted-foreground"
                     >
-                      Admin token
+                      Access token
                     </label>
                     <div className="relative">
                       <input
@@ -94,7 +94,7 @@ function LoginForm() {
                         autoComplete="current-password"
                         value={token}
                         onChange={(e) => setToken(e.target.value)}
-                        placeholder="Enter your admin token"
+                        placeholder="Enter your access token"
                         className={inputClass + " pr-10"}
                       />
                       <button

@@ -10,9 +10,11 @@
 //     anyone — this is the candidate apply flow.
 //   - Everything else requires the `admin_session` cookie (set at /login), so the
 //     proxy is not an open relay.
+//   - Admin-only mutations (job CRUD, reprocess, score-override) are gated to the
+//     "admin" role. HR sessions can read/update candidate status but cannot manage jobs.
 
 import { NextRequest, NextResponse } from "next/server";
-import { verifySession, SESSION_COOKIE } from "@/lib/session";
+import { verifySession, getSessionRole, SESSION_COOKIE } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,26 @@ function isPublic(method: string, path: string): boolean {
   return false;
 }
 
+// Actions that require the admin role — HR users are denied with 403.
+function isAdminOnly(method: string, path: string): boolean {
+  if (method === "POST" && path === "jobs") return true; // create job
+  if (
+    (method === "PUT" || method === "PATCH" || method === "DELETE") &&
+    /^jobs\/\d+$/.test(path)
+  )
+    return true; // edit / archive / delete job
+  if (method === "POST" && /^jobs\/\d+\/(reprocess|email)$/.test(path)) return true;
+  if (
+    (method === "PUT" || method === "POST") &&
+    /^jobs\/\d+\/scoring-weights$/.test(path)
+  )
+    return true;
+  if (method === "POST" && /^candidates\/\d+\/reprocess$/.test(path)) return true;
+  if (method === "PATCH" && /^candidates\/\d+\/score-override$/.test(path)) return true;
+  if (method === "POST" && /^candidates\/\d+\/annotate-video$/.test(path)) return true;
+  return false;
+}
+
 async function handle(
   req: NextRequest,
   ctx: { params: Promise<{ path: string[] }> }
@@ -37,10 +59,18 @@ async function handle(
   const method = req.method;
 
   if (!isPublic(method, path)) {
-    // Authoritative gate: the cookie must be a valid SIGNED session token (not the raw
-    // admin secret). The backend bearer is injected below, server-side only.
-    if (!ADMIN_API_TOKEN || !verifySession(req.cookies.get(SESSION_COOKIE)?.value)) {
+    // Authoritative gate: the cookie must be a valid SIGNED session token.
+    const sessionToken = req.cookies.get(SESSION_COOKIE)?.value;
+    if (!ADMIN_API_TOKEN || !verifySession(sessionToken)) {
       return NextResponse.json({ detail: "Not authenticated." }, { status: 401 });
+    }
+
+    // Role-based access: reject HR users from admin-only mutations.
+    if (isAdminOnly(method, path) && getSessionRole(sessionToken) === "hr") {
+      return NextResponse.json(
+        { detail: "Admin role required for this action." },
+        { status: 403 }
+      );
     }
   }
 

@@ -1,12 +1,21 @@
-// Admin login: validates the shared admin token against the server-side
-// ADMIN_API_TOKEN (constant-time) and, on success, sets an httpOnly cookie holding a
-// short-lived SIGNED SESSION TOKEN — not the raw secret, so a cookie leak is no longer a
-// full backend compromise. Per-IP rate limiting blunts brute-force. No DB, no users.
+// Login: validates the provided token against ADMIN_API_TOKEN (admin role) or
+// HR_API_TOKEN (hr role). On success, sets an httpOnly signed SESSION TOKEN cookie
+// (not the raw secret) plus a readable user_role cookie for client-side UI gating.
+// Per-IP rate limiting blunts brute-force. No DB, no users.
 
 import { NextRequest, NextResponse } from "next/server";
-import { mintSession, verifySession, safeEqual, SESSION_COOKIE, SESSION_MAX_AGE_S } from "@/lib/session";
+import {
+  mintSession,
+  verifySession,
+  safeEqual,
+  SESSION_COOKIE,
+  ROLE_COOKIE,
+  SESSION_MAX_AGE_S,
+  type SessionRole,
+} from "@/lib/session";
 
 const ADMIN_API_TOKEN = process.env.ADMIN_API_TOKEN || "";
+const HR_API_TOKEN = process.env.HR_API_TOKEN || "";
 
 // In-memory per-IP rate limit (best-effort; single-instance). Resets on the window.
 const ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
@@ -22,6 +31,12 @@ function rateLimited(ip: string): boolean {
   }
   rec.count += 1;
   return rec.count > MAX_ATTEMPTS;
+}
+
+function resolveRole(token: string): SessionRole | null {
+  if (ADMIN_API_TOKEN && safeEqual(token, ADMIN_API_TOKEN)) return "admin";
+  if (HR_API_TOKEN && safeEqual(token, HR_API_TOKEN)) return "hr";
+  return null;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -40,15 +55,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const { token } = await req.json().catch(() => ({ token: "" }));
-  if (typeof token !== "string" || !safeEqual(token, ADMIN_API_TOKEN)) {
+  if (typeof token !== "string") {
     return NextResponse.json({ ok: false, error: "Invalid token." }, { status: 401 });
   }
 
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set(SESSION_COOKIE, mintSession(), {
+  const role = resolveRole(token);
+  if (!role) {
+    return NextResponse.json({ ok: false, error: "Invalid token." }, { status: 401 });
+  }
+
+  const isSecure = process.env.NODE_ENV === "production";
+  const res = NextResponse.json({ ok: true, role });
+  res.cookies.set(SESSION_COOKIE, mintSession(role), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
+    path: "/",
+    maxAge: SESSION_MAX_AGE_S,
+  });
+  // Non-httpOnly so client JS can read it for UI gating. Not a secret — enforcement
+  // is server-side in the proxy. Cleared together with the session on logout.
+  res.cookies.set(ROLE_COOKIE, role, {
+    httpOnly: false,
+    sameSite: "lax",
+    secure: isSecure,
     path: "/",
     maxAge: SESSION_MAX_AGE_S,
   });
@@ -58,6 +88,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 export async function DELETE(): Promise<NextResponse> {
   const res = NextResponse.json({ ok: true });
   res.cookies.set(SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+  res.cookies.set(ROLE_COOKIE, "", { httpOnly: false, path: "/", maxAge: 0 });
   return res;
 }
 

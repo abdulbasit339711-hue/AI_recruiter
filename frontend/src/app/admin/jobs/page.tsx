@@ -10,12 +10,14 @@ import { JobCard } from "@/components/job/JobCard";
 import { JobFormModal } from "@/components/admin/JobFormModal";
 import { Plus, Briefcase } from "lucide-react";
 import type { Job } from "@/types";
+import { useIsAdmin } from "@/hooks/useRole";
 
 export default function AdminJobsPage() {
   const { data: jobs = [], isLoading, isError, error } = useJobs();
   const createJobMutation = useCreateJob();
   const updateJobMutation = useUpdateJob();
   const archiveJobMutation = useArchiveJob();
+  const isAdmin = useIsAdmin();
 
   const [isModalOpen, setModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<Job | null>(null);
@@ -65,13 +67,15 @@ export default function AdminJobsPage() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-heading">Job Openings</h1>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 rounded-xl bg-[#1C99BF] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#3DAFCC] hover:shadow-[0_0_24px_rgba(28,153,191,0.4)]"
-        >
-          <Plus className="h-4 w-4" />
-          Post New Job
-        </button>
+        {isAdmin && (
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 rounded-xl bg-[#1C99BF] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#3DAFCC] hover:shadow-[0_0_24px_rgba(28,153,191,0.4)]"
+          >
+            <Plus className="h-4 w-4" />
+            Post New Job
+          </button>
+        )}
       </div>
 
       {/* ── Loading skeletons ──────────────────────────────────────────────── */}
@@ -130,13 +134,15 @@ export default function AdminJobsPage() {
               Add a role to start accepting candidates and running AI screening.
             </p>
           </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 rounded-xl bg-[#1C99BF] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#3DAFCC] hover:shadow-[0_0_24px_rgba(28,153,191,0.4)]"
-          >
-            <Plus className="h-4 w-4" />
-            Post New Job
-          </button>
+          {isAdmin && (
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 rounded-xl bg-[#1C99BF] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#3DAFCC] hover:shadow-[0_0_24px_rgba(28,153,191,0.4)]"
+            >
+              <Plus className="h-4 w-4" />
+              Post New Job
+            </button>
+          )}
         </div>
       )}
 
@@ -147,8 +153,8 @@ export default function AdminJobsPage() {
             <JobCard
               key={job.id}
               job={job}
-              onEdit={openEdit}
-              onArchive={handleArchive}
+              onEdit={isAdmin ? openEdit : undefined}
+              onArchive={isAdmin ? handleArchive : undefined}
             />
           ))}
         </div>

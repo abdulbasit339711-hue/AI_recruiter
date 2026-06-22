@@ -1,7 +1,7 @@
 // src/hooks/useMetrics.ts
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import axios from "@/lib/api";
 
 type Metrics = {
@@ -16,13 +16,15 @@ type Metrics = {
   topScore: number;
 };
 
-export const useMetrics = () => {
+export const useMetrics = (jobId?: number | null) => {
   return useQuery<Metrics, Error>({
-    queryKey: ['metrics'],
+    queryKey: ['metrics', jobId ?? null],
     queryFn: async () => {
-      const { data } = await axios.get('/metrics');
+      const params = jobId != null ? { job_id: jobId } : {};
+      const { data } = await axios.get('/metrics', { params });
       return data as Metrics;
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 30_000, // 30 s — short so dashboard stays fresh
+    placeholderData: keepPreviousData,
   });
 };
