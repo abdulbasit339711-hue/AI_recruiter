@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1
+# Pipecat voice interview server (runner.py). Build from the repo ROOT so the
+# editable shared package at ../../packages/shared resolves:
+#   docker build -f Dockerfile.voice -t ai-recruiter-voice .
+#
+# NOTE: voice-agent/server/Dockerfile is the separate Pipecat Cloud image
+# (pcc-deploy.toml, built on dailyco/pipecat-base — arm64-only). THIS file is the
+# self-contained linux/amd64 image for the local stack, built on python + uv.
+FROM python:3.12-slim
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# ffmpeg for media handling (aiortc/PyAV); build tools cover any sdist fallbacks.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv drives the lockfile-based install the project is built around.
+RUN pip install uv
+
+# pyproject pins  recruiter-shared = { path = "../../packages/shared" }  — recreate
+# that relative layout: server at /app/voice-agent/server, shared at /app/packages/shared.
+WORKDIR /app/voice-agent/server
+COPY packages/shared /app/packages/shared
+
+# Resolve + install dependencies from the lockfile first (cached layer). The
+# editable path dep needs packages/shared present, hence the COPY above.
+COPY voice-agent/server/pyproject.toml voice-agent/server/uv.lock ./
+RUN uv sync --locked --no-install-project --no-dev
+
+# Application code, then install the project itself into the venv.
+COPY voice-agent/server/ ./
+RUN uv sync --locked --no-dev
+
+EXPOSE 7860
+
+# Apply the voice schema (alembic reads DB_* / DATABASE_URL), then serve. runner:app
+# owns /interview/validate, /events, /chat, /token and spawns per-room bots on demand.
+# runner.py's __main__ binds 127.0.0.1 (not container-reachable) by design — launch via
+# uvicorn so it binds 0.0.0.0, exactly as the module docstring intends.
+#
+# `uv run --no-sync`: the venv is already fully built, so skip uv's implicit
+# re-sync on boot — that sync recompiled ~10k bytecode files and reinstalled dev
+# deps every start (~30s). --no-sync keeps uv's project environment while making
+# boot near-instant. (A plain `uvicorn` without uv hangs during app import here.)
+CMD ["sh", "-c", "uv run --no-sync alembic upgrade head && exec uv run --no-sync uvicorn runner:app --host 0.0.0.0 --port 7860"]

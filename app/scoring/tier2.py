@@ -64,8 +64,17 @@ def _looks_like_jd(text: str) -> tuple[bool, str]:
     min_signals = cfg.get("min_jd_signals", 1)
 
     stripped = text.strip()
+
+    # A short or thin job description is the recruiter's input, not the candidate's
+    # fault — it must never cause the resume to be rejected. Warn (so HR can flesh out
+    # the posting) but always let scoring proceed. Genuinely empty JDs are still caught
+    # by the explicit emptiness check in score_tier2.
+    warnings: list[str] = []
     if len(stripped) < min_chars:
-        return False, f"JD too short ({len(stripped)} chars < {min_chars})."
+        warnings.append(
+            f"Warning: job description is very short ({len(stripped)} chars < {min_chars}); "
+            f"similarity and LLM scoring may be less reliable."
+        )
 
     jd_signals = {
         "responsibilities", "requirements", "qualifications",
@@ -74,9 +83,9 @@ def _looks_like_jd(text: str) -> tuple[bool, str]:
     lower = stripped.lower()
     found = {kw for kw in jd_signals if kw in lower}
     if len(found) < min_signals:
-        return True, f"Warning: only {len(found)}/{min_signals} JD signals found: {found or 'none'}."
+        warnings.append(f"Warning: only {len(found)}/{min_signals} JD signals found: {found or 'none'}.")
 
-    return True, ""
+    return True, " ".join(warnings)
 
 
 class IrrelevantDocumentError(ValueError):

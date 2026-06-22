@@ -1,0 +1,48 @@
+[project]
+name = "pipecat-quickstart"
+version = "0.1.0"
+description = "Voice AI bot built with Pipecat"
+requires-python = ">=3.11"
+dependencies = [
+    # 1.4.0 + the dedicated-loop bot fix (runner.py) is required for LiveKit to
+    # complete the room handshake; 1.3.0 still FFI-panics even off the uvicorn loop.
+    "pipecat-ai[cartesia,deepgram,groq,openai,rnnoise,runner,silero,webrtc,livekit]==1.4.0",
+    "pipecatcloud",
+    "fastapi",
+    "uvicorn",
+    "loguru",
+    "python-dotenv",
+    "livekit",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.0",
+    "groq>=0.13.0",
+    "alembic>=1.13.0",
+    "pyjwt>=2.8.0",
+    "recruiter-shared",
+    "pyrnnoise>=0.4.1",
+    "av>=12.0.0",
+]
+
+[tool.uv.sources]
+recruiter-shared = { path = "../../packages/shared", editable = true }
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.404,<2",
+    "ruff>=0.12.11,<1",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+# auto: any `async def test_*` runs without a per-test marker.
+asyncio_mode = "auto"
+# Tests live in tests/ but import top-level server modules (e.g. `interview_session`,
+# `runner`) and the `processors`/`services` packages, so put the server root on sys.path.
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+[tool.ruff.lint]
+select = ["I", "UP"]

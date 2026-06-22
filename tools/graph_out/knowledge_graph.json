@@ -1,0 +1,2265 @@
+{
+  "meta": {
+    "nodes": 126,
+    "edges": 223,
+    "subsystems": {
+      "backend": 34,
+      "voice": 28,
+      "shared": 5,
+      "frontend": 59
+    }
+  },
+  "nodes": [
+    {
+      "id": "app",
+      "subsystem": "backend",
+      "fan_in": 2,
+      "fan_out": 0,
+      "weight_in": 2,
+      "weight_out": 0,
+      "impact": 6
+    },
+    {
+      "id": "app.core",
+      "subsystem": "backend",
+      "fan_in": 6,
+      "fan_out": 0,
+      "weight_in": 6,
+      "weight_out": 0,
+      "impact": 18
+    },
+    {
+      "id": "app.core.auth",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "app.core.circuit_breaker",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "app.core.jd_embedding_cache",
+      "subsystem": "backend",
+      "fan_in": 3,
+      "fan_out": 1,
+      "weight_in": 3,
+      "weight_out": 1,
+      "impact": 9
+    },
+    {
+      "id": "app.core.logging_config",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "app.core.model_registry",
+      "subsystem": "backend",
+      "fan_in": 4,
+      "fan_out": 0,
+      "weight_in": 5,
+      "weight_out": 0,
+      "impact": 13
+    },
+    {
+      "id": "app.core.ratelimit",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "app.core.status",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "app.dashboard.app",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 6,
+      "weight_in": 0,
+      "weight_out": 6,
+      "impact": 0
+    },
+    {
+      "id": "app.database",
+      "subsystem": "backend",
+      "fan_in": 10,
+      "fan_out": 0,
+      "weight_in": 10,
+      "weight_out": 0,
+      "impact": 30
+    },
+    {
+      "id": "app.events",
+      "subsystem": "backend",
+      "fan_in": 3,
+      "fan_out": 1,
+      "weight_in": 3,
+      "weight_out": 1,
+      "impact": 9
+    },
+    {
+      "id": "app.events.broadcaster",
+      "subsystem": "backend",
+      "fan_in": 2,
+      "fan_out": 1,
+      "weight_in": 2,
+      "weight_out": 1,
+      "impact": 6
+    },
+    {
+      "id": "app.events.sse",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "app.intake.upload",
+      "subsystem": "backend",
+      "fan_in": 2,
+      "fan_out": 0,
+      "weight_in": 2,
+      "weight_out": 0,
+      "impact": 6
+    },
+    {
+      "id": "app.interview_links",
+      "subsystem": "backend",
+      "fan_in": 2,
+      "fan_out": 1,
+      "weight_in": 2,
+      "weight_out": 1,
+      "impact": 6
+    },
+    {
+      "id": "app.llm.groq_client",
+      "subsystem": "backend",
+      "fan_in": 3,
+      "fan_out": 3,
+      "weight_in": 3,
+      "weight_out": 3,
+      "impact": 9
+    },
+    {
+      "id": "app.llm.json_parser",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "app.llm.name_extractor",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 2,
+      "weight_in": 0,
+      "weight_out": 2,
+      "impact": 0
+    },
+    {
+      "id": "app.main",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 17,
+      "weight_in": 0,
+      "weight_out": 18,
+      "impact": 0
+    },
+    {
+      "id": "app.models",
+      "subsystem": "backend",
+      "fan_in": 5,
+      "fan_out": 1,
+      "weight_in": 6,
+      "weight_out": 1,
+      "impact": 16
+    },
+    {
+      "id": "app.queue",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "app.queue.worker",
+      "subsystem": "backend",
+      "fan_in": 2,
+      "fan_out": 6,
+      "weight_in": 2,
+      "weight_out": 7,
+      "impact": 6
+    },
+    {
+      "id": "app.schemas",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "app.scoring",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "app.scoring.engine",
+      "subsystem": "backend",
+      "fan_in": 2,
+      "fan_out": 9,
+      "weight_in": 2,
+      "weight_out": 9,
+      "impact": 6
+    },
+    {
+      "id": "app.scoring.heuristics",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 1,
+      "weight_in": 1,
+      "weight_out": 1,
+      "impact": 3
+    },
+    {
+      "id": "app.scoring.tier1",
+      "subsystem": "backend",
+      "fan_in": 3,
+      "fan_out": 2,
+      "weight_in": 3,
+      "weight_out": 2,
+      "impact": 9
+    },
+    {
+      "id": "app.scoring.tier2",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 4,
+      "weight_in": 1,
+      "weight_out": 4,
+      "impact": 3
+    },
+    {
+      "id": "app.scripts",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "app.scripts.migrate_sqlite_to_pg",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 2,
+      "weight_in": 0,
+      "weight_out": 2,
+      "impact": 0
+    },
+    {
+      "id": "app.services",
+      "subsystem": "backend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "app.services.email",
+      "subsystem": "backend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "app.services.interview_invite",
+      "subsystem": "backend",
+      "fan_in": 2,
+      "fan_out": 2,
+      "weight_in": 2,
+      "weight_out": 2,
+      "impact": 6
+    },
+    {
+      "id": "bot",
+      "subsystem": "voice",
+      "fan_in": 3,
+      "fan_out": 6,
+      "weight_in": 3,
+      "weight_out": 6,
+      "impact": 9
+    },
+    {
+      "id": "bot_manager_dual",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 7,
+      "weight_in": 1,
+      "weight_out": 7,
+      "impact": 3
+    },
+    {
+      "id": "core",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "core.metrics",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "database",
+      "subsystem": "voice",
+      "fan_in": 8,
+      "fan_out": 0,
+      "weight_in": 11,
+      "weight_out": 0,
+      "impact": 27
+    },
+    {
+      "id": "events",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "events.broadcaster",
+      "subsystem": "voice",
+      "fan_in": 5,
+      "fan_out": 0,
+      "weight_in": 5,
+      "weight_out": 0,
+      "impact": 15
+    },
+    {
+      "id": "fe:app/admin/candidates/[candidateId]/interview/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/admin/candidates/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 16,
+      "weight_in": 0,
+      "weight_out": 16,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/admin/dashboard/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 2,
+      "weight_in": 0,
+      "weight_out": 2,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/admin/jobs/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 8,
+      "weight_in": 0,
+      "weight_out": 8,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/admin/layout.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/admin/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/api/admin/[...path]/route.ts",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/api/login/route.ts",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/applicant/[jobId]/apply/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 3,
+      "weight_in": 0,
+      "weight_out": 3,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/applicant/[jobId]/apply/success/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/applicant/[jobId]/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/applicant/layout.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/applicant/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 2,
+      "weight_in": 0,
+      "weight_out": 2,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/interview/[token]/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 2,
+      "weight_in": 0,
+      "weight_out": 2,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/interview/layout.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/layout.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/login/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "fe:app/page.tsx",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "fe:components/admin/CandidateTable.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 8,
+      "weight_in": 1,
+      "weight_out": 8,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/admin/JobFormModal.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 5,
+      "weight_in": 1,
+      "weight_out": 5,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/admin/JobTable.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 4,
+      "weight_in": 1,
+      "weight_out": 4,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/admin/KanbanBoard.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 6,
+      "weight_in": 1,
+      "weight_out": 6,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/admin/ResumeViewer.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 3,
+      "weight_in": 1,
+      "weight_out": 3,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/admin/ScoreBar.tsx",
+      "subsystem": "frontend",
+      "fan_in": 3,
+      "fan_out": 0,
+      "weight_in": 3,
+      "weight_out": 0,
+      "impact": 9
+    },
+    {
+      "id": "fe:components/admin/ScoreVisualization.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/admin/StatusBadge.tsx",
+      "subsystem": "frontend",
+      "fan_in": 4,
+      "fan_out": 1,
+      "weight_in": 4,
+      "weight_out": 1,
+      "impact": 12
+    },
+    {
+      "id": "fe:components/candidates/CandidateActions.tsx",
+      "subsystem": "frontend",
+      "fan_in": 2,
+      "fan_out": 6,
+      "weight_in": 2,
+      "weight_out": 6,
+      "impact": 6
+    },
+    {
+      "id": "fe:components/candidates/CandidateNotesPanel.tsx",
+      "subsystem": "frontend",
+      "fan_in": 3,
+      "fan_out": 3,
+      "weight_in": 3,
+      "weight_out": 3,
+      "impact": 9
+    },
+    {
+      "id": "fe:components/candidates/CandidateTimeline.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/candidates/InterviewPanel.tsx",
+      "subsystem": "frontend",
+      "fan_in": 2,
+      "fan_out": 1,
+      "weight_in": 2,
+      "weight_out": 1,
+      "impact": 6
+    },
+    {
+      "id": "fe:components/candidates/StatusBadge.tsx",
+      "subsystem": "frontend",
+      "fan_in": 2,
+      "fan_out": 0,
+      "weight_in": 2,
+      "weight_out": 0,
+      "impact": 6
+    },
+    {
+      "id": "fe:components/job/JobCard.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/layout/header.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/providers.tsx",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "fe:components/ui/button.tsx",
+      "subsystem": "frontend",
+      "fan_in": 13,
+      "fan_out": 1,
+      "weight_in": 13,
+      "weight_out": 1,
+      "impact": 39
+    },
+    {
+      "id": "fe:components/ui/card.tsx",
+      "subsystem": "frontend",
+      "fan_in": 3,
+      "fan_out": 1,
+      "weight_in": 3,
+      "weight_out": 1,
+      "impact": 9
+    },
+    {
+      "id": "fe:components/ui/dialog.tsx",
+      "subsystem": "frontend",
+      "fan_in": 4,
+      "fan_out": 1,
+      "weight_in": 4,
+      "weight_out": 1,
+      "impact": 12
+    },
+    {
+      "id": "fe:components/ui/input.tsx",
+      "subsystem": "frontend",
+      "fan_in": 2,
+      "fan_out": 1,
+      "weight_in": 2,
+      "weight_out": 1,
+      "impact": 6
+    },
+    {
+      "id": "fe:components/ui/table.tsx",
+      "subsystem": "frontend",
+      "fan_in": 2,
+      "fan_out": 1,
+      "weight_in": 2,
+      "weight_out": 1,
+      "impact": 6
+    },
+    {
+      "id": "fe:components/ui/textarea.tsx",
+      "subsystem": "frontend",
+      "fan_in": 2,
+      "fan_out": 1,
+      "weight_in": 2,
+      "weight_out": 1,
+      "impact": 6
+    },
+    {
+      "id": "fe:hooks/useArchiveJob.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 1,
+      "weight_in": 1,
+      "weight_out": 1,
+      "impact": 3
+    },
+    {
+      "id": "fe:hooks/useCandidate.ts",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 2,
+      "weight_in": 0,
+      "weight_out": 2,
+      "impact": 0
+    },
+    {
+      "id": "fe:hooks/useCandidateEvaluation.ts",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 2,
+      "weight_in": 0,
+      "weight_out": 3,
+      "impact": 0
+    },
+    {
+      "id": "fe:hooks/useCandidates.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "fe:hooks/useCreateJob.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "fe:hooks/useInterviewLive.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 1,
+      "weight_in": 1,
+      "weight_out": 1,
+      "impact": 3
+    },
+    {
+      "id": "fe:hooks/useJob.ts",
+      "subsystem": "frontend",
+      "fan_in": 2,
+      "fan_out": 2,
+      "weight_in": 2,
+      "weight_out": 2,
+      "impact": 6
+    },
+    {
+      "id": "fe:hooks/useJobEvaluationEvents.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "fe:hooks/useJobs.ts",
+      "subsystem": "frontend",
+      "fan_in": 3,
+      "fan_out": 2,
+      "weight_in": 3,
+      "weight_out": 2,
+      "impact": 9
+    },
+    {
+      "id": "fe:hooks/useMetrics.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 1,
+      "weight_in": 1,
+      "weight_out": 1,
+      "impact": 3
+    },
+    {
+      "id": "fe:hooks/useUpdateJob.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "fe:hooks/useUploadResume.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "fe:lib/api.ts",
+      "subsystem": "frontend",
+      "fan_in": 17,
+      "fan_out": 1,
+      "weight_in": 17,
+      "weight_out": 1,
+      "impact": 51
+    },
+    {
+      "id": "fe:lib/csv.ts",
+      "subsystem": "frontend",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "fe:lib/utils.ts",
+      "subsystem": "frontend",
+      "fan_in": 6,
+      "fan_out": 0,
+      "weight_in": 6,
+      "weight_out": 0,
+      "impact": 18
+    },
+    {
+      "id": "fe:lib/voice.ts",
+      "subsystem": "frontend",
+      "fan_in": 2,
+      "fan_out": 0,
+      "weight_in": 2,
+      "weight_out": 0,
+      "impact": 6
+    },
+    {
+      "id": "fe:middleware.ts",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "fe:store/recruiter-store.ts",
+      "subsystem": "frontend",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "fe:types/index.ts",
+      "subsystem": "frontend",
+      "fan_in": 20,
+      "fan_out": 0,
+      "weight_in": 21,
+      "weight_out": 0,
+      "impact": 61
+    },
+    {
+      "id": "fixed_json_parser",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "generate_token",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "interview_session",
+      "subsystem": "voice",
+      "fan_in": 8,
+      "fan_out": 0,
+      "weight_in": 8,
+      "weight_out": 0,
+      "impact": 24
+    },
+    {
+      "id": "judge_processor",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 1,
+      "weight_in": 1,
+      "weight_out": 1,
+      "impact": 3
+    },
+    {
+      "id": "llm",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "llm.json_parser",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "processors",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "processors.adaptive_questioning_processor",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "processors.goal_tracking_processor",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 4,
+      "weight_in": 1,
+      "weight_out": 4,
+      "impact": 3
+    },
+    {
+      "id": "question_flow_processor",
+      "subsystem": "voice",
+      "fan_in": 2,
+      "fan_out": 2,
+      "weight_in": 2,
+      "weight_out": 2,
+      "impact": 6
+    },
+    {
+      "id": "recruiter_shared",
+      "subsystem": "shared",
+      "fan_in": 5,
+      "fan_out": 3,
+      "weight_in": 5,
+      "weight_out": 3,
+      "impact": 15
+    },
+    {
+      "id": "recruiter_shared.roles",
+      "subsystem": "shared",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "recruiter_shared.status",
+      "subsystem": "shared",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "recruiter_shared.tokens",
+      "subsystem": "shared",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "resilient_tts",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 0,
+      "weight_in": 1,
+      "weight_out": 0,
+      "impact": 3
+    },
+    {
+      "id": "runner",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 6,
+      "weight_in": 1,
+      "weight_out": 10,
+      "impact": 3
+    },
+    {
+      "id": "services",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 0,
+      "weight_in": 0,
+      "weight_out": 0,
+      "impact": 0
+    },
+    {
+      "id": "services.goal_tracking_service",
+      "subsystem": "voice",
+      "fan_in": 5,
+      "fan_out": 3,
+      "weight_in": 5,
+      "weight_out": 3,
+      "impact": 15
+    },
+    {
+      "id": "services.role_config_service",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 5,
+      "weight_in": 1,
+      "weight_out": 5,
+      "impact": 3
+    },
+    {
+      "id": "session_factory",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 3,
+      "weight_in": 2,
+      "weight_out": 3,
+      "impact": 4
+    },
+    {
+      "id": "test_interview_session",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "test_question_flow",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 2,
+      "weight_in": 0,
+      "weight_out": 2,
+      "impact": 0
+    },
+    {
+      "id": "test_voice_auth",
+      "subsystem": "voice",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "tests.test_shared",
+      "subsystem": "shared",
+      "fan_in": 0,
+      "fan_out": 1,
+      "weight_in": 0,
+      "weight_out": 1,
+      "impact": 0
+    },
+    {
+      "id": "transcript_accumulator",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 2,
+      "weight_in": 1,
+      "weight_out": 2,
+      "impact": 3
+    },
+    {
+      "id": "working_processors",
+      "subsystem": "voice",
+      "fan_in": 1,
+      "fan_out": 1,
+      "weight_in": 1,
+      "weight_out": 1,
+      "impact": 3
+    }
+  ],
+  "edges": [
+    {
+      "source": "runner",
+      "target": "database",
+      "weight": 4
+    },
+    {
+      "source": "app.main",
+      "target": "app.core.model_registry",
+      "weight": 2
+    },
+    {
+      "source": "app.queue.worker",
+      "target": "app.models",
+      "weight": 2
+    },
+    {
+      "source": "runner",
+      "target": "session_factory",
+      "weight": 2
+    },
+    {
+      "source": "fe:hooks/useCandidateEvaluation.ts",
+      "target": "fe:types/index.ts",
+      "weight": 2
+    },
+    {
+      "source": "app.interview_links",
+      "target": "recruiter_shared",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.core.logging_config",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.core",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.core.auth",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.core.ratelimit",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.core.jd_embedding_cache",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.models",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.intake.upload",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.schemas",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.queue.worker",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.llm.groq_client",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.events.broadcaster",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.events.sse",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.events",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.services.interview_invite",
+      "weight": 1
+    },
+    {
+      "source": "app.main",
+      "target": "app.interview_links",
+      "weight": 1
+    },
+    {
+      "source": "app.models",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.core.jd_embedding_cache",
+      "target": "app.core.model_registry",
+      "weight": 1
+    },
+    {
+      "source": "app.dashboard.app",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.dashboard.app",
+      "target": "app.models",
+      "weight": 1
+    },
+    {
+      "source": "app.dashboard.app",
+      "target": "app.scoring.engine",
+      "weight": 1
+    },
+    {
+      "source": "app.dashboard.app",
+      "target": "app.intake.upload",
+      "weight": 1
+    },
+    {
+      "source": "app.dashboard.app",
+      "target": "app.queue.worker",
+      "weight": 1
+    },
+    {
+      "source": "app.dashboard.app",
+      "target": "app.core",
+      "weight": 1
+    },
+    {
+      "source": "app.events.broadcaster",
+      "target": "app.core",
+      "weight": 1
+    },
+    {
+      "source": "app.events.sse",
+      "target": "app.core",
+      "weight": 1
+    },
+    {
+      "source": "app.events.sse",
+      "target": "app.events.broadcaster",
+      "weight": 1
+    },
+    {
+      "source": "app.events",
+      "target": "app",
+      "weight": 1
+    },
+    {
+      "source": "app.llm.groq_client",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.llm.groq_client",
+      "target": "app.core.circuit_breaker",
+      "weight": 1
+    },
+    {
+      "source": "app.llm.groq_client",
+      "target": "app.llm.json_parser",
+      "weight": 1
+    },
+    {
+      "source": "app.llm.name_extractor",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.llm.name_extractor",
+      "target": "app.llm.groq_client",
+      "weight": 1
+    },
+    {
+      "source": "app.queue.worker",
+      "target": "app.core",
+      "weight": 1
+    },
+    {
+      "source": "app.queue.worker",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.queue.worker",
+      "target": "app.events",
+      "weight": 1
+    },
+    {
+      "source": "app.queue.worker",
+      "target": "app.scoring.engine",
+      "weight": 1
+    },
+    {
+      "source": "app.queue.worker",
+      "target": "app.services.interview_invite",
+      "weight": 1
+    },
+    {
+      "source": "app.queue",
+      "target": "app",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.core",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.llm.groq_client",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.models",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.core.jd_embedding_cache",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.events",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.scoring.heuristics",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.scoring.tier1",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.engine",
+      "target": "app.scoring.tier2",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.heuristics",
+      "target": "app.scoring.tier1",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.tier1",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.tier1",
+      "target": "app.core.model_registry",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.tier2",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.tier2",
+      "target": "app.core.jd_embedding_cache",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.tier2",
+      "target": "app.core.model_registry",
+      "weight": 1
+    },
+    {
+      "source": "app.scoring.tier2",
+      "target": "app.scoring.tier1",
+      "weight": 1
+    },
+    {
+      "source": "app.scripts.migrate_sqlite_to_pg",
+      "target": "app.database",
+      "weight": 1
+    },
+    {
+      "source": "app.scripts.migrate_sqlite_to_pg",
+      "target": "app.models",
+      "weight": 1
+    },
+    {
+      "source": "app.services.interview_invite",
+      "target": "app.interview_links",
+      "weight": 1
+    },
+    {
+      "source": "app.services.interview_invite",
+      "target": "app.services.email",
+      "weight": 1
+    },
+    {
+      "source": "bot",
+      "target": "core.metrics",
+      "weight": 1
+    },
+    {
+      "source": "bot",
+      "target": "interview_session",
+      "weight": 1
+    },
+    {
+      "source": "bot",
+      "target": "transcript_accumulator",
+      "weight": 1
+    },
+    {
+      "source": "bot",
+      "target": "question_flow_processor",
+      "weight": 1
+    },
+    {
+      "source": "bot",
+      "target": "fixed_json_parser",
+      "weight": 1
+    },
+    {
+      "source": "bot",
+      "target": "events.broadcaster",
+      "weight": 1
+    },
+    {
+      "source": "bot_manager_dual",
+      "target": "working_processors",
+      "weight": 1
+    },
+    {
+      "source": "bot_manager_dual",
+      "target": "judge_processor",
+      "weight": 1
+    },
+    {
+      "source": "bot_manager_dual",
+      "target": "bot",
+      "weight": 1
+    },
+    {
+      "source": "bot_manager_dual",
+      "target": "services.goal_tracking_service",
+      "weight": 1
+    },
+    {
+      "source": "bot_manager_dual",
+      "target": "processors.goal_tracking_processor",
+      "weight": 1
+    },
+    {
+      "source": "bot_manager_dual",
+      "target": "database",
+      "weight": 1
+    },
+    {
+      "source": "bot_manager_dual",
+      "target": "events.broadcaster",
+      "weight": 1
+    },
+    {
+      "source": "judge_processor",
+      "target": "services.goal_tracking_service",
+      "weight": 1
+    },
+    {
+      "source": "question_flow_processor",
+      "target": "interview_session",
+      "weight": 1
+    },
+    {
+      "source": "question_flow_processor",
+      "target": "events.broadcaster",
+      "weight": 1
+    },
+    {
+      "source": "runner",
+      "target": "resilient_tts",
+      "weight": 1
+    },
+    {
+      "source": "runner",
+      "target": "bot_manager_dual",
+      "weight": 1
+    },
+    {
+      "source": "runner",
+      "target": "events.broadcaster",
+      "weight": 1
+    },
+    {
+      "source": "runner",
+      "target": "recruiter_shared",
+      "weight": 1
+    },
+    {
+      "source": "session_factory",
+      "target": "database",
+      "weight": 1
+    },
+    {
+      "source": "session_factory",
+      "target": "bot",
+      "weight": 1
+    },
+    {
+      "source": "session_factory",
+      "target": "services.role_config_service",
+      "weight": 1
+    },
+    {
+      "source": "test_interview_session",
+      "target": "interview_session",
+      "weight": 1
+    },
+    {
+      "source": "test_question_flow",
+      "target": "interview_session",
+      "weight": 1
+    },
+    {
+      "source": "test_question_flow",
+      "target": "question_flow_processor",
+      "weight": 1
+    },
+    {
+      "source": "test_voice_auth",
+      "target": "runner",
+      "weight": 1
+    },
+    {
+      "source": "transcript_accumulator",
+      "target": "interview_session",
+      "weight": 1
+    },
+    {
+      "source": "transcript_accumulator",
+      "target": "events.broadcaster",
+      "weight": 1
+    },
+    {
+      "source": "working_processors",
+      "target": "database",
+      "weight": 1
+    },
+    {
+      "source": "processors.adaptive_questioning_processor",
+      "target": "services.goal_tracking_service",
+      "weight": 1
+    },
+    {
+      "source": "processors.adaptive_questioning_processor",
+      "target": "database",
+      "weight": 1
+    },
+    {
+      "source": "processors.goal_tracking_processor",
+      "target": "services.goal_tracking_service",
+      "weight": 1
+    },
+    {
+      "source": "processors.goal_tracking_processor",
+      "target": "interview_session",
+      "weight": 1
+    },
+    {
+      "source": "processors.goal_tracking_processor",
+      "target": "processors.adaptive_questioning_processor",
+      "weight": 1
+    },
+    {
+      "source": "processors.goal_tracking_processor",
+      "target": "database",
+      "weight": 1
+    },
+    {
+      "source": "services.goal_tracking_service",
+      "target": "database",
+      "weight": 1
+    },
+    {
+      "source": "services.goal_tracking_service",
+      "target": "interview_session",
+      "weight": 1
+    },
+    {
+      "source": "services.goal_tracking_service",
+      "target": "recruiter_shared",
+      "weight": 1
+    },
+    {
+      "source": "services.role_config_service",
+      "target": "database",
+      "weight": 1
+    },
+    {
+      "source": "services.role_config_service",
+      "target": "interview_session",
+      "weight": 1
+    },
+    {
+      "source": "services.role_config_service",
+      "target": "bot",
+      "weight": 1
+    },
+    {
+      "source": "services.role_config_service",
+      "target": "services.goal_tracking_service",
+      "weight": 1
+    },
+    {
+      "source": "services.role_config_service",
+      "target": "recruiter_shared",
+      "weight": 1
+    },
+    {
+      "source": "recruiter_shared",
+      "target": "recruiter_shared.roles",
+      "weight": 1
+    },
+    {
+      "source": "recruiter_shared",
+      "target": "recruiter_shared.status",
+      "weight": 1
+    },
+    {
+      "source": "recruiter_shared",
+      "target": "recruiter_shared.tokens",
+      "weight": 1
+    },
+    {
+      "source": "tests.test_shared",
+      "target": "recruiter_shared",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useInterviewLive.ts",
+      "target": "fe:lib/voice.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useJobEvaluationEvents.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useJobEvaluationEvents.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/ui/textarea.tsx",
+      "target": "fe:lib/utils.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobTable.tsx",
+      "target": "fe:components/ui/table.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobTable.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobTable.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobTable.tsx",
+      "target": "fe:components/admin/StatusBadge.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/ui/button.tsx",
+      "target": "fe:lib/utils.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useUpdateJob.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useUpdateJob.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useArchiveJob.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useUploadResume.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useUploadResume.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/ResumeViewer.tsx",
+      "target": "fe:components/ui/dialog.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/ResumeViewer.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/ResumeViewer.tsx",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useMetrics.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/ui/dialog.tsx",
+      "target": "fe:lib/utils.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/InterviewPanel.tsx",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/applicant/[jobId]/apply/success/page.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useCandidateEvaluation.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useCreateJob.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useCreateJob.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobFormModal.tsx",
+      "target": "fe:components/ui/dialog.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobFormModal.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobFormModal.tsx",
+      "target": "fe:components/ui/input.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobFormModal.tsx",
+      "target": "fe:components/ui/textarea.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/JobFormModal.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/ScoreVisualization.tsx",
+      "target": "fe:hooks/useMetrics.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/ScoreVisualization.tsx",
+      "target": "fe:components/ui/card.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateNotesPanel.tsx",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateNotesPanel.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateNotesPanel.tsx",
+      "target": "fe:components/ui/textarea.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/page.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/ui/card.tsx",
+      "target": "fe:lib/utils.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/job/JobCard.tsx",
+      "target": "fe:components/ui/card.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/job/JobCard.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/layout.tsx",
+      "target": "fe:components/providers.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/applicant/page.tsx",
+      "target": "fe:hooks/useJobs.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/applicant/page.tsx",
+      "target": "fe:components/job/JobCard.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/[candidateId]/interview/page.tsx",
+      "target": "fe:components/candidates/InterviewPanel.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/applicant/[jobId]/page.tsx",
+      "target": "fe:hooks/useJob.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useCandidate.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useCandidate.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/page.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/layout.tsx",
+      "target": "fe:components/layout/header.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/KanbanBoard.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/KanbanBoard.tsx",
+      "target": "fe:components/admin/ScoreBar.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/KanbanBoard.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/KanbanBoard.tsx",
+      "target": "fe:components/admin/StatusBadge.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/KanbanBoard.tsx",
+      "target": "fe:components/candidates/CandidateActions.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/KanbanBoard.tsx",
+      "target": "fe:components/candidates/CandidateNotesPanel.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/ui/table.tsx",
+      "target": "fe:lib/utils.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useCandidates.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useCandidates.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:lib/api.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/CandidateTable.tsx",
+      "target": "fe:components/ui/table.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/CandidateTable.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/CandidateTable.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/CandidateTable.tsx",
+      "target": "fe:components/admin/ScoreBar.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/CandidateTable.tsx",
+      "target": "fe:components/admin/StatusBadge.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/CandidateTable.tsx",
+      "target": "fe:components/candidates/StatusBadge.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/CandidateTable.tsx",
+      "target": "fe:components/candidates/CandidateActions.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/CandidateTable.tsx",
+      "target": "fe:components/candidates/CandidateNotesPanel.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/ui/input.tsx",
+      "target": "fe:lib/utils.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/applicant/[jobId]/apply/page.tsx",
+      "target": "fe:hooks/useJob.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/applicant/[jobId]/apply/page.tsx",
+      "target": "fe:hooks/useUploadResume.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/applicant/[jobId]/apply/page.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateActions.tsx",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateActions.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateActions.tsx",
+      "target": "fe:components/ui/dialog.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateActions.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateActions.tsx",
+      "target": "fe:components/ui/input.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateActions.tsx",
+      "target": "fe:components/candidates/CandidateTimeline.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/interview/[token]/page.tsx",
+      "target": "fe:lib/voice.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/interview/[token]/page.tsx",
+      "target": "fe:hooks/useInterviewLive.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/admin/StatusBadge.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useJobs.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useJobs.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/admin/CandidateTable.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/admin/KanbanBoard.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/candidates/CandidateNotesPanel.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/candidates/InterviewPanel.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:hooks/useCandidates.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:hooks/useJobEvaluationEvents.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:hooks/useJobs.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/ui/dialog.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/admin/ResumeViewer.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:lib/csv.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/admin/ScoreBar.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/admin/StatusBadge.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/candidates/page.tsx",
+      "target": "fe:components/candidates/StatusBadge.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/dashboard/page.tsx",
+      "target": "fe:components/admin/ScoreVisualization.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/dashboard/page.tsx",
+      "target": "fe:components/ui/card.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateTimeline.tsx",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:components/candidates/CandidateTimeline.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/jobs/page.tsx",
+      "target": "fe:hooks/useJobs.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/jobs/page.tsx",
+      "target": "fe:hooks/useCreateJob.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/jobs/page.tsx",
+      "target": "fe:hooks/useUpdateJob.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/jobs/page.tsx",
+      "target": "fe:hooks/useArchiveJob.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/jobs/page.tsx",
+      "target": "fe:components/admin/JobTable.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/jobs/page.tsx",
+      "target": "fe:components/admin/JobFormModal.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/jobs/page.tsx",
+      "target": "fe:components/ui/button.tsx",
+      "weight": 1
+    },
+    {
+      "source": "fe:app/admin/jobs/page.tsx",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useJob.ts",
+      "target": "fe:lib/api.ts",
+      "weight": 1
+    },
+    {
+      "source": "fe:hooks/useJob.ts",
+      "target": "fe:types/index.ts",
+      "weight": 1
+    }
+  ]
+}

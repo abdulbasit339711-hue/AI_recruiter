@@ -1,12 +1,33 @@
-"""Candidate evaluation status constants and mapping."""
+"""Candidate evaluation status — a string enum + legacy mapping.
 
-QUEUED = "Queued"
-PROCESSING = "Processing"
-SHORTLISTED = "Shortlisted"
-REVIEWED = "Reviewed"
-REJECTED = "Rejected"
-UNGRADED = "Ungraded"
-ERROR = "Error"
+``Status`` is a ``StrEnum`` so members ARE their string value ("Queued", …): they
+compare/serialize/persist exactly like the old bare strings (SQLAlchemy String
+columns, JSON/SSE, f-strings all behave identically), but typos now fail loudly
+and the set of valid statuses is a single source of truth. The module-level
+aliases (``QUEUED`` etc.) keep existing ``S.QUEUED`` call sites working unchanged.
+"""
+
+from enum import StrEnum
+
+
+class Status(StrEnum):
+    QUEUED = "Queued"
+    PROCESSING = "Processing"
+    SHORTLISTED = "Shortlisted"
+    REVIEWED = "Reviewed"
+    REJECTED = "Rejected"
+    UNGRADED = "Ungraded"
+    ERROR = "Error"
+
+
+# Backward-compatible module-level aliases (existing code uses `S.QUEUED`, …).
+QUEUED = Status.QUEUED
+PROCESSING = Status.PROCESSING
+SHORTLISTED = Status.SHORTLISTED
+REVIEWED = Status.REVIEWED
+REJECTED = Status.REJECTED
+UNGRADED = Status.UNGRADED
+ERROR = Status.ERROR
 
 TERMINAL_STATUSES = frozenset({
     SHORTLISTED,

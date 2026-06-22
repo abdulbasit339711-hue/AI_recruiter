@@ -1,0 +1,161 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
+import { motion } from "framer-motion";
+import { Bell, Briefcase, Building2, LayoutDashboard, Settings, Users, Sun, Moon } from "lucide-react";
+import { useEffect, useState } from "react";
+
+const NAV_ITEMS = [
+  { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/admin/jobs", label: "Jobs", icon: Briefcase },
+  { to: "/admin/candidates", label: "Candidates", icon: Users },
+  { to: "/admin/orgs", label: "Organizations", icon: Building2 },
+  { to: "/admin/settings", label: "Settings", icon: Settings },
+];
+
+export function TopNav() {
+  const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch
+  useEffect(() => setMounted(true), []);
+
+  const isDark = theme === "dark";
+
+  return (
+    <header
+      className="sticky top-0 z-40 backdrop-blur-xl transition-colors"
+      style={{ background: "var(--surface-card)", borderBottom: "1px solid var(--surface-border)" }}
+    >
+      <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4 sm:px-6 lg:px-8">
+        {/* Logo */}
+        <Link href="/admin/dashboard" className="flex items-center gap-2.5 shrink-0">
+          <svg viewBox="0 0 36 36" className="h-8 w-8">
+            <circle
+              cx="18" cy="18" r="14"
+              fill="none" stroke="#1C99BF" strokeWidth="2.5" opacity="0.25"
+            />
+            <motion.circle
+              cx="18" cy="18" r="14"
+              fill="none" stroke="#1C99BF" strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray="44 88"
+              transform="rotate(-90 18 18)"
+              initial={{ strokeDashoffset: 88 }}
+              animate={{ strokeDashoffset: 0 }}
+              transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+              style={{ filter: "drop-shadow(0 0 4px rgba(28,153,191,0.6))" }}
+            />
+          </svg>
+          <div>
+            <span className="font-mono text-base font-bold" style={{ color: "#1C99BF" }}>OZI</span>
+            <span className="ml-0.5 font-mono text-base font-bold text-foreground/50"> Recruiter</span>
+          </div>
+        </Link>
+
+        {/* Center nav */}
+        <nav className="hidden md:flex items-center gap-1">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname.startsWith(item.to);
+            return (
+              <Link
+                key={item.to}
+                href={item.to}
+                className="relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                style={{ color: isActive ? "#1C99BF" : undefined }}
+                data-inactive={!isActive || undefined}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="nav-active"
+                    className="-z-10 absolute inset-0 rounded-lg"
+                    style={{ background: "rgba(28,153,191,0.1)" }}
+                    transition={{ type: "spring", duration: 0.4 }}
+                  />
+                )}
+                <Icon className={`h-4 w-4 ${!isActive ? "text-muted-foreground" : ""}`} />
+                <span className={isActive ? "" : "text-muted-foreground"}>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Right side */}
+        <div className="flex items-center gap-2">
+          {/* Theme toggle */}
+          {mounted && (
+            <button
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+              className="relative rounded-lg p-2 text-muted-foreground hover:text-heading transition-colors"
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              <motion.div
+                key={theme}
+                initial={{ scale: 0.7, opacity: 0, rotate: -30 }}
+                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                transition={{ duration: 0.25 }}
+              >
+                {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </motion.div>
+            </button>
+          )}
+
+          {/* Bell */}
+          <button className="relative rounded-lg p-2 text-muted-foreground hover:text-heading transition-colors">
+            <Bell className="h-5 w-5" />
+            <span
+              className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full"
+              style={{ background: "#1C99BF", boxShadow: "0 0 8px #1C99BF" }}
+            />
+          </button>
+
+          {/* Avatar pill */}
+          <div
+            className="flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-3 transition-colors"
+            style={{
+              background: "var(--surface-card)",
+              borderColor: "var(--surface-border)",
+            }}
+          >
+            <div
+              className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white"
+              style={{ background: "linear-gradient(135deg, #1C99BF, #3DAFCC)" }}
+            >
+              AD
+            </div>
+            <div className="hidden sm:block">
+              <p className="text-xs font-semibold text-heading leading-none">Admin</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">Recruiter</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile bottom nav */}
+      <div
+        className="flex items-center justify-around border-t px-2 py-1 md:hidden"
+        style={{ borderColor: "var(--surface-border)" }}
+      >
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname.startsWith(item.to);
+          return (
+            <Link
+              key={item.to}
+              href={item.to}
+              className="flex flex-col items-center gap-1 px-4 py-2 text-[10px] font-medium transition-colors"
+              style={{ color: isActive ? "#1C99BF" : "#9CA3B0" }}
+            >
+              <Icon className="h-5 w-5" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </div>
+    </header>
+  );
+}

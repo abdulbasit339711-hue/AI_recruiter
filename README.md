@@ -17,7 +17,7 @@ AI-Recruiter is an end-to-end automated recruitment platform designed to ingest 
 
 - `app/`: FastAPI backend and core logic (Scoring, LLM, Database).
 - `frontend/`: Next.js 15 web application.
-- `pipecat-quickstart/`: Real-time voice interview agent sub-project.
+- `voice-agent/`: Real-time voice interview agent sub-project.
 - `tests/`: End-to-end and unit tests.
 
 ## 🛠️ Quick Start
@@ -35,7 +35,7 @@ AI-Recruiter is an end-to-end automated recruitment platform designed to ingest 
 3. `npm run dev`
 
 ### Voice Agent (Pipecat)
-See [pipecat-quickstart/README.md](./pipecat-quickstart/README.md) for detailed setup.
+See [voice-agent/README.md](./voice-agent/README.md) for detailed setup.
 
 ## 📄 Documentation
 

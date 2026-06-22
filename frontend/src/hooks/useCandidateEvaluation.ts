@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getCandidateEventsUrl } from "@/lib/api";
+import { openReconnectingSSE } from "@/lib/sse";
 import type { CandidateSSEPayload, CandidateStatus } from "@/types";
 import { isTerminalStatus } from "@/types";
 
@@ -24,7 +25,6 @@ export function useCandidateEvaluation(
   const [isConnected, setIsConnected] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
   const onTerminalRef = useRef(options.onTerminal);
   onTerminalRef.current = options.onTerminal;
 
@@ -49,46 +49,39 @@ export function useCandidateEvaluation(
     setIsComplete(false);
     setIsConnected(false);
 
-    const url = getCandidateEventsUrl(candidateId);
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
+    const handle = openReconnectingSSE(() => getCandidateEventsUrl(candidateId), {
+      // Transient drops auto-reconnect; we only flip the connected flag (no hard error).
+      onError: () => setIsConnected(false),
+      setup: (es, done) => {
+        es.addEventListener("connected", () => setIsConnected(true));
 
-    es.addEventListener("connected", () => {
-      setIsConnected(true);
+        es.addEventListener("evaluation_update", (ev) => {
+          try {
+            handlePayload(JSON.parse((ev as MessageEvent).data) as CandidateSSEPayload);
+          } catch {
+            setError("Failed to parse evaluation event");
+          }
+        });
+
+        es.addEventListener("evaluation_complete", (ev) => {
+          try {
+            const data = JSON.parse((ev as MessageEvent).data) as {
+              candidate_id: number;
+              status: CandidateStatus;
+            };
+            setStatus(data.status);
+            setIsComplete(true);
+            queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
+            onTerminalRef.current?.(data.candidate_id, data.status);
+          } catch {
+            setError("Failed to parse completion event");
+          }
+          done(); // evaluation finished — stop the stream for good
+        });
+      },
     });
 
-    es.addEventListener("evaluation_update", (ev) => {
-      try {
-        const data = JSON.parse(ev.data) as CandidateSSEPayload;
-        handlePayload(data);
-      } catch {
-        setError("Failed to parse evaluation event");
-      }
-    });
-
-    es.addEventListener("evaluation_complete", (ev) => {
-      try {
-        const data = JSON.parse(ev.data) as { candidate_id: number; status: CandidateStatus };
-        setStatus(data.status);
-        setIsComplete(true);
-        queryClient.invalidateQueries({ queryKey: ["candidate", candidateId] });
-        onTerminalRef.current?.(data.candidate_id, data.status);
-      } catch {
-        setError("Failed to parse completion event");
-      }
-      es.close();
-    });
-
-    es.onerror = () => {
-      setError("Connection to evaluation stream lost");
-      setIsConnected(false);
-      es.close();
-    };
-
-    return () => {
-      es.close();
-      eventSourceRef.current = null;
-    };
+    return () => handle.close();
   }, [candidateId, handlePayload, queryClient]);
 
   return {

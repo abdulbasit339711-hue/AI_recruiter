@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1
+# FastAPI backend + 3-tier scoring engine. Build from the repo ROOT:
+#   docker build -f Dockerfile.backend -t ai-recruiter-backend .
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# build-essential covers any sdist fallbacks (thinc/blis); removed after install.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Dependencies first for layer caching. psycopg2-binary is the driver for the
+# shared Postgres (DATABASE_URL=postgresql+psycopg2://...); the repo's
+# requirements.txt omits it because the default is SQLite. spaCy needs its
+# Tier-1 parser model downloaded at build time.
+COPY requirements.txt ./
+RUN pip install -r requirements.txt \
+    && pip install "psycopg2-binary>=2.9.9" \
+    && python -m spacy download en_core_web_sm
+
+# httpx<0.28: groq==0.9.0 passes the `proxies` kwarg that httpx removed in 0.28,
+# which otherwise breaks Groq client init (Tier-3 LLM) in a clean install. Kept as
+# its own layer so the heavy deps above stay cached.
+RUN pip install "httpx<0.28"
+
+# recruiter_shared: app/interview_links.py shares the invite-token codec with the
+# voice agent via this package. It's not in requirements.txt (it's a path dep), so
+# install it explicitly or the interview-invite endpoint 500s with ModuleNotFoundError.
+COPY packages/shared /opt/recruiter-shared
+RUN pip install /opt/recruiter-shared
+
+# Pre-bake the Tier-2 embedding model into the image so the container starts fast
+# and without a network round-trip (otherwise SentenceTransformer downloads
+# all-MiniLM-L6-v2 on first boot, adding ~1 min to every cold start). HF_HOME is set
+# before the download so the cache lands here, and persists at runtime.
+ENV HF_HOME=/opt/hf-cache
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# Application code (scoring engine reads app/config.yaml).
+COPY app/ ./app/
+COPY scripts/ ./scripts/
+
+# Where interview-audio recordings are read from (shared volume with the voice agent).
+RUN mkdir -p /data/recordings
+ENV RECORDINGS_DIR=/data/recordings
+
+EXPOSE 8000
+
+# Tables are created + additive migrations applied in the FastAPI lifespan on boot.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

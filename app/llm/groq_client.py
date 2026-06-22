@@ -23,6 +23,19 @@ logger = logging.getLogger(__name__)
 _groq_client: Any = None
 _circuit: CircuitBreaker | None = None
 
+# Rough Groq pricing (USD per token), matching the voice agent's estimates:
+# ~$0.20 / 1M input tokens, ~$1.00 / 1M output tokens.
+GROQ_INPUT_COST_PER_TOKEN = 0.20 / 1_000_000
+GROQ_OUTPUT_COST_PER_TOKEN = 1.00 / 1_000_000
+
+
+def _usage_to_cost(prompt_tokens: int, completion_tokens: int) -> float:
+    return round(
+        prompt_tokens * GROQ_INPUT_COST_PER_TOKEN
+        + completion_tokens * GROQ_OUTPUT_COST_PER_TOKEN,
+        6,
+    )
+
 
 class EducationModel(BaseModel):
     degree: str = ""
@@ -44,6 +57,8 @@ class Tier3Evaluation(BaseModel):
     status: str = ""
     summary: str = ""
     evidence: List[str] = Field(default_factory=list)
+    # Résumé-tailored interview questions the AI interviewer asks as presets.
+    interview_questions: List[str] = Field(default_factory=list)
 
     @field_validator("summary")
     @classmethod
@@ -109,7 +124,8 @@ def _build_system_prompt(custom_prompt: Optional[str], llm_wt: int) -> str:
         f'  "tier3_score": <integer 0-{llm_wt}>,\n'
         '  "status": "<Shortlisted|Reviewed|Rejected>",\n'
         '  "summary": "<100-150 word recruiter-style summary>",\n'
-        '  "evidence": ["<concrete evidence>", "..."]\n'
+        '  "evidence": ["<concrete evidence>", "..."],\n'
+        '  "interview_questions": ["<résumé-specific interview question>", "..."]\n'
         "}"
     )
     output_rules = (
@@ -117,7 +133,11 @@ def _build_system_prompt(custom_prompt: Optional[str], llm_wt: int) -> str:
         f"- Return ONLY valid JSON matching:\n{schema}\n"
         "- No markdown, code fences, or text outside JSON.\n"
         "- summary MUST be 100-150 words: direct recruiter tone, strongest positive signal, "
-        "biggest gap, experience relevance, role alignment."
+        "biggest gap, experience relevance, role alignment.\n"
+        "- interview_questions: 4-6 questions TAILORED to THIS candidate — probe their "
+        "specific projects, companies, and claims from the résumé, and the biggest gap vs "
+        "the job description. Phrase each as the interviewer would ask it aloud (one "
+        "sentence, no preamble)."
     )
 
     if custom_prompt and custom_prompt.strip():
@@ -139,7 +159,8 @@ def _call_groq_api(
     model_name: str,
     system_prompt: str,
     user_prompt: str,
-) -> str:
+) -> tuple[str, Dict[str, Any]]:
+    """Call Groq and return (content, usage) where usage holds token counts + cost."""
     response = client.chat.completions.create(
         model=model_name,
         messages=[
@@ -149,7 +170,17 @@ def _call_groq_api(
         temperature=0.2,
         response_format={"type": "json_object"},
     )
-    return response.choices[0].message.content
+    raw_usage = getattr(response, "usage", None)
+    prompt_tokens = int(getattr(raw_usage, "prompt_tokens", 0) or 0)
+    completion_tokens = int(getattr(raw_usage, "completion_tokens", 0) or 0)
+    total_tokens = int(getattr(raw_usage, "total_tokens", prompt_tokens + completion_tokens) or 0)
+    usage = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "cost_usd": _usage_to_cost(prompt_tokens, completion_tokens),
+    }
+    return response.choices[0].message.content, usage
 
 
 def evaluate_with_llm(
@@ -184,14 +215,17 @@ def evaluate_with_llm(
     last_error: Optional[str] = None
     for attempt in range(retries):
         try:
-            content = _call_groq_api(client, model_name, system_prompt, user_prompt)
+            content, usage = _call_groq_api(client, model_name, system_prompt, user_prompt)
             circuit.record_success()
             parsed = parse_llm_json(content)
             score = float(parsed.get("tier3_score", 0))
             parsed["tier3_score"] = max(0.0, min(llm_wt, score))
 
             validated = Tier3Evaluation(**parsed)
-            return validated.model_dump()
+            result = validated.model_dump()
+            result["is_fallback"] = False  # genuine LLM evaluation
+            result["usage"] = usage  # token counts + estimated cost for HR visibility
+            return result
 
         except (ValidationError, json.JSONDecodeError, KeyError) as parse_err:
             last_error = str(parse_err)
@@ -215,13 +249,23 @@ def simulate_tier3_evaluation(
     max_score: int = 30,
     error_reason: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Keyword-overlap fallback when Groq is unavailable."""
+    """Keyword-overlap fallback when Groq is unavailable.
+
+    The result is flagged ``is_fallback: True`` so the score is never mistaken for a
+    real LLM evaluation downstream.
+    """
+    logger.warning("Tier-3 FALLBACK score in use (LLM unavailable): %s", error_reason or "unknown reason")
     resume_lower = resume_text.lower()
     jd_words = set(re.findall(r"\b[a-z]{4,15}\b", jd_text.lower()))
     resume_words = set(re.findall(r"\b[a-z]{4,15}\b", resume_lower))
     common_words = jd_words.intersection(resume_words)
     match_count = len(common_words)
-    simulated_score = min(max_score, 10 + int(match_count / 2))
+    # Scale by how much of the JD's vocabulary the resume covers, so different resumes
+    # spread across the range instead of all clustering at a flat floor (the old
+    # `10 + match_count/2` collapsed to ~10 whenever the JD was short). A small base
+    # keeps a weak-but-present match from scoring zero.
+    coverage = (match_count / len(jd_words)) if jd_words else 0.0
+    simulated_score = round(min(float(max_score), max_score * (0.2 + 0.8 * coverage)), 1)
 
     evidence = []
     for keyword, label in [
@@ -264,4 +308,6 @@ def simulate_tier3_evaluation(
         "status": status,
         "summary": summary,
         "evidence": evidence,
+        "is_fallback": True,
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
     }

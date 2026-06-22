@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 
 export default function AdminPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-start bg-gradient-to-b from-gray-900 to-gray-800 p-8 pt-16">
-      <h1 className="mb-6 text-3xl font-bold text-white">Admin Panel</h1>
+    <main className="flex flex-col items-center justify-start p-8 pt-16">
+      <h1 className="mb-6 font-display text-3xl font-bold text-heading">Admin Panel</h1>
       <div className="flex flex-col gap-4">
         <Link href="/admin/jobs" legacyBehavior passHref>
           <Button size="lg">Manage Jobs</Button>

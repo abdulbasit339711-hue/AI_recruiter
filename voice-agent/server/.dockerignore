@@ -1,0 +1,29 @@
+# Keep secrets and local cruft out of the build context entirely.
+# Anything matched here can never be COPYed into an image layer.
+
+# Secrets / local env
+.env
+.env.*
+*.env
+
+# Python caches & virtualenvs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Tests, docs, and runtime artifacts not needed in the image
+tests/
+*.md
+data/
+recordings/
+*.wav
+*.log
+logs/
+
+# VCS
+.git/
+.gitignore

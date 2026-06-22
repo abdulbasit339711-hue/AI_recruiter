@@ -1,6 +1,9 @@
 import io
+import logging
 import re
 import pdfplumber
+
+logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 MIN_TEXT_LENGTH = 20  # Accept shorter text extracts (still require some content)
@@ -21,8 +24,9 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
                 if page_text:
                     text_content.append(page_text)
     except Exception as e:
-        raise IngestionError(f"Failed to parse PDF file structure: {str(e)}")
-        
+        logger.warning("PDF parse failed: %s", e)
+        raise IngestionError("Failed to parse the PDF. The file may be corrupt or unsupported.")
+
     return "\n".join(text_content).strip()
 
 def is_valid_resume_structure(text: str) -> bool:
@@ -66,58 +70,12 @@ def validate_and_extract(file_bytes: bytes, filename: str) -> str:
         raise IngestionError(
             "Scanned or image-only PDF detected. Please upload a PDF containing searchable text.",
         )
-        
-                                    # 5. Strict professional CV/resume structure validation
+
+    # 5. Strict professional CV/resume structure validation
     if not is_valid_resume_structure(raw_text):
         raise IngestionError(
             "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
             400,
         )
-    return raw_text
-    if not is_valid_resume_structure(raw_text):
-        raise IngestionError(
-            "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
-            400,
-        )
-    if not is_valid_resume_structure(raw_text):
-        raise IngestionError(
-            "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
-            400,
-        )
-    if not is_valid_resume_structure(raw_text):
-        raise IngestionError(
-            "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
-            400,
-        )
-    if not is_valid_resume_structure(raw_text):
-        raise IngestionError(
-            "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
-            400,
-        )
-        if not is_valid_resume_structure(raw_text):
-            raise IngestionError(
-                "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
-                400,
-            )
-    if not is_valid_resume_structure(raw_text):
-        raise IngestionError(
-            "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
-            400,
-        )
-    if not is_valid_resume_structure(raw_text):
-        raise IngestionError(
-            "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
-            400
-        )
-        raise IngestionError(
-            "Please upload a valid professional CV/resume with standard sections (Experience, Education, Skills) and a contact email.",
-            400
-        )
-        raise IngestionError(
-            "Validation failed: The document does not appear to be a professional CV/resume. "
-            "Please ensure your PDF contains standard sections (e.g., Experience, Education, Skills) "
-            "and valid contact information (email address).",
-            400
-        )
-        
+
     return raw_text

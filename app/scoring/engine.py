@@ -21,6 +21,16 @@ def _pipeline_cfg() -> dict:
     return config.get("pipeline", {})
 
 
+def _weighted_total(candidate: Candidate, job) -> float:
+    """Final score = tier1*w1 + tier2*w2 + tier3*w3 using the job's per-tier weights.
+    Weights default to 1.0 (→ the plain tier sum), so behaviour is unchanged unless HR
+    sets custom weights for the role."""
+    w1 = (getattr(job, "tier1_weight", None) if job else None) or 1.0
+    w2 = (getattr(job, "tier2_weight", None) if job else None) or 1.0
+    w3 = (getattr(job, "tier3_weight", None) if job else None) or 1.0
+    return round(candidate.tier1 * w1 + candidate.tier2 * w2 + candidate.tier3 * w3, 2)
+
+
 def _resolve_final_status(total_score: float, llm_status: str | None) -> str:
     cfg = _pipeline_cfg()
     shortlisted_min = float(cfg.get("shortlisted_min_score", 75.0))
@@ -45,6 +55,15 @@ def _apply_tier1_contact(candidate: Candidate, t1: dict) -> None:
         name = t1.get("name")
     if name and not candidate.name:
         candidate.name = name
+    # Enriched profile fields from Tier 1 extraction
+    if t1.get("github_url") and not candidate.github_url:
+        candidate.github_url = t1["github_url"]
+    if t1.get("linkedin_url") and not candidate.linkedin_url:
+        candidate.linkedin_url = t1["linkedin_url"]
+    if t1.get("projects"):
+        candidate.projects = json.dumps(t1["projects"])
+    if t1.get("certifications"):
+        candidate.certifications = json.dumps(t1["certifications"])
 
 
 def _apply_tier3_fields(candidate: Candidate, t3: dict) -> None:
@@ -61,7 +80,17 @@ def _apply_tier3_fields(candidate: Candidate, t3: dict) -> None:
     candidate.tier3 = float(t3.get("tier3_score", 0.0))
     candidate.summary = t3.get("summary", "")
     candidate.evidence = json.dumps(t3.get("evidence", []))
+    candidate.interview_questions = json.dumps(t3.get("interview_questions", []))
+    try:
+        candidate.years_experience = float(t3.get("total_years_experience", 0) or 0)
+    except (TypeError, ValueError):
+        candidate.years_experience = None
     candidate.evaluation_data = json.dumps(t3)
+
+    usage = t3.get("usage") or {}
+    candidate.llm_prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+    candidate.llm_completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+    candidate.llm_cost_usd = float(usage.get("cost_usd", 0.0) or 0.0)
 
 
 def _run_tier1(resume_text: str) -> dict:
@@ -88,6 +117,7 @@ def evaluate_candidate_pipeline(
     target_jd = jd_text
     custom_prompt = None
     job_id = candidate.job_id
+    job = None
 
     if candidate.job_id:
         job = db.query(Job).filter(Job.id == candidate.job_id).first()
@@ -131,7 +161,7 @@ def evaluate_candidate_pipeline(
 
         if combined < tier3_threshold:
             candidate.tier3 = 0.0
-            candidate.total_score = round(combined, 2)
+            candidate.total_score = _weighted_total(candidate, job)
             candidate.status = S.UNGRADED
             candidate.summary = (
                 f"Automated screening completed without LLM evaluation "
@@ -155,10 +185,7 @@ def evaluate_candidate_pipeline(
         t3 = evaluate_with_llm(resume_text, target_jd, custom_prompt=custom_prompt)
         _apply_tier3_fields(candidate, t3)
 
-        candidate.total_score = round(
-            candidate.tier1 + candidate.tier2 + candidate.tier3,
-            2,
-        )
+        candidate.total_score = _weighted_total(candidate, job)
         candidate.status = _resolve_final_status(
             candidate.total_score,
             t3.get("status"),

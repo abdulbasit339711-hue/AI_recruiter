@@ -5,7 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Job } from "@/types";
 
-type UpdateJobPayload = Partial<Omit<Job, 'id'>> & { id: number };
+// `id` identifies the job; `created_at` is server-managed and not editable.
+type UpdateJobPayload = Partial<Omit<Job, 'id' | 'created_at'>> & { id: number };
 
 export const useUpdateJob = () => {
   const queryClient = useQueryClient();

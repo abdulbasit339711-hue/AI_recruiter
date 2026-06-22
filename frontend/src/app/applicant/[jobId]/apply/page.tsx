@@ -2,9 +2,16 @@
 
 import React, { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Loader2, FileText, UploadCloud, CheckCircle2 } from "lucide-react";
 import { useJob } from "@/hooks/useJob";
 import { useUploadResume } from "@/hooks/useUploadResume";
+import { IqTest } from "@/components/applicant/IqTest";
 import { Button } from "@/components/ui/button";
+import { Swap } from "@/components/ui/motion";
+import { formatDuration } from "@/lib/utils";
+import type { IqSubmitResponse } from "@/types";
+
+type Step = "iq" | "upload";
 
 export default function ApplyPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -13,54 +20,136 @@ export default function ApplyPage() {
   const { data: job, isLoading, isError } = useJob(numericId);
   const upload = useUploadResume(numericId);
   const [file, setFile] = useState<File | null>(null);
+  const [step, setStep] = useState<Step>("iq");
+  const [iq, setIq] = useState<IqSubmitResponse | null>(null);
+
+  const onIqComplete = (result: IqSubmitResponse | null) => {
+    setIq(result);
+    setStep("upload");
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
     try {
-      const result = await upload.mutateAsync(file);
-      router.push(`/applicant/${jobId}/apply/success?candidateId=${result.id}`);
+      await upload.mutateAsync({ file, iqToken: iq?.result_token });
+      router.push(`/applicant/${jobId}/apply/success`);
     } catch {
       /* error shown below */
     }
   };
 
   if (isLoading) {
-    return <div className="mx-auto mt-8 h-48 max-w-xl animate-pulse rounded-md border border-white/10 bg-card/80" />;
+    return <div className="mx-auto mt-8 h-48 max-w-xl animate-pulse glass rounded-2xl" />;
   }
 
   if (isError || !job) {
-    return <p className="p-8 text-red-300">Could not load job.</p>;
+    return <p className="p-8 text-weak">Could not load job.</p>;
   }
 
   return (
     <section className="mx-auto max-w-xl space-y-6 p-4 py-8">
       <div>
-        <p className="text-sm text-muted-foreground">{job.department}</p>
-        <h1 className="mt-2 text-2xl font-semibold">Apply for {job.title}</h1>
+        <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">{job.department}</p>
+        <h1 className="mt-2 font-display text-[28px] font-bold leading-tight tracking-tight text-heading">Apply for {job.title}</h1>
+        {/* Two-step progress */}
+        <div className="mt-4 flex items-center gap-2.5" aria-label={`Step ${step === "iq" ? 1 : 2} of 2`}>
+          {[
+            { key: "iq", label: "Aptitude screen" },
+            { key: "upload", label: "Résumé upload" },
+          ].map((s, i) => {
+            const active = s.key === step;
+            const done = step === "upload" && s.key === "iq";
+            return (
+              <React.Fragment key={s.key}>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs font-semibold ${
+                      active || done ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"
+                    }`}
+                  >
+                    {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
+                  </span>
+                  <span className={`text-sm ${active ? "font-semibold text-heading" : "text-muted-foreground"}`}>{s.label}</span>
+                </div>
+                {i === 0 && <div className="h-px w-6 bg-border" />}
+              </React.Fragment>
+            );
+          })}
+        </div>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-4 rounded-md border border-white/10 bg-card/80 p-5">
-        <label className="block">
-          <span className="text-sm font-medium">Resume (PDF, max 5MB)</span>
-          <input
-            type="file"
-            accept=".pdf,application/pdf"
-            className="mt-2 block w-full rounded-md border border-white/10 bg-background p-3 text-sm"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
+      <Swap k={step === "iq" ? "iq" : upload.isPending ? "loading" : "upload"}>
+      {step === "iq" ? (
+        <IqTest jobId={numericId} onComplete={onIqComplete} />
+      ) : upload.isPending ? (
+        <UploadingLoader fileName={file?.name} />
+      ) : (
+        <form onSubmit={onSubmit} className="space-y-4 glass rounded-2xl p-5">
+          {iq && (
+            <div className="flex items-center gap-3 rounded-xl border p-3 text-sm" style={{ borderColor: "var(--strong)", background: "var(--strong-bg)", color: "var(--strong-text)" }}>
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              Aptitude screen complete — {iq.correct}/{iq.total} correct, scored {Math.round(iq.score)}% in {formatDuration(iq.time_seconds)}.
+            </div>
+          )}
 
-        {upload.isError && (
-          <p className="rounded-md border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200">
-            {upload.error?.message || "Upload failed"}
-          </p>
-        )}
+          <label className="block">
+            <span className="text-sm font-medium text-heading">Résumé (PDF, max 5MB)</span>
+            <div className="relative mt-2 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-foreground/[0.03] px-4 py-8 text-center transition-colors hover:border-primary/50 focus-within:border-primary/60">
+              <UploadCloud className="h-7 w-7 text-primary" />
+              <p className="text-sm text-foreground">{file ? file.name : "Drag your PDF here, or click to browse"}</p>
+              {!file && <p className="text-xs text-muted-foreground">We only accept PDF, up to 5MB.</p>}
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+          </label>
 
-        <Button type="submit" className="w-full" size="lg" disabled={!file || upload.isPending}>
-          {upload.isPending ? "Uploading..." : "Submit application"}
-        </Button>
-      </form>
+          {upload.isError && (
+            <p className="rounded-xl border p-3 text-sm" style={{ borderColor: "var(--weak)", background: "var(--weak-bg)", color: "var(--weak-text)" }}>
+              {upload.error?.message || "Upload failed"}
+            </p>
+          )}
+
+          <Button type="submit" className="w-full" size="lg" disabled={!file}>
+            Submit application
+          </Button>
+        </form>
+      )}
+      </Swap>
     </section>
+  );
+}
+
+/** Animated loader shown while the resume is being uploaded & queued. */
+function UploadingLoader({ fileName }: { fileName?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-5 glass rounded-2xl p-10 text-center">
+      {/* Pulsing ring + spinner with a document icon at the center */}
+      <div className="relative flex h-20 w-20 items-center justify-center">
+        <span className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
+        <span className="absolute inset-2 rounded-full bg-primary/10" />
+        <Loader2 className="absolute h-20 w-20 animate-spin text-primary/70" strokeWidth={1.25} />
+        <FileText className="relative h-7 w-7 text-primary" />
+      </div>
+
+      <div>
+        <p className="flex items-center justify-center gap-2 text-base font-medium">
+          <UploadCloud className="h-4 w-4 text-primary" /> Uploading your resume…
+        </p>
+        {fileName && <p className="mt-1 truncate text-xs text-muted-foreground">{fileName}</p>}
+        <p className="mt-2 text-sm text-muted-foreground">
+          Please don&apos;t close this window — this only takes a moment.
+        </p>
+      </div>
+
+      {/* Indeterminate progress bar */}
+      <div className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-foreground/10">
+        <div className="h-full w-1/3 animate-[loading_1.2s_ease-in-out_infinite] rounded-full bg-primary" />
+      </div>
+    </div>
   );
 }

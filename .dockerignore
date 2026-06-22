@@ -1,0 +1,54 @@
+# Build context excludes for the root-context images (backend + voice).
+# The frontend has its own frontend/.dockerignore.
+
+# VCS / CI
+.git/
+.github/
+.gitignore
+
+# Python caches & virtualenvs
+**/__pycache__/
+*.py[cod]
+**/venv/
+**/.venv/
+.pytest_cache/
+**/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node (frontend is built in its own context; never ship it into the python images)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+**/node_modules/
+
+# Secrets / local env — injected at runtime, never baked into a layer
+.env
+.env.*
+**/.env
+**/.env.*
+!*.env.example
+
+# Local databases & runtime data (candidate PII, recordings)
+*.db
+*.db-journal
+data/
+**/recordings/
+*.wav
+
+# Logs & generated artifacts
+logs/
+**/logs/
+*.log
+project_code_summary.txt
+recruitment_report.md
+frontend/interview-links.json
+
+# Model weights (ultralytics auto-downloads; mount at runtime if you want to pin)
+*.pt
+
+# Docker files themselves
+docker-compose*.yml
+Dockerfile*
+**/Dockerfile*
+.dockerignore

@@ -1,28 +1,38 @@
-import type { CandidateStatus } from "@/types";
-
-const STATUS_STYLES: Record<string, string> = {
-  Queued: "border-sky-400/25 bg-sky-400/10 text-sky-200",
-  Processing: "border-cyan-400/25 bg-cyan-400/10 text-cyan-200",
-  Shortlisted: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
-  Reviewed: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-  Rejected: "border-rose-400/25 bg-rose-400/10 text-rose-200",
-  Ungraded: "border-slate-400/25 bg-slate-400/10 text-slate-200",
-  Error: "border-red-400/25 bg-red-400/10 text-red-200",
-  Pending: "border-sky-400/25 bg-sky-400/10 text-sky-200",
-  Processed: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
-  Failed: "border-red-400/25 bg-red-400/10 text-red-200",
-  Active: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
-  Archived: "border-slate-400/25 bg-slate-400/10 text-slate-200",
+type StatusBadgeProps = {
+  status: string;
 };
 
-export function StatusBadge({ status }: { status: CandidateStatus | "Active" | "Archived" | string }) {
+function statusColor(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "hired" || s === "strong") return "#34C28A";
+  if (s === "processed" || s === "shortlisted" || s === "in interview") return "#1C99BF";
+  if (s === "pending" || s === "pending review" || s === "promising") return "#F5B544";
+  if (s === "failed" || s === "rejected" || s === "weak") return "#F25C7C";
+  if (s === "archived") return "#556070";
+  return "#9CA3B0";
+}
+
+export function StatusBadge({ status }: StatusBadgeProps) {
+  const color = statusColor(status);
   return (
     <span
-      className={`inline-flex h-6 items-center rounded-full border px-2.5 text-xs font-medium ${
-        STATUS_STYLES[status] ?? "border-white/15 bg-white/5 text-muted-foreground"
-      }`}
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+      style={{
+        background: `${color}26`,
+        color,
+        border: `1px solid ${color}33`,
+      }}
     >
+      <span
+        className="h-1.5 w-1.5 rounded-full shrink-0"
+        style={{
+          background: color,
+          boxShadow: `0 0 6px ${color}80`,
+        }}
+      />
       {status}
     </span>
   );
 }
+
+export default StatusBadge;

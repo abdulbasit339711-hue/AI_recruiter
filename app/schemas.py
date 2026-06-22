@@ -1,5 +1,54 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
+
+
+# ── Pre-application IQ screen ──────────────────────────────────────────────────
+class IqQuestionPublic(BaseModel):
+    id: str
+    prompt: str
+    options: List[str]
+
+
+class IqTestResponse(BaseModel):
+    questions: List[IqQuestionPublic]
+    test_token: str
+    time_limit_seconds: int
+    total: int
+
+
+class IqSubmitRequest(BaseModel):
+    test_token: str = Field(..., max_length=4096)
+    answers: Dict[str, int]              # {question_id: chosen_option_index}
+    times: Optional[Dict[str, int]] = None  # {question_id: seconds spent} (client-reported)
+
+    @field_validator("answers")
+    @classmethod
+    def _bound_answers(cls, v: Dict[str, int]) -> Dict[str, int]:
+        if len(v) > 100:
+            raise ValueError("too many answers")
+        for qid, idx in v.items():
+            if len(qid) > 64:
+                raise ValueError("question id too long")
+            if not (0 <= idx < 50):
+                raise ValueError("option index out of range")
+        return v
+
+    @field_validator("times")
+    @classmethod
+    def _bound_times(cls, v):
+        if v and len(v) > 100:
+            raise ValueError("too many time entries")
+        return v
+
+
+class IqSubmitResponse(BaseModel):
+    correct: int
+    total: int
+    accuracy: float       # raw correct/total percentage
+    score: float          # time-adjusted percentage 0–100
+    time_seconds: int     # server-measured time taken
+    detail: List[dict]    # per-question breakdown
+    result_token: str
 
 class StatusUpdateRequest(BaseModel):
     hr_status: str
@@ -58,8 +107,10 @@ class CandidateResponse(BaseModel):
     evaluation_data: Optional[str] = None
     current_role: Optional[str] = None
     companies: Optional[str] = None
+    years_experience: Optional[float] = None
     skills_matched: Optional[str] = None
     skills_missing: Optional[str] = None
+    interview_questions: Optional[str] = None
     status: str
     created_at: Optional[str] = None
     
@@ -69,4 +120,42 @@ class CandidateResponse(BaseModel):
     hr_score_override: Optional[float] = None
     status_history: Optional[str] = None
 
+    # Pre-application IQ screen (server-scored; recorded, never gates).
+    iq_score: Optional[float] = None
+    iq_correct: Optional[int] = None
+    iq_total: Optional[int] = None
+    iq_time_seconds: Optional[int] = None
+    iq_attempted_at: Optional[str] = None
+    iq_details: Optional[str] = None  # JSON: per-question breakdown
+
+    # Availability scheduling fields
+    availability_invited_at: Optional[str] = None
+    availability_response: Optional[str] = None
+    availability_submitted_at: Optional[str] = None
+    interview_confirmed_slot: Optional[str] = None
+    interview_confirmed_at: Optional[str] = None
+    interview_token: Optional[str] = None
+
+    # Enriched resume profile (extracted during Tier 1 scoring)
+    github_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    projects: Optional[str] = None       # JSON list of project names
+    certifications: Optional[str] = None  # JSON list of certifications
+
+    # Voice AI interview result
+    interview_completed_at: Optional[str] = None
+    interview_phase1_score: Optional[float] = None
+    interview_phase2_score: Optional[float] = None
+    interview_overall_score: Optional[float] = None
+    interview_passed: Optional[bool] = None
+
     model_config = {"from_attributes": True}
+
+
+class AvailabilitySubmit(BaseModel):
+    selected_slot: Optional[str] = None
+    custom_time: Optional[str] = None
+
+
+class SlotConfirm(BaseModel):
+    slot: Optional[str] = None

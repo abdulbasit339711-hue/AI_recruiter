@@ -1,0 +1,135 @@
+# AI-Recruiter full stack.
+#   cp .env.docker.example .env   # fill in API keys + secrets
+#   docker compose up --build
+#
+# Networking (internal compose DNS): frontend -> backend:8000, backend/voice -> postgres:5432.
+# The browser reaches the voice service directly on the host (NEXT_PUBLIC_VOICE_URL).
+# Secrets come from the host env / .env via ${VAR} substitution — hostnames are hardcoded
+# here so a localhost value in your existing .env can't leak into the containers.
+
+services:
+  postgres:
+    restart: unless-stopped
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-ai_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+      POSTGRES_DB: ${DB_NAME:-ai_recruiter}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Not published to the host (5432 is typically taken by a local Postgres).
+    # Internal services reach it as postgres:5432; for a host DB client use
+    # `docker compose exec postgres psql -U ai_user ai_recruiter`, or add a
+    # `ports: ["5433:5432"]` mapping to a free host port.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ai_user} -d ${DB_NAME:-ai_recruiter}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${DB_USER:-ai_user}:${DB_PASSWORD:-secure_password}@postgres:5432/${DB_NAME:-ai_recruiter}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      INTERVIEW_LINK_SECRET: ${INTERVIEW_LINK_SECRET}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      RECORDINGS_DIR: /data/recordings
+      SMTP_EMAIL: ${SMTP_EMAIL:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+    volumes:
+      - recordings:/data/recordings
+    ports:
+      - "8000:8000"
+
+  voice:
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile.voice
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Voice runtime (asyncpg) + alembic (psycopg2) both build from DB_*.
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-ai_user}
+      DB_PASSWORD: ${DB_PASSWORD:-secure_password}
+      DB_NAME: ${DB_NAME:-ai_recruiter}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      CARTESIA_API_KEY: ${CARTESIA_API_KEY}
+      CARTESIA_VOICE_ID: ${CARTESIA_VOICE_ID:-71a7ad14-091c-4e8e-a314-022ece01c121}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      # Must MATCH the backend's values (token verification / operator auth).
+      INTERVIEW_LINK_SECRET: ${INTERVIEW_LINK_SECRET}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      # Require the operator bearer token on /chat, /interview/configure|end, /settings,
+      # /pipeline. Candidate routes (/interview/validate, /events) stay open. On by
+      # default now that the stack may be exposed via a tunnel.
+      VOICE_REQUIRE_AUTH: ${VOICE_REQUIRE_AUTH:-true}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      RECORDINGS_DIR: /data/recordings
+      PIPELINE_MODE: ${PIPELINE_MODE:-dual}
+      GOAL_TRACKING_ENABLED: ${GOAL_TRACKING_ENABLED:-true}
+      BILINGUAL_MODE: ${BILINGUAL_MODE:-true}
+      NOISE_CANCELLATION: ${NOISE_CANCELLATION:-true}
+      # The auto-starting "test-room" bot is only for the local :7860 dashboard. It
+      # connects at boot during the startup CPU spike, where its LiveKit FFI handshake
+      # times out and crashes the process. Real interviews spawn their own per-room bot
+      # on demand via /interview/validate, so keep it off for the stack.
+      START_DEFAULT_BOT: ${START_DEFAULT_BOT:-false}
+    volumes:
+      - recordings:/data/recordings
+    ports:
+      - "7860:7860"
+
+  frontend:
+    restart: unless-stopped
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Same-origin: the browser hits the frontend's own /voice proxy (inlined at
+        # build time), so it only ever talks to :3000. Override for a split origin.
+        NEXT_PUBLIC_VOICE_URL: ${NEXT_PUBLIC_VOICE_URL:-/voice}
+        # Whitelabel: applicant-facing branding. Set in .env before building.
+        NEXT_PUBLIC_ORG_NAME: ${NEXT_PUBLIC_ORG_NAME:-}
+        NEXT_PUBLIC_ORG_COLOR: ${NEXT_PUBLIC_ORG_COLOR:-#1C99BF}
+        NEXT_PUBLIC_ORG_LOGO_URL: ${NEXT_PUBLIC_ORG_LOGO_URL:-}
+    depends_on:
+      - backend
+    environment:
+      # Server-only: the /api/admin proxy forwards here with the admin token injected.
+      BACKEND_URL: http://backend:8000
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      # Login credentials (email/password). HR_EMAIL/HR_PASSWORD are optional.
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      HR_EMAIL: ${HR_EMAIL:-}
+      HR_PASSWORD: ${HR_PASSWORD:-}
+      # Server-only: where the same-origin /voice proxy forwards (the voice container).
+      VOICE_PROXY_TARGET: http://voice:7860
+    ports:
+      - "3000:3000"
+      - "3001:3000"
+
+volumes:
+  pgdata:
+  recordings:
