@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import Link from "next/link";
 import { AppBackground } from "@/components/layout/AppBackground";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { CareersThemeProvider } from "@/components/applicant/CareersThemeProvider";
 
 interface Props {
   children: ReactNode;
@@ -46,7 +47,7 @@ export default async function CareersLayout({ children, params }: Props) {
   const mono = monogram(name);
 
   return (
-    <>
+    <CareersThemeProvider color={color}>
       <AppBackground />
       <div className="flex min-h-screen flex-col">
         <header className="glass-rail sticky top-0 z-40">
@@ -87,6 +88,6 @@ export default async function CareersLayout({ children, params }: Props) {
           © {name} — Careers
         </footer>
       </div>
-    </>
+    </CareersThemeProvider>
   );
 }

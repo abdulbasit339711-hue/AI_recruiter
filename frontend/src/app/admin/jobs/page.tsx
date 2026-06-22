@@ -153,6 +153,7 @@ export default function AdminJobsPage() {
             <JobCard
               key={job.id}
               job={job}
+              candidateCount={job.candidate_count}
               onEdit={isAdmin ? openEdit : undefined}
               onArchive={isAdmin ? handleArchive : undefined}
             />

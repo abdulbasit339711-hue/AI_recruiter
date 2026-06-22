@@ -248,7 +248,17 @@ def get_org_jobs(slug: str, db: Session = Depends(get_db)):
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found.")
     jobs = db.query(Job).filter(Job.org_id == org.id, Job.status == "Active").all()
-    return [_serialize_job(j, False) for j in jobs]
+    if jobs:
+        job_ids = [j.id for j in jobs]
+        counts = dict(
+            db.query(Candidate.job_id, func.count(Candidate.id))
+            .filter(Candidate.job_id.in_(job_ids))
+            .group_by(Candidate.job_id)
+            .all()
+        )
+    else:
+        counts = {}
+    return [dict(**_serialize_job(j, False), candidate_count=counts.get(j.id, 0)) for j in jobs]
 
 
 @app.patch("/orgs/{org_id}")
@@ -384,7 +394,19 @@ def list_jobs(request: Request, status: Optional[str] = "Active", db: Session = 
             query = query.filter(Job.status == status)
     else:
         query = query.filter(Job.status == "Active")
-    return [_serialize_job(j, is_admin) for j in query.all()]
+    jobs_list = query.all()
+    # Batch-count candidates per job in a single query (avoids N+1).
+    if jobs_list:
+        job_ids = [j.id for j in jobs_list]
+        counts = dict(
+            db.query(Candidate.job_id, func.count(Candidate.id))
+            .filter(Candidate.job_id.in_(job_ids))
+            .group_by(Candidate.job_id)
+            .all()
+        )
+    else:
+        counts = {}
+    return [dict(**_serialize_job(j, is_admin), candidate_count=counts.get(j.id, 0)) for j in jobs_list]
 
 
 @app.get("/jobs/{job_id}")

@@ -22,6 +22,7 @@ export interface Job {
   org_id: number | null;
   org_slug: string | null;
   org_name: string | null;
+  candidate_count?: number;
 }
 
 export type CandidateStatus =

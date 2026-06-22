@@ -86,32 +86,6 @@ export const JobCard: React.FC<JobCardProps> = ({
         </span>
       </div>
 
-      {/* Mini score bar */}
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
-        <div className="flex h-full w-full">
-          {/* weak 25% */}
-          <div
-            className="h-full"
-            style={{ width: "25%", background: "#F25C7C" }}
-          />
-          {/* promising 45% */}
-          <div
-            className="h-full"
-            style={{ width: "45%", background: "#F5B544" }}
-          />
-          {/* strong 30% */}
-          <div
-            className="h-full"
-            style={{ width: "30%", background: "#34C28A" }}
-          />
-        </div>
-      </div>
-      <div className="flex justify-between text-[9px] text-muted-foreground/40">
-        <span>0</span>
-        <span>50</span>
-        <span>100</span>
-      </div>
-
       {/* Bottom actions */}
       <div className="mt-4 flex gap-2 border-t border-white/[0.05] pt-4">
         <Link
