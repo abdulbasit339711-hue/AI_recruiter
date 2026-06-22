@@ -19,7 +19,10 @@ import {
   Video,
   ShieldAlert,
   ChevronDown,
+  Loader2,
+  Send,
 } from "lucide-react";
+import { api } from "@/lib/api";
 import { getInterviewVideoUrl } from "@/lib/api";
 import type { InterviewResult } from "@/lib/api";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -87,8 +90,22 @@ export default function CandidateInterviewPage() {
   const { candidateId } = useParams<{ candidateId: string }>();
   const id = Number(candidateId);
   const { data: candidate, isLoading } = useCandidate(id);
-  const { data: interviewResult } = useInterviewResult(id);
+  const { data: interviewResult, isFetching } = useInterviewResult(id);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [sending, setSending] = useState(false);
+  const [sentLink, setSentLink] = useState<string | null>(null);
+
+  async function sendInvite() {
+    setSending(true);
+    try {
+      const res = await api.triggerInterviewInvite(id);
+      setSentLink(res.link ?? null);
+    } catch {
+      // ignore — button remains active
+    } finally {
+      setSending(false);
+    }
+  }
 
   // ── Parse assessment ─────────────────────────────────────────────────────────
   const assessment = parseAssessment(
@@ -211,8 +228,99 @@ export default function CandidateInterviewPage() {
   const iq = candidate?.iq_score;
   const hasIq = iq != null && !Number.isNaN(Number(iq));
 
-  // Suppress unused variable warning — isLoading guards the hero card below
   void isLoading;
+
+  const hasInterview = interviewResult?.has_interview === true;
+
+  // ── No interview yet: show invite / waiting state ────────────────────────────
+  if (interviewResult && !hasInterview) {
+    return (
+      <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+        <Link
+          href="/admin/candidates"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          All candidates
+        </Link>
+
+        <div className="mb-5 flex items-center gap-4">
+          <div
+            className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold text-white shrink-0"
+            style={{ background: "linear-gradient(135deg, #1C99BF, #3DAFCC)" }}
+          >
+            {initials(candidate?.name || candidate?.filename || "?")}
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-heading">
+              {candidate?.name || candidate?.filename || "Candidate"}
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">Interview results</p>
+          </div>
+        </div>
+
+        <div
+          className="flex flex-col items-center gap-5 rounded-2xl border border-dashed p-14 text-center"
+          style={{ borderColor: "var(--surface-border)", background: "var(--surface-card)" }}
+        >
+          {/* Pulsing ring to indicate polling */}
+          <div className="relative flex h-16 w-16 items-center justify-center">
+            <span
+              className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-20"
+              style={{ background: "#1C99BF" }}
+            />
+            <span
+              className="relative flex h-12 w-12 items-center justify-center rounded-full"
+              style={{ background: "rgba(28,153,191,0.15)", border: "1px solid rgba(28,153,191,0.3)" }}
+            >
+              <Video className="h-6 w-6" style={{ color: "#1C99BF" }} />
+            </span>
+          </div>
+
+          <div>
+            <p className="text-base font-semibold text-heading">No interview completed yet</p>
+            <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
+              {candidate?.interview_token
+                ? "The candidate has been invited and their results will appear here automatically once they finish."
+                : "Send the candidate an interview invite. Results will appear here as soon as they finish."}
+            </p>
+          </div>
+
+          {isFetching && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Checking for results…
+            </div>
+          )}
+
+          {!candidate?.interview_token && (
+            <button
+              onClick={sendInvite}
+              disabled={sending || !!sentLink}
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, #1C99BF, #3DAFCC)", boxShadow: "0 0 20px rgba(28,153,191,0.3)" }}
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {sentLink ? "Invite sent!" : "Send interview invite"}
+            </button>
+          )}
+
+          {sentLink && (
+            <p className="text-xs text-muted-foreground">
+              Invite link:{" "}
+              <a href={sentLink} className="text-primary underline" target="_blank" rel="noreferrer">
+                {sentLink}
+              </a>
+            </p>
+          )}
+
+          <p className="text-xs text-muted-foreground opacity-60">
+            This page auto-refreshes every 10 seconds.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
@@ -437,6 +545,12 @@ export default function CandidateInterviewPage() {
           ))}
         </div>
       </GlassCard>
+
+      {/* ── Phase assessment card ── */}
+      <PhaseAssessmentCard
+        phase1Score={session?.phase1_score}
+        currentPhase={session?.current_phase}
+      />
 
       {/* ── Decision / rationale banner ── */}
       {rationale && (
@@ -866,6 +980,116 @@ export default function CandidateInterviewPage() {
           )}
         </AnimatePresence>
       </GlassCard>
+    </div>
+  );
+}
+
+// ── PhaseAssessmentCard ────────────────────────────────────────────────────────
+function PhaseAssessmentCard({
+  phase1Score,
+  currentPhase,
+}: {
+  phase1Score: number | null | undefined;
+  currentPhase: string | null | undefined;
+}) {
+  if (phase1Score == null && !currentPhase) return null;
+
+  const p1 = phase1Score ?? 0;
+  const p1Color = p1 >= 60 ? "#34C28A" : p1 >= 40 ? "#F5B544" : "#F25C7C";
+  const phase = currentPhase ?? "initial";
+  const passed = p1 >= 60;
+  const reachedTech = phase === "technical" || phase === "complete";
+
+  return (
+    <div
+      className="mb-4 rounded-2xl p-5"
+      style={{ background: "var(--surface-card)", border: "1px solid var(--surface-border)" }}
+    >
+      <h3 className="mb-4 text-sm font-semibold text-heading">Phase Assessment</h3>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-8">
+        {/* Phase 1 */}
+        <div className="flex-1">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Phase 1 — Behavioral</span>
+            {phase1Score != null && (
+              <span className="font-mono text-xs font-bold tabular-nums" style={{ color: p1Color }}>
+                {Math.round(p1)}/100
+              </span>
+            )}
+          </div>
+          <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-subtle)" }}>
+            {phase1Score != null && (
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(p1, 100)}%` }}
+                transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+                className="h-full rounded-full"
+                style={{ background: `linear-gradient(90deg, ${p1Color}, ${p1Color}cc)`, boxShadow: `0 0 10px ${p1Color}40` }}
+              />
+            )}
+          </div>
+          <div className="mt-1 flex items-center gap-1.5">
+            <span
+              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              style={{
+                background: passed ? "rgba(52,194,138,0.12)" : "rgba(242,92,124,0.12)",
+                color: passed ? "#34C28A" : "#F25C7C",
+                border: `1px solid ${passed ? "rgba(52,194,138,0.3)" : "rgba(242,92,124,0.3)"}`,
+              }}
+            >
+              {phase1Score == null ? "Pending" : passed ? "Passed" : "Did not pass"}
+            </span>
+            {phase1Score != null && !passed && (
+              <span className="text-[10px] text-muted-foreground">Threshold: 60</span>
+            )}
+          </div>
+        </div>
+
+        {/* Connector */}
+        <div className="flex items-center justify-center sm:flex-col sm:gap-1">
+          <div className="h-px w-8 sm:h-8 sm:w-px" style={{ background: "var(--surface-border)" }} />
+          <span className="text-[10px] text-muted-foreground">→</span>
+          <div className="h-px w-8 sm:h-8 sm:w-px" style={{ background: "var(--surface-border)" }} />
+        </div>
+
+        {/* Phase 2 */}
+        <div className="flex-1">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Phase 2 — Technical</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--surface-subtle)" }}>
+            {reachedTech && phase === "complete" && (
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: "100%" }}
+                transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+                className="h-full rounded-full"
+                style={{ background: "linear-gradient(90deg, #1C99BF, #3DAFCC)", boxShadow: "0 0 10px rgba(28,153,191,0.4)" }}
+              />
+            )}
+          </div>
+          <div className="mt-1">
+            <span
+              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              style={
+                reachedTech && phase === "complete"
+                  ? { background: "rgba(28,153,191,0.12)", color: "#1C99BF", border: "1px solid rgba(28,153,191,0.3)" }
+                  : reachedTech
+                  ? { background: "rgba(245,181,68,0.12)", color: "#F5B544", border: "1px solid rgba(245,181,68,0.3)" }
+                  : { background: "var(--surface-subtle)", color: "#9CA3B0", border: "1px solid var(--surface-border)" }
+              }
+            >
+              {!passed && phase1Score != null
+                ? "Skipped"
+                : reachedTech && phase === "complete"
+                ? "Completed"
+                : reachedTech
+                ? "In progress"
+                : "Not reached"}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
