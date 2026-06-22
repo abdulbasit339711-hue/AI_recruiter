@@ -263,16 +263,17 @@ def _candidate_briefing(candidate: dict | None) -> str:
         lines.append(f"- Strengths matched to the role: {', '.join(map(str, matched[:12]))}.")
     if missing:
         lines.append(f"- Potential gaps to probe: {', '.join(map(str, missing[:12]))}.")
-    resume_qs = _resume_questions(candidate)
-    if resume_qs:
-        lines.append("- Résumé-tailored questions to weave in and probe:")
-        lines.extend(f"    {i+1}. {q}" for i, q in enumerate(resume_qs))
+    # NOTE: résumé-tailored questions are NOT listed here — they are injected by the
+    # question flow processor at Phase 2 in strict order. Listing them in the system
+    # prompt causes the LLM to jump to technical questions before Phase 1 behavioral
+    # questions are complete.
     if not lines:
         return ""
     return (
-        "\n\nCANDIDATE BRIEFING (from the résumé Tier-3 evaluation — for your awareness; "
-        "use it to ask sharper, evidence-based follow-ups, but keep the conversation "
-        "natural):\n" + "\n".join(lines)
+        "\n\nCANDIDATE BRIEFING (from the résumé Tier-3 evaluation — for context only; "
+        "use it to give sharper, evidence-based follow-ups during the conversation, "
+        "but do NOT ask technical questions until Phase 1 behavioral screening is complete):\n"
+        + "\n".join(lines)
     )
 
 

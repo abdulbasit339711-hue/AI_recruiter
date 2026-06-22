@@ -64,6 +64,8 @@ _SYSTEM = (
 _PROMPT = (
     "Return JSON with exactly these keys:\n"
     '{"present": bool,           // a person is visibly on camera\n'
+    ' "people_count": int,       // total number of people visible in the frame (0, 1, 2, ...)\n'
+    ' "second_person": bool,     // true if ANY additional person is visible besides the candidate\n'
     ' "facing_screen": bool,     // oriented toward the camera/screen\n'
     ' "engagement": int,         // 0-5 visible attentiveness (0 none, 5 full)\n'
     ' "looking_away": bool,      // appears to look off-screen\n'
@@ -212,7 +214,13 @@ class VisionAnalysisProcessor(FrameProcessor):
                 obs["t"] = self._elapsed()
                 obs["backend"] = self._backend
                 self.observations.append(obs)
-                logger.info(f"[VisionAnalysis] semantic t={obs['t']}s present={obs.get('present')} engagement={obs.get('engagement')}")
+                logger.info(f"[VisionAnalysis] semantic t={obs['t']}s present={obs.get('present')} people={obs.get('people_count')} engagement={obs.get('engagement')}")
+                # Trigger violation callback when VLM sees a second person
+                if obs.get("second_person") and self.on_violation:
+                    try:
+                        await self.on_violation(["multiple_people"])
+                    except Exception as cb_err:
+                        logger.warning(f"[VisionAnalysis] on_violation (semantic) error: {cb_err}")
                 await self._broadcaster.broadcast("vision_analysis", {
                     "session_id": self._session.session_id if self._session else None,
                     **obs,
@@ -280,6 +288,9 @@ class VisionAnalysisProcessor(FrameProcessor):
             eng = [o["engagement"] for o in self.observations if isinstance(o.get("engagement"), (int, float))]
             agg["avg_engagement"] = round(sum(eng) / len(eng), 2) if eng else None
             agg["present_ratio"] = round(sum(1 for o in self.observations if o.get("present")) / len(self.observations), 2)
+            agg["second_person_detected"] = any(o.get("second_person") for o in self.observations)
+            pc = [o["people_count"] for o in self.observations if isinstance(o.get("people_count"), int)]
+            agg["max_people_count_semantic"] = max(pc) if pc else 0
         if self.detections:
             flags = [f for d in self.detections for f in (d.get("integrity_flags") or [])]
             agg["max_people_count"] = max((d.get("people_count") or 0) for d in self.detections)

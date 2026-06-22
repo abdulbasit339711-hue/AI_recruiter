@@ -63,6 +63,29 @@ function parseAssessment(
   return null;
 }
 
+// Merge consecutive same-speaker fragments (Deepgram fires multiple events per utterance)
+function mergeTranscriptTurns(
+  turns: { speaker?: string; text?: string; evaluation?: { score?: number } }[]
+) {
+  const merged: { speaker: string; text: string; evaluation?: { score?: number } }[] = [];
+  for (const t of turns) {
+    const spk = (t.speaker ?? "").toLowerCase();
+    const prev = merged[merged.length - 1];
+    if (prev && (prev.speaker ?? "").toLowerCase() === spk) {
+      prev.text = prev.text + " " + (t.text ?? "");
+      // keep the highest evaluation score in the merged bubble
+      if (t.evaluation?.score != null) {
+        if (prev.evaluation == null || (t.evaluation.score > (prev.evaluation.score ?? 0))) {
+          prev.evaluation = t.evaluation;
+        }
+      }
+    } else {
+      merged.push({ speaker: spk, text: t.text ?? "", evaluation: t.evaluation });
+    }
+  }
+  return merged;
+}
+
 const TIER_MAX = { tier1: 30, tier2: 40, tier3: 30 } as const;
 
 type TabKey = "overview" | "assessment" | "transcript";
@@ -609,7 +632,7 @@ export default function CandidateInterviewPage() {
             const isActive = tab.key === activeTab;
             const count =
               tab.key === "transcript" && transcript?.length
-                ? ` (${transcript.length})`
+                ? ` (${mergeTranscriptTurns(transcript).length})`
                 : "";
             return (
               <button
@@ -906,25 +929,19 @@ export default function CandidateInterviewPage() {
               className="max-h-[600px] overflow-y-auto p-6"
             >
               {transcript && transcript.length > 0 ? (
-                <div className="space-y-3">
-                  {transcript.map((msg, i) => {
-                    // speaker field: "candidate" / "interviewer" / "user" / "assistant"
+                <div className="space-y-4">
+                  {mergeTranscriptTurns(transcript).map((msg, i) => {
                     const spk = (msg.speaker ?? "").toLowerCase();
-                    const isCandidate =
-                      spk === "candidate" || spk === "user";
+                    const isCandidate = spk === "candidate" || spk === "user";
                     return (
                       <div
                         key={i}
-                        className={`flex ${
-                          isCandidate ? "justify-end" : "justify-start"
-                        }`}
+                        className={`flex ${isCandidate ? "justify-end" : "justify-start"}`}
                       >
                         <div className="max-w-[80%]">
                           <p
                             className="mb-1 text-[10px] uppercase tracking-wider"
-                            style={{
-                              color: isCandidate ? "#1C99BF" : "#556070",
-                            }}
+                            style={{ color: isCandidate ? "#1C99BF" : "#556070" }}
                           >
                             {isCandidate ? "Candidate" : "OZI"}
                           </p>
@@ -932,34 +949,19 @@ export default function CandidateInterviewPage() {
                             className="rounded-2xl px-4 py-3 text-sm leading-relaxed"
                             style={
                               isCandidate
-                                ? {
-                                    background: "rgba(28,153,191,0.15)",
-                                    border:
-                                      "1px solid rgba(28,153,191,0.2)",
-                                    color: "#E8EDF5",
-                                  }
-                                : {
-                                    background: "var(--surface-subtle)",
-                                    border:
-                                      "1px solid var(--surface-border)",
-                                    color: "#9CA3B0",
-                                  }
+                                ? { background: "rgba(28,153,191,0.15)", border: "1px solid rgba(28,153,191,0.2)", color: "#E8EDF5" }
+                                : { background: "var(--surface-subtle)", border: "1px solid var(--surface-border)", color: "#9CA3B0" }
                             }
                           >
                             {msg.text}
                           </div>
-                          {/* Per-turn evaluation score badge */}
                           {msg.evaluation?.score != null && (
                             <div className="mt-1 flex justify-end">
                               <span
                                 className="rounded-full px-2 py-0.5 text-[10px] font-mono tabular-nums"
                                 style={{
-                                  background: `${scoreColor(
-                                    msg.evaluation.score * 10
-                                  )}26`,
-                                  color: scoreColor(
-                                    msg.evaluation.score * 10
-                                  ),
+                                  background: `${scoreColor(msg.evaluation.score * 10)}26`,
+                                  color: scoreColor(msg.evaluation.score * 10),
                                 }}
                               >
                                 {msg.evaluation.score}/10
