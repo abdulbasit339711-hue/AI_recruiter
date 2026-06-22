@@ -1,29 +1,38 @@
 // src/app/layout.tsx
 import './globals.css';
-import { Poppins, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { ReactNode } from 'react';
 import { Providers } from '@/components/providers';
 
-// OZI Group — Poppins for both display and body
-const display = Poppins({
-  subsets: ['latin'],
+const display = localFont({
+  src: [
+    { path: '../../public/fonts/Poppins-400.woff2', weight: '400' },
+    { path: '../../public/fonts/Poppins-500.woff2', weight: '500' },
+    { path: '../../public/fonts/Poppins-600.woff2', weight: '600' },
+    { path: '../../public/fonts/Poppins-700.woff2', weight: '700' },
+    { path: '../../public/fonts/Poppins-800.woff2', weight: '800' },
+  ],
   variable: '--font-display',
-  weight: ['400', '500', '600', '700', '800'],
   display: 'swap',
 });
 
-const sans = Poppins({
-  subsets: ['latin'],
+const sans = localFont({
+  src: [
+    { path: '../../public/fonts/Poppins-300.woff2', weight: '300' },
+    { path: '../../public/fonts/Poppins-400.woff2', weight: '400' },
+    { path: '../../public/fonts/Poppins-500.woff2', weight: '500' },
+    { path: '../../public/fonts/Poppins-600.woff2', weight: '600' },
+    { path: '../../public/fonts/Poppins-700.woff2', weight: '700' },
+  ],
   variable: '--font-sans',
-  weight: ['300', '400', '500', '600', '700'],
   display: 'swap',
 });
 
-// OZI Group — JetBrains Mono for code / scores / numbers
-const mono = JetBrains_Mono({
-  subsets: ['latin'],
+const mono = localFont({
+  src: [
+    { path: '../../public/fonts/JetBrainsMono-400.woff2', weight: '400' },
+  ],
   variable: '--font-mono',
-  weight: ['400', '500', '600'],
   display: 'swap',
 });
 

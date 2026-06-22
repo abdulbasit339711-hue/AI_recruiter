@@ -109,6 +109,10 @@ services:
         # Same-origin: the browser hits the frontend's own /voice proxy (inlined at
         # build time), so it only ever talks to :3000. Override for a split origin.
         NEXT_PUBLIC_VOICE_URL: ${NEXT_PUBLIC_VOICE_URL:-/voice}
+        # Whitelabel: applicant-facing branding. Set in .env before building.
+        NEXT_PUBLIC_ORG_NAME: ${NEXT_PUBLIC_ORG_NAME:-}
+        NEXT_PUBLIC_ORG_COLOR: ${NEXT_PUBLIC_ORG_COLOR:-#1C99BF}
+        NEXT_PUBLIC_ORG_LOGO_URL: ${NEXT_PUBLIC_ORG_LOGO_URL:-}
     depends_on:
       - backend
     environment:

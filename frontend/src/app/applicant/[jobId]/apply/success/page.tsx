@@ -49,7 +49,11 @@ function SuccessContent() {
           <StaggerItem><h1 className="mt-5 font-display text-2xl font-bold text-heading">Application received</h1></StaggerItem>
           <StaggerItem>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Your résumé is in. Our team is reviewing applications for this role now.
+              Your résumé is in.{" "}
+              {process.env.NEXT_PUBLIC_ORG_NAME
+                ? `The ${process.env.NEXT_PUBLIC_ORG_NAME} team`
+                : "Our team"}{" "}
+              is reviewing applications for this role now.
             </p>
           </StaggerItem>
           <StaggerItem>
