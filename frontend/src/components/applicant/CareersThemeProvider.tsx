@@ -51,29 +51,34 @@ export function CareersThemeProvider({ color, children }: Props) {
   const atmoOpacity2 = 0.12;
   const atmoOpacity3 = 0.09;
 
+  // Decide foreground on primary button: dark bg needs white text, light bg needs dark text
+  const primaryFg = l < 55 ? "#FFFFFF" : "#04111B";
+
   const css = `
 .careers-theme {
   --brand-h: ${h};
   --brand-s: ${s}%;
   --brand-l: ${l}%;
 }
-/* Override dark-mode surface + atmosphere variables inside .careers-theme */
+/* Override surface + atmosphere + primary accent inside .careers-theme */
 .dark .careers-theme,
 .careers-theme {
-  --background:    hsl(${h}, ${bgS}%, ${bgL}%);
-  --glass-top:     hsla(${h}, ${cardS}%, 13%, 0.80);
-  --glass-bottom:  hsla(${h}, ${Math.round(cardS * 0.7)}%, 7%, 0.65);
-  --glass-border:  hsla(${h}, ${s}%, ${l}%, 0.16);
-  --glass-inset:   hsla(${h}, ${s}%, ${l}%, 0.07);
-  --glass-shadow:  0 24px 60px -28px rgba(0,0,0,0.72),
-                   0 0 0 1px hsla(${h}, ${s}%, ${l}%, 0.09);
-  --surface-card:  hsla(${h}, ${cardS}%, 10%, 0.72);
+  --background:         hsl(${h}, ${bgS}%, ${bgL}%);
+  --primary:            hsl(${h}, ${s}%, ${l}%);
+  --primary-foreground: ${primaryFg};
+  --primary-strong:     hsl(${h}, ${s}%, ${Math.max(l - 8, 10)}%);
+  --glass-top:          hsla(${h}, ${cardS}%, 13%, 0.80);
+  --glass-bottom:       hsla(${h}, ${Math.round(cardS * 0.7)}%, 7%, 0.65);
+  --glass-border:       hsla(${h}, ${s}%, ${l}%, 0.16);
+  --glass-inset:        hsla(${h}, ${s}%, ${l}%, 0.07);
+  --glass-shadow:       0 24px 60px -28px rgba(0,0,0,0.72),
+                        0 0 0 1px hsla(${h}, ${s}%, ${l}%, 0.09);
+  --surface-card:       hsla(${h}, ${cardS}%, 10%, 0.72);
   --atmo:
     radial-gradient(900px 540px at 12% -6%,  hsla(${h},  ${s}%, ${l}%, ${atmoOpacity1}), transparent 58%),
     radial-gradient(640px 420px at 92%  4%,  hsla(${h2}, ${Math.round(s * 0.75)}%, ${Math.min(l + 12, 80)}%, ${atmoOpacity2}), transparent 54%),
     radial-gradient(720px 640px at 55% 112%, hsla(${h2}, ${Math.round(s * 0.6)}%,  ${l}%, ${atmoOpacity3}), transparent 62%);
 }
-/* Tint the grain layer's background so it blends with the new bg */
 .careers-theme .app-atmosphere {
   background-color: hsl(${h}, ${bgS}%, ${bgL}%);
   background-image: var(--atmo);
