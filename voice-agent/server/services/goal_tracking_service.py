@@ -156,11 +156,13 @@ class GoalTrackingService:
         return str(template_id)
 
     async def _create_session_goal(self, goal_data: Dict[str, Any]) -> str:
-        """Create a session goal in database"""
+        """Create a session goal in database. ON CONFLICT DO NOTHING guards against
+        double-init races; returns the existing row id if the goal already exists."""
         query = """
         INSERT INTO session_goals
         (session_id, goal_template_id, completion_status, progress_score, confidence_level)
         VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (session_id, goal_template_id) DO NOTHING
         RETURNING id
         """
 
@@ -172,6 +174,15 @@ class GoalTrackingService:
             goal_data["progress_score"],
             goal_data["confidence_level"]
         )
+
+        if goal_id is None:
+            # Row already existed — fetch the id
+            existing = await db_manager.execute_query(
+                "SELECT id FROM session_goals WHERE session_id=$1 AND goal_template_id=$2",
+                goal_data["session_id"],
+                goal_data["goal_template_id"],
+            )
+            return str(existing)
 
         return str(goal_id)
 

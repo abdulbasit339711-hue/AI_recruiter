@@ -67,13 +67,6 @@ class GoalTrackingProcessor(FrameProcessor):
     async def process_frame(self, frame: Frame, direction):
         await super().process_frame(frame, direction)
 
-        # Initialize goals once, after a session is configured. The _initializing
-        # flag is set synchronously so the many frames that arrive before the async
-        # init finishes don't each spawn their own (duplicate) initialization task.
-        if self.session is not None and not self.goals_initialized and not self._initializing:
-            self._initializing = True
-            asyncio.create_task(self.initialize_goals())
-
         # Analyze candidate speech for goal progress
         if isinstance(frame, TranscriptionFrame):
             await self._handle_transcription(frame)
