@@ -276,20 +276,18 @@ import hmac
 from fastapi.responses import JSONResponse
 
 # The voice service (:7860) is a local TESTING + bot-runtime component. Its
-# operator endpoints (/chat, /settings, /pipeline, /interview/configure) are OPEN
-# by default — no auth needed for testing. The real security boundary for
-# applicants is the SIGNED INTERVIEW LINK, verified by /interview/validate.
+# operator endpoints are OPEN by default — no auth needed for local testing. The
+# real security boundary for applicants is the SIGNED INTERVIEW LINK verified by
+# /interview/validate.
 #
 # For an exposed/production deployment, set VOICE_REQUIRE_AUTH=true to require the
 # shared admin bearer token on these operator endpoints.
-# Genuine operator/system endpoints that reconfigure the bot or runtime — gated when
-# VOICE_REQUIRE_AUTH is on. NOTE: /chat and /interview/end are reachable by the
-# candidate page (text answers; ending one's own interview), so they are NOT gated —
-# gating them 401s real candidates. /interview/validate and /events are candidate-open too.
+# Genuine operator/system endpoints — gated when VOICE_REQUIRE_AUTH is on.
+# /interview/validate and /events are candidate-open (they do their own token checks).
 _PROTECTED_VOICE_ROUTES = {
     ("POST", "/interview/configure"),
+    ("POST", "/chat"),
     ("POST", "/settings"),
-    ("POST", "/pipeline"),
 }
 
 

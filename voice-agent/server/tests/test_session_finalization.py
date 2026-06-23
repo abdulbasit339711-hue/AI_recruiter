@@ -16,6 +16,7 @@ from processors.goal_tracking_processor import GoalTrackingProcessor
 def make_processor():
     session = MagicMock()
     session.session_id = "sess-123"
+    session.config = None  # prevents MagicMock > int comparison in phase1_boundary check
     goal_service = MagicMock()
     goal_service.comprehensive_goal_analysis = AsyncMock()
     broadcaster = MagicMock()

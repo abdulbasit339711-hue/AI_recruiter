@@ -27,7 +27,7 @@ def test_protected_set_is_what_we_expect():
     assert ("POST", "/interview/configure") in runner._PROTECTED_VOICE_ROUTES
     assert ("POST", "/chat") in runner._PROTECTED_VOICE_ROUTES
     assert ("POST", "/settings") in runner._PROTECTED_VOICE_ROUTES
-    assert ("POST", "/pipeline") in runner._PROTECTED_VOICE_ROUTES
+    assert ("POST", "/pipeline") not in runner._PROTECTED_VOICE_ROUTES
 
 
 def test_chat_without_token_is_401():
