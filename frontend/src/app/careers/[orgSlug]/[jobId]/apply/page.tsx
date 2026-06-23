@@ -91,7 +91,7 @@ export default function CareersApplyPage() {
 
       <Swap k={step === "iq" ? "iq" : upload.isPending ? "loading" : "upload"}>
         {step === "iq" ? (
-          <IqTest jobId={numericId} onComplete={onIqComplete} />
+          <IqTest jobId={numericId} color={color} onComplete={onIqComplete} />
         ) : upload.isPending ? (
           <UploadingLoader fileName={file?.name} />
         ) : (

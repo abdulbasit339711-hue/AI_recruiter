@@ -8,6 +8,7 @@ import type { IqTestResponse, IqSubmitResponse } from "@/types";
 
 interface IqTestProps {
   jobId: number;
+  color?: string;
   /** Called when the screen is finished (or skipped on error). `result` is null
    *  when the test couldn't run — the apply flow then proceeds without a score. */
   onComplete: (result: IqSubmitResponse | null) => void;
@@ -17,7 +18,7 @@ type Phase = "loading" | "error" | "active" | "submitting";
 
 /** A short, timed aptitude screen taken before résumé upload. Questions are
  *  served (and scored) by the backend; this component only collects choices. */
-export function IqTest({ jobId, onComplete }: IqTestProps) {
+export function IqTest({ jobId, color = "#1C99BF", onComplete }: IqTestProps) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [test, setTest] = useState<IqTestResponse | null>(null);
   const [index, setIndex] = useState(0);
@@ -114,9 +115,13 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
         <p className="text-sm text-muted-foreground">
           The aptitude screen is unavailable right now. You can continue with your application.
         </p>
-        <Button onClick={() => onComplete(null)} className="w-full" size="lg">
+        <button
+          onClick={() => onComplete(null)}
+          className="w-full rounded-xl px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90"
+          style={{ background: color }}
+        >
           Continue to résumé upload
-        </Button>
+        </button>
       </div>
     );
   }
@@ -135,7 +140,7 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
   return (
     <div className="space-y-5 glass rounded-2xl p-5">
       <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-2 font-medium text-primary">
+        <span className="flex items-center gap-2 font-medium" style={{ color }}>
           <Brain className="h-4 w-4" /> Aptitude screen
         </span>
         <span
@@ -150,8 +155,8 @@ export function IqTest({ jobId, onComplete }: IqTestProps) {
       <div className="flex items-center gap-3">
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-foreground/10">
           <div
-            className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${(index / test.total) * 100}%` }}
+            className="h-full rounded-full transition-all"
+            style={{ width: `${(index / test.total) * 100}%`, background: color }}
           />
         </div>
         <span className="text-xs text-muted-foreground">

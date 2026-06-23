@@ -156,7 +156,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
               </label>
               <Input
                 id="job-interview-deadline"
-                type="date"
+                type="datetime-local"
                 {...register("interview_deadline")}
               />
             </div>
