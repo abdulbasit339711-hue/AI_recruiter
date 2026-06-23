@@ -184,6 +184,10 @@ class InterviewBot:
         # dying room and see no resume. ensure_interview waits for it to finish, then
         # respawns a fresh bot that resumes the SAME session from the DB.
         self.draining = False
+        # True while a candidate WebRTC participant is connected to this room. Written
+        # from the bot thread (CPython GIL makes single-bool writes atomic), read from
+        # the uvicorn thread in /interview/validate to reject a second concurrent join.
+        self.candidate_connected: bool = False
 
     def alive(self) -> bool:
         return self.thread is not None and self.thread.is_alive()
@@ -443,6 +447,13 @@ async def validate_interview(token: str):
         }
     if bot.error:
         return {"valid": False, "error": "Could not start the interview. Please contact the recruiter."}
+
+    if bot.candidate_connected:
+        return {
+            "valid": False,
+            "error": "This interview is already open in another browser or tab. "
+                     "Please close that window and try again.",
+        }
 
     try:
         await db_manager._ensure_pool()
@@ -1226,6 +1237,8 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         identity = getattr(participant, "identity", participant)
         logger.info(f"UI Joined Room {room_name}: {identity}")
         await broadcaster.broadcast("participant", {"event": "joined", "identity": str(identity)})
+        if str(identity) != "recruiter-bot" and bot_ref:
+            bot_ref.candidate_connected = True
         # Do NOT greet here. participant_connected fires the instant the candidate's
         # SIGNALING connects — before their browser has subscribed to our audio track
         # and started playback. Greeting now races ahead of their audio and the first
@@ -1259,6 +1272,8 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         await broadcaster.broadcast("participant", {"event": "dropped", "identity": str(identity)})
         # End a REAL interview when the candidate leaves — frees the slot/room.
         if not is_default and str(identity) != "recruiter-bot":
+            if bot_ref:
+                bot_ref.candidate_connected = False
             # Mark draining FIRST so a fast re-open doesn't grab this dying bot.
             if bot_ref:
                 bot_ref.draining = True
