@@ -153,6 +153,15 @@ def test_console_batch_falls_back_to_per_message_send():
 
 # ── Interview-invite composition over the SMTP path ─────────────────────────────
 
+def _text_body(msg: EmailMessage) -> str:
+    """Extract plain-text content from a message (handles multipart/alternative)."""
+    if msg.get_content_maintype() == "multipart":
+        for part in msg.iter_parts():
+            if part.get_content_type() == "text/plain":
+                return part.get_content()
+    return msg.get_content()
+
+
 def test_send_interview_invite_composes_link_and_subject(monkeypatch):
     monkeypatch.setenv("SMTP_EMAIL", "recruiter@acme.com")
     monkeypatch.setenv("SMTP_PASSWORD", "pw")
@@ -169,7 +178,7 @@ def test_send_interview_invite_composes_link_and_subject(monkeypatch):
     sent = server.send_message.call_args.args[0]
     assert sent["To"] == "alice@example.com"
     assert "Backend Engineer" in sent["Subject"]
-    body = sent.get_content()
+    body = _text_body(sent)
     assert "Alice" in body
     assert "https://app.example.com/interview/abc123" in body
 
@@ -185,5 +194,5 @@ def test_send_interview_invite_handles_missing_name(monkeypatch):
             job_title="Data Scientist", link="https://x/iv/9",
         )
 
-    body = server.send_message.call_args.args[0].get_content()
+    body = _text_body(server.send_message.call_args.args[0])
     assert "there" in body  # graceful "Hi there," fallback when name is unknown
