@@ -517,6 +517,11 @@ export const api = {
     return response.data;
   },
 
+  async sendAvailabilityInvite(candidateId: number): Promise<{ status: string; candidate_id: number; link: string }> {
+    const response = await client.post(`/candidates/${candidateId}/availability-invite`);
+    return response.data;
+  },
+
   async confirmInterviewSlot(candidateId: number, slot: string): Promise<Candidate> {
     const response = await client.patch<Candidate>(`/candidates/${candidateId}/confirm-slot`, { slot });
     return response.data;

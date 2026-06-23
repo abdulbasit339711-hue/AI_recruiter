@@ -1166,9 +1166,27 @@ export default function AdminCandidatesPage() {
                 </div>
 
                 {/* ── Availability scheduling ─────────────────────── */}
-                {selected && (selected.availability_invited_at || selected.availability_response || selected.interview_confirmed_slot) && (
+                {selected && (
                   <div className="space-y-2 border-t border-white/[0.06] pt-3">
                     <p className="text-xs uppercase text-muted-foreground">Interview Scheduling</p>
+                    {!selected.availability_invited_at && !selected.interview_confirmed_slot && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.sendAvailabilityInvite(selected.id);
+                            const updated = await api.getCandidate(selected.id);
+                            setSelected(updated);
+                            refetch();
+                            toast.success("Availability invite sent!");
+                          } catch {
+                            toast.error("Failed to send availability invite.");
+                          }
+                        }}
+                        className="w-full rounded-lg bg-[#1C99BF]/10 py-1.5 text-xs font-semibold text-[#1C99BF] transition-colors hover:bg-[#1C99BF]/20"
+                      >
+                        Send availability invite
+                      </button>
+                    )}
                     {selected.interview_confirmed_slot ? (
                       <div className="space-y-2">
                         <div className="rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-400">
@@ -1208,12 +1226,12 @@ export default function AdminCandidatesPage() {
                           Confirm this slot
                         </button>
                       </div>
-                    ) : (
+                    ) : selected.availability_invited_at ? (
                       <p className="text-xs text-muted-foreground">
                         Availability form sent.{" "}
                         <span className="text-muted-foreground/60">Waiting for candidate response.</span>
                       </p>
-                    )}
+                    ) : null}
                   </div>
                 )}
 

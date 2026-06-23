@@ -10,6 +10,7 @@ import re
 import sys
 import json
 import threading
+import time
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -188,6 +189,11 @@ class InterviewBot:
         # from the bot thread (CPython GIL makes single-bool writes atomic), read from
         # the uvicorn thread in /interview/validate to reject a second concurrent join.
         self.candidate_connected: bool = False
+        # Monotonic timestamp of when candidate_connected was last set True. Used to
+        # detect stale locks: if the candidate's tab crashed and LiveKit hasn't fired
+        # on_participant_disconnected yet (or never will due to a network partition),
+        # the validate endpoint unlocks the link after STALE_CONNECTED_SECS seconds.
+        self.candidate_connected_at: float = 0.0
 
     def alive(self) -> bool:
         return self.thread is not None and self.thread.is_alive()
@@ -448,12 +454,21 @@ async def validate_interview(token: str):
     if bot.error:
         return {"valid": False, "error": "Could not start the interview. Please contact the recruiter."}
 
+    _STALE_SECS = 90  # LiveKit detects crashes in ~30 s; 90 s covers slow networks
     if bot.candidate_connected:
-        return {
-            "valid": False,
-            "error": "This interview is already open in another browser or tab. "
-                     "Please close that window and try again.",
-        }
+        age = time.monotonic() - bot.candidate_connected_at
+        if age < _STALE_SECS:
+            return {
+                "valid": False,
+                "error": "This interview is already open in another browser or tab. "
+                         "Please close that window and try again.",
+            }
+        # Stale lock — LiveKit never fired the disconnect event (crash / network partition).
+        # Clear the flag so this tab can take over; the old connection is dead anyway.
+        logger.warning(
+            "[Interview] stale candidate_connected on %s (%.0f s old) — clearing lock", room, age
+        )
+        bot.candidate_connected = False
 
     try:
         await db_manager._ensure_pool()
@@ -1239,6 +1254,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         await broadcaster.broadcast("participant", {"event": "joined", "identity": str(identity)})
         if str(identity) != "recruiter-bot" and bot_ref:
             bot_ref.candidate_connected = True
+            bot_ref.candidate_connected_at = time.monotonic()
         # Do NOT greet here. participant_connected fires the instant the candidate's
         # SIGNALING connects — before their browser has subscribed to our audio track
         # and started playback. Greeting now races ahead of their audio and the first

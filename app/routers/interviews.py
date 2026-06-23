@@ -719,6 +719,35 @@ def send_interview_invite_api(candidate_id: int, db: Session = Depends(get_db)):
     return {"status": "sent", "candidate_id": candidate_id, "link": url}
 
 
+@router.post("/candidates/{candidate_id}/availability-invite")
+def send_availability_invite_api(candidate_id: int, db: Session = Depends(get_db)):
+    """HR action: send (or resend) the slot-picker availability link to a candidate."""
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    if not cand.email:
+        raise HTTPException(status_code=400, detail="Candidate has no email address.")
+    job = db.query(Job).filter(Job.id == cand.job_id).first()
+    if not job:
+        raise HTTPException(status_code=400, detail="Candidate is not linked to a job.")
+
+    from ..availability_tokens import mint_availability_token
+    from ..services.email import send_availability_invite
+
+    _, avail_url = mint_availability_token(cand.id)
+    send_availability_invite(
+        to=cand.email,
+        candidate_name=cand.name,
+        job_title=job.title,
+        link=avail_url,
+    )
+
+    cand.availability_invited_at = _utcnow().isoformat()
+    db.commit()
+    db.refresh(cand)
+    return {"status": "sent", "candidate_id": candidate_id, "link": avail_url}
+
+
 @router.post("/candidates/{candidate_id}/interview-result")
 def record_interview_result(
     candidate_id: int,

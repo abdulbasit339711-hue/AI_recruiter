@@ -40,20 +40,19 @@ AI-Recruiter is a multi-tier automated recruitment system with:
 
 ### Backend (FastAPI)
 ```bash
-# Setup
-cd app
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-.\venv\Scripts\activate   # Windows
-pip install -r ../requirements.txt
+# Setup (from repo root)
+python -m venv app/venv
+source app/venv/bin/activate  # Linux/Mac
+.\app\venv\Scripts\activate   # Windows
+pip install -r requirements.txt
 
-# Development
+# Development (from repo root — `app` package must be on sys.path)
 uvicorn app.main:app --reload  # API runs on http://127.0.0.1:8000
 
-# Testing
-python scripts/test_scoring.py       # Test scoring engine
-python scripts/test_hr_endpoints.py  # Test HR endpoints
-pytest tests/                        # Run all backend tests
+# Testing (always from repo root so `import app` resolves)
+pytest tests/                        # Run all backend tests (66 tests)
+python scripts/test_scoring.py       # Manual scoring smoke-test
+python scripts/test_hr_endpoints.py  # Manual HR endpoint smoke-test
 ```
 
 ### Frontend (Next.js)
