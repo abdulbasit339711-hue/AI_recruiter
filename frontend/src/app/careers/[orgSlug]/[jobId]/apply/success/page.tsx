@@ -24,6 +24,7 @@ function SuccessContent() {
   });
 
   const orgName = org?.name || orgSlug;
+  const color = org?.primary_color || "#1C99BF";
 
   return (
     <section className="flex min-h-[80vh] items-center justify-center p-4">
@@ -36,14 +37,14 @@ function SuccessContent() {
         <div className="relative mx-auto flex h-16 w-16 items-center justify-center">
           <motion.span
             className="absolute inset-0 rounded-full"
-            style={{ background: "var(--strong)" }}
+            style={{ background: color }}
             initial={{ scale: 0.6, opacity: 0.5 }}
             animate={{ scale: 1.6, opacity: 0 }}
             transition={{ duration: 1.1, ease: "easeOut", delay: 0.25 }}
           />
           <motion.span
             className="relative flex h-16 w-16 items-center justify-center rounded-2xl"
-            style={{ background: "var(--strong-bg)", color: "var(--strong)" }}
+            style={{ background: `${color}22`, color }}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 260, damping: 16, delay: 0.15 }}
@@ -70,7 +71,7 @@ function SuccessContent() {
           </StaggerItem>
           <StaggerItem>
             <div className="mt-6 flex items-start gap-3 rounded-xl border border-border bg-foreground/[0.03] p-4 text-left">
-              <Mail className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <Mail className="mt-0.5 h-5 w-5 shrink-0" style={{ color }} />
               <p className="text-sm text-muted-foreground">
                 If your profile matches, we&apos;ll email you an invitation to take the AI interview.
                 No further action is needed right now.
@@ -78,13 +79,13 @@ function SuccessContent() {
             </div>
           </StaggerItem>
           <StaggerItem>
-            <Button
+            <button
               onClick={() => router.push(`/careers/${orgSlug}/${jobId}`)}
-              className="mt-6 w-full"
-              size="lg"
+              className="mt-6 w-full rounded-xl px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90"
+              style={{ background: color }}
             >
               Back to job details
-            </Button>
+            </button>
           </StaggerItem>
         </Stagger>
       </motion.div>

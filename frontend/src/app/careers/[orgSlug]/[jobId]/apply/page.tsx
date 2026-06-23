@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { Loader2, FileText, UploadCloud, CheckCircle2 } from "lucide-react";
 import { useJob } from "@/hooks/useJob";
 import { useUploadResume } from "@/hooks/useUploadResume";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import type { Org } from "@/types";
 import { IqTest } from "@/components/applicant/IqTest";
 import { Button } from "@/components/ui/button";
 import { Swap } from "@/components/ui/motion";
@@ -19,6 +22,13 @@ export default function CareersApplyPage() {
   const router = useRouter();
 
   const { data: job, isLoading, isError } = useJob(numericId);
+  const { data: org } = useQuery<Org>({
+    queryKey: ["orgs", orgSlug],
+    queryFn: () => api.getOrgBySlug(orgSlug),
+    staleTime: 60_000,
+    enabled: !!orgSlug,
+  });
+  const color = org?.primary_color || "#1C99BF";
   const upload = useUploadResume(numericId);
   const [file, setFile] = useState<File | null>(null);
   const [step, setStep] = useState<Step>("iq");
@@ -62,8 +72,9 @@ export default function CareersApplyPage() {
                 <div className="flex items-center gap-2">
                   <span
                     className={`flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs font-semibold ${
-                      active || done ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"
+                      active || done ? "text-white" : "border border-border text-muted-foreground"
                     }`}
+                    style={active || done ? { background: color } : undefined}
                   >
                     {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
                   </span>
@@ -86,7 +97,7 @@ export default function CareersApplyPage() {
         ) : (
           <form onSubmit={onSubmit} className="space-y-4 glass rounded-2xl p-5">
             {iq && (
-              <div className="flex items-center gap-3 rounded-xl border p-3 text-sm" style={{ borderColor: "var(--strong)", background: "var(--strong-bg)", color: "var(--strong-text)" }}>
+              <div className="flex items-center gap-3 rounded-xl border p-3 text-sm" style={{ borderColor: `${color}60`, background: `${color}12`, color }}>
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 Aptitude screen complete — {iq.correct}/{iq.total} correct, scored {Math.round(iq.score)}% in {formatDuration(iq.time_seconds)}.
               </div>
@@ -94,7 +105,7 @@ export default function CareersApplyPage() {
             <label className="block">
               <span className="text-sm font-medium text-heading">Résumé (PDF, max 5MB)</span>
               <div className="relative mt-2 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-foreground/[0.03] px-4 py-8 text-center transition-colors hover:border-primary/50 focus-within:border-primary/60">
-                <UploadCloud className="h-7 w-7 text-primary" />
+                <UploadCloud className="h-7 w-7" style={{ color }} />
                 <p className="text-sm text-foreground">{file ? file.name : "Drag your PDF here, or click to browse"}</p>
                 {!file && <p className="text-xs text-muted-foreground">PDF only, up to 5MB.</p>}
                 <input
@@ -110,9 +121,14 @@ export default function CareersApplyPage() {
                 {upload.error?.message || "Upload failed"}
               </p>
             )}
-            <Button type="submit" className="w-full" size="lg" disabled={!file}>
+            <button
+              type="submit"
+              className="w-full rounded-xl px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+              style={{ background: color }}
+              disabled={!file}
+            >
               Submit application
-            </Button>
+            </button>
           </form>
         )}
       </Swap>
