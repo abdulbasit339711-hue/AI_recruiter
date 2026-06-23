@@ -1,13 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Clock } from "lucide-react";
 import type { Job } from "@/types";
 
 interface Props {
   job: Job;
   href?: string;
   brandColor?: string;
+}
+
+function deadlineLabel(iso: string | null | undefined): { text: string; color: string } | null {
+  if (!iso) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(iso);
+  const diff = Math.ceil((d.getTime() - today.getTime()) / 86_400_000);
+  const fmt = (dt: Date) => dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  if (diff < 0)  return { text: `Closed ${fmt(d)}`,           color: "#9ca3af" };
+  if (diff === 0) return { text: "Closes today",               color: "#f59e0b" };
+  if (diff <= 7)  return { text: `Closes ${fmt(d)} · ${diff}d left`, color: "#f59e0b" };
+  return           { text: `Apply by ${fmt(d)}`,               color: "#6b7280" };
 }
 
 export function ApplicantJobCard({ job, href, brandColor }: Props) {
@@ -45,6 +57,17 @@ export function ApplicantJobCard({ job, href, brandColor }: Props) {
           {snippet}{snippet.length < (job.job_description ?? "").length ? "…" : ""}
         </p>
       )}
+
+      {(() => {
+        const dl = deadlineLabel(job.resume_deadline);
+        if (!dl) return null;
+        return (
+          <span className="flex items-center gap-1 text-xs" style={{ color: dl.color }}>
+            <Clock className="h-3 w-3 shrink-0" />
+            {dl.text}
+          </span>
+        );
+      })()}
 
       <div
         className="mt-auto flex items-center gap-1.5 text-sm font-semibold"

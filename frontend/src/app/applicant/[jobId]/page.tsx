@@ -4,8 +4,20 @@ import React from "react";
 import { useParams } from "next/navigation";
 import { useJob } from "../../../hooks/useJob";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Clock } from "lucide-react";
 import { Reveal } from "@/components/ui/Reveal";
+
+function resumeDeadlineBadge(iso: string | null | undefined) {
+  if (!iso) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(iso);
+  const diff = Math.ceil((d.getTime() - today.getTime()) / 86_400_000);
+  const fmt = (dt: Date) => dt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  if (diff < 0)   return { text: `Applications closed on ${fmt(d)}`, color: "#9ca3af" };
+  if (diff === 0) return { text: "Applications close today",         color: "#f59e0b" };
+  if (diff <= 7)  return { text: `Applications close ${fmt(d)} — ${diff} day${diff !== 1 ? "s" : ""} left`, color: "#f59e0b" };
+  return           { text: `Apply by ${fmt(d)}`,                     color: "#6b7280" };
+}
 
 export default function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -34,6 +46,16 @@ export default function JobDetailPage() {
         <div className="glass rounded-2xl p-7">
           <p className="font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">{job.department}</p>
           <h1 className="mt-2 font-display text-[34px] font-bold leading-tight tracking-tight text-heading">{job.title}</h1>
+          {(() => {
+            const dl = resumeDeadlineBadge(job.resume_deadline);
+            if (!dl) return null;
+            return (
+              <p className="mt-3 flex items-center gap-1.5 text-sm" style={{ color: dl.color }}>
+                <Clock className="h-4 w-4 shrink-0" />
+                {dl.text}
+              </p>
+            );
+          })()}
         </div>
       </Reveal>
       <Reveal index={1}>
