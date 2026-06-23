@@ -30,10 +30,17 @@ def upgrade() -> None:
             ORDER BY session_id, goal_template_id, created_at
         )
     """)
-    # Add unique constraint (idempotent — DO NOTHING if it already exists)
+    # Add unique constraint — idempotent: skip silently if it already exists
+    # (ALTER TABLE ADD CONSTRAINT has no IF NOT EXISTS; use the DO block workaround)
     op.execute("""
-        ALTER TABLE session_goals
-        ADD CONSTRAINT uq_session_goal UNIQUE (session_id, goal_template_id)
+        DO $$
+        BEGIN
+            ALTER TABLE session_goals
+            ADD CONSTRAINT uq_session_goal UNIQUE (session_id, goal_template_id);
+        EXCEPTION WHEN duplicate_table THEN
+            NULL;  -- constraint already present, nothing to do
+        END;
+        $$
     """)
 
 
