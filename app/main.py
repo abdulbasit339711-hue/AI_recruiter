@@ -23,6 +23,9 @@ def _run_alembic_upgrade() -> None:
 
     env.py auto-stamps existing databases (no alembic_version table, but application
     tables already present) so this is a no-op for pre-Alembic installations.
+
+    If the DB carries a revision from a different migration branch (e.g. an older
+    deployment), we re-stamp to head before upgrading so Alembic can proceed.
     Falls back to legacy run_migrations() if alembic is unavailable.
     """
     try:
@@ -32,7 +35,18 @@ def _run_alembic_upgrade() -> None:
 
         ini = pathlib.Path(__file__).parent.parent / "alembic.ini"
         cfg = AlembicConfig(str(ini))
-        alembic_command.upgrade(cfg, "head")
+        try:
+            alembic_command.upgrade(cfg, "head")
+        except Exception as inner:
+            if "Can't locate revision" in str(inner):
+                import logging as _log
+                _log.getLogger(__name__).warning(
+                    "Unknown Alembic revision in DB (%s); re-stamping to head.", inner
+                )
+                alembic_command.stamp(cfg, "head")
+                alembic_command.upgrade(cfg, "head")
+            else:
+                raise
     except Exception as exc:
         import logging as _log
         _log.getLogger(__name__).warning(

@@ -42,6 +42,7 @@ ENV HF_HOME=/opt/hf-cache
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
 # Application code (scoring engine reads app/config.yaml).
+COPY alembic.ini ./
 COPY app/ ./app/
 COPY scripts/ ./scripts/
 
