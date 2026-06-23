@@ -1182,6 +1182,126 @@ function GoalTile({ goal, index }: {
   );
 }
 
+// ── Dimension label map ────────────────────────────────────────────────────────
+const DIMENSION_LABELS: { key: string; label: string }[] = [
+  { key: "communication_skills",    label: "Communication" },
+  { key: "confidence_presentation", label: "Confidence & Presentation" },
+  { key: "technical_competency",    label: "Technical Competency" },
+  { key: "problem_solving",         label: "Problem Solving" },
+  { key: "relevant_experience",     label: "Relevant Experience" },
+  { key: "skills_match",            label: "Skills Match" },
+  { key: "cultural_fit",            label: "Cultural Fit" },
+  { key: "leadership_ownership",    label: "Leadership & Ownership" },
+  { key: "learning_agility",        label: "Learning Agility" },
+  { key: "emotional_intelligence",  label: "Emotional Intelligence" },
+  { key: "motivation_alignment",    label: "Motivation & Alignment" },
+  { key: "behavioral_assessment",   label: "Behavioral Assessment" },
+  { key: "resume_consistency",      label: "Resume Consistency" },
+  { key: "overall_performance",     label: "Overall Performance" },
+];
+
+// ── ScreeningSummaryView ───────────────────────────────────────────────────────
+function ScreeningSummaryView({ summary }: { summary: Record<string, unknown> }) {
+  const ev = (summary.evaluation ?? {}) as Record<string, unknown>;
+  const techStack = Array.isArray(summary.tech_stack) ? summary.tech_stack as string[] : [];
+  const recColor: Record<string, string> = { Proceed: "#34C28A", Hold: "#F5B544", Reject: "#F25C7C" };
+  const rec = String(ev.recommendation ?? "");
+
+  const facts = [
+    { label: "Experience",     value: summary.total_experience },
+    { label: "Current Salary", value: summary.current_salary },
+    { label: "Expected",       value: summary.expected_salary },
+    { label: "Notice Period",  value: summary.notice_period },
+    { label: "Schedule Fit",   value: summary.schedule_location_agreement },
+    { label: "FYP",            value: summary.final_year_project },
+    { label: "Project Motive", value: summary.project_choice_motivation },
+    { label: "Achievements",   value: summary.achievements },
+    { label: "Status",         value: summary.confirmation_status },
+  ].filter(f => f.value && f.value !== "Not provided");
+
+  const evalDims = [
+    { key: "vocabulary",            label: "Vocabulary" },
+    { key: "technical_terminology", label: "Technical Terms" },
+    { key: "answer_quality",        label: "Answer Quality" },
+    { key: "tone",                  label: "Tone" },
+    { key: "overall_fit",           label: "Overall Fit" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Recommendation badge */}
+      {rec && rec !== "Not assessed" && (
+        <div className="flex items-center gap-3">
+          <span
+            className="rounded-lg px-3 py-1 text-xs font-bold uppercase tracking-wide"
+            style={{ background: `${recColor[rec] ?? "#9CA3B0"}18`, color: recColor[rec] ?? "#9CA3B0", border: `1px solid ${recColor[rec] ?? "#9CA3B0"}40` }}
+          >
+            {rec}
+          </span>
+          {!!ev.evaluation_summary && String(ev.evaluation_summary) !== "Not assessed" && (
+            <p className="text-xs text-muted-foreground">{String(ev.evaluation_summary)}</p>
+          )}
+        </div>
+      )}
+
+      {/* Facts grid */}
+      {facts.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {facts.map(f => (
+            <div key={f.label} className="rounded-lg p-3" style={{ background: "var(--surface-subtle)", border: "1px solid var(--surface-border)" }}>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{f.label}</p>
+              <p className="mt-0.5 text-xs font-medium text-heading leading-snug">{String(f.value)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tech stack */}
+      {techStack.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">Tech Stack</p>
+          <div className="flex flex-wrap gap-1.5">
+            {techStack.map((t, i) => (
+              <span key={i} className="rounded-md px-2 py-0.5 text-xs font-mono" style={{ background: "rgba(28,153,191,0.10)", color: "#1C99BF", border: "1px solid rgba(28,153,191,0.25)" }}>
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Communication evaluation */}
+      {evalDims.some(d => ev[d.key] && (ev[d.key] as Record<string, unknown>).score != null) && (
+        <div>
+          <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">Communication Evaluation</p>
+          <div className="space-y-2">
+            {evalDims.map(({ key, label }) => {
+              const cell = ev[key] as Record<string, unknown> | undefined;
+              if (!cell || cell.score == null) return null;
+              const score = Number(cell.score);
+              const comment = String(cell.comment ?? "");
+              const pct = (score / 5) * 100;
+              const color = score >= 4 ? "#34C28A" : score >= 3 ? "#F5B544" : "#F25C7C";
+              return (
+                <div key={key}>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-medium text-heading">{label}</p>
+                    <span className="font-mono text-xs font-bold tabular-nums" style={{ color }}>{score}/5</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+                  </div>
+                  {comment && <p className="mt-0.5 text-[10px] text-muted-foreground">{comment}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AssessmentView ─────────────────────────────────────────────────────────────
 function AssessmentView({
   assessment,
@@ -1208,6 +1328,10 @@ function AssessmentView({
   const summary = String(fr.summary ?? ov.summary ?? assessment?.summary ?? "");
   const strengths = (fr.strengths ?? ov.strengths ?? assessment?.strengths ?? []) as string[];
   const devAreas = (fr.development_areas ?? ov.development_areas ?? assessment?.development_areas ?? []) as string[];
+  const rationale = String(fr.decision_rationale ?? ov.rationale ?? "");
+  const dimScores = (assessment?.dimension_scores ?? null) as Record<string, unknown> | null;
+  const screeningSummary = (assessment?.screening_summary ?? null) as Record<string, unknown> | null;
+  const nextSteps = (assessment?.next_steps ?? []) as string[];
 
   return (
     <div className="space-y-6">
@@ -1289,6 +1413,39 @@ function AssessmentView({
         </div>
       )}
 
+      {/* ── 14-Dimension Scores ── */}
+      {dimScores && Object.keys(dimScores).length > 0 && (
+        <div>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-heading">
+            <Brain className="h-4 w-4" style={{ color: "#1C99BF" }} />
+            Evaluation Dimensions
+          </h3>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {DIMENSION_LABELS.map(({ key, label }) => {
+              const dim = dimScores[key] as Record<string, unknown> | undefined;
+              if (!dim) return null;
+              const score = typeof dim.score === "number" ? dim.score : null;
+              const notes = String(dim.notes ?? "");
+              const color = score != null ? scoreColor(score) : "#9CA3B0";
+              return (
+                <div key={key} className="rounded-xl p-3" style={{ background: "var(--surface-subtle)", border: "1px solid var(--surface-border)" }}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-medium text-heading">{label}</p>
+                    <span className="font-mono text-sm font-bold tabular-nums" style={{ color }}>
+                      {score != null ? score : "—"}
+                    </span>
+                  </div>
+                  <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${score ?? 0}%`, background: color }} />
+                  </div>
+                  {notes && <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">{notes}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Strengths + dev areas ── */}
       {(strengths.length > 0 || devAreas.length > 0) && (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -1327,11 +1484,47 @@ function AssessmentView({
         </div>
       )}
 
+      {/* ── Decision Rationale ── */}
+      {rationale && (
+        <div className="rounded-xl p-4" style={{ background: "rgba(28,153,191,0.05)", border: "1px solid rgba(28,153,191,0.18)" }}>
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#1C99BF" }}>Decision Rationale</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{rationale}</p>
+        </div>
+      )}
+
       {/* ── Summary ── */}
       {summary && (
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
           <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Summary</p>
           <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p>
+        </div>
+      )}
+
+      {/* ── Screening Profile ── */}
+      {screeningSummary && (
+        <div>
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-heading">
+            <ListChecks className="h-4 w-4" style={{ color: "#1C99BF" }} />
+            Screening Profile
+          </h3>
+          <ScreeningSummaryView summary={screeningSummary} />
+        </div>
+      )}
+
+      {/* ── Next Steps ── */}
+      {nextSteps.length > 0 && (
+        <div>
+          <h3 className="mb-2.5 text-sm font-semibold text-heading">Recommended Next Steps</h3>
+          <div className="space-y-1.5">
+            {nextSteps.map((step, i) => (
+              <div key={i} className="flex items-start gap-2.5 rounded-lg p-2.5"
+                style={{ background: "var(--surface-subtle)", border: "1px solid var(--surface-border)" }}>
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
+                  style={{ background: "rgba(28,153,191,0.15)", color: "#1C99BF" }}>{i + 1}</span>
+                <p className="text-xs text-muted-foreground leading-relaxed">{step}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
