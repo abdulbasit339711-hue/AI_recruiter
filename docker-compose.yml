@@ -86,7 +86,6 @@ services:
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       RECORDINGS_DIR: /data/recordings
-      PIPELINE_MODE: ${PIPELINE_MODE:-dual}
       GOAL_TRACKING_ENABLED: ${GOAL_TRACKING_ENABLED:-true}
       BILINGUAL_MODE: ${BILINGUAL_MODE:-true}
       NOISE_CANCELLATION: ${NOISE_CANCELLATION:-true}

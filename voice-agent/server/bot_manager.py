@@ -115,19 +115,9 @@ def _finalize_lock_for(session_id: str) -> "threading.Lock":
 
 
 class BotManager:
-    """
-    Manages bot pipeline with support for two modes:
-    1. Single LLM - Traditional pipeline
-    2. Dual LLM - Judge evaluates, Responder uses evaluation context
-    """
+    """Manages the dual-LLM interview pipeline (Judge + Responder)."""
 
-    def __init__(self, transport, stt, llm, tts, context, user_aggregator, assistant_aggregator, mode="single"):
-        """
-        Initialize bot manager with specified pipeline mode
-
-        Args:
-            mode: "single" for traditional pipeline, "dual" for judge+responder pipeline
-        """
+    def __init__(self, transport, stt, llm, tts, context, user_aggregator, assistant_aggregator):
         self.transport = transport
         self.stt = stt
         self.llm = llm
@@ -135,7 +125,6 @@ class BotManager:
         self.context = context
         self.user_aggregator = user_aggregator
         self.assistant_aggregator = assistant_aggregator
-        self.mode = mode
 
         # The interview session is configured per-candidate at connect time via
         # configure_session(); processors are built session-less and updated then.
@@ -272,13 +261,8 @@ class BotManager:
         from processors.silence_nudge_processor import SilenceNudgeProcessor
         self.silence_processor = SilenceNudgeProcessor(self.broadcaster)
 
-        # Create pipeline based on mode
-        if mode == "dual":
-            logger.info("[BotManager] Initializing DUAL LLM pipeline (Judge + Responder)")
-            self.pipeline = self._create_dual_pipeline()
-        else:
-            logger.info("[BotManager] Initializing SINGLE LLM pipeline")
-            self.pipeline = self._create_single_pipeline()
+        logger.info("[BotManager] Initializing DUAL LLM pipeline (Judge + Responder)")
+        self.pipeline = self._create_dual_pipeline()
 
         # Create worker.
         # idle_timeout_secs: a real candidate often pauses to think between answers;
@@ -294,36 +278,6 @@ class BotManager:
                 enable_usage_metrics=True,
             ),
         )
-
-    def _create_single_pipeline(self):
-        """Create traditional single LLM pipeline"""
-        pipeline_processors = [self.transport.input()]
-        if self.video_recorder:
-            pipeline_processors.append(self.video_recorder)
-        if self.vision_processor:
-            pipeline_processors.append(self.vision_processor)
-        pipeline_processors += [
-            self.stt,
-            self.transcript_processor,
-        ]
-        if self.silence_processor:
-            pipeline_processors.append(self.silence_processor)
-
-        # Add goal tracking if enabled
-        if self.goal_processor:
-            pipeline_processors.append(self.goal_processor)
-
-        pipeline_processors.extend([
-            self.user_aggregator,
-            self.llm,
-            self.metrics_processor,
-            self.tts,
-            self.audio_buffer,
-            self.transport.output(),
-            self.assistant_aggregator,
-        ])
-
-        return Pipeline(pipeline_processors)
 
     def _create_dual_pipeline(self):
         """Create dual LLM pipeline with judge and context-aware responder"""
@@ -378,14 +332,12 @@ class BotManager:
                 logger.error(f"[BotManager] Failed to initialize database: {e}")
                 # Continue without database support
 
-        # Log pipeline mode (the interview session itself is attached later via
-        # configure_session() when a candidate connects).
         await self.broadcaster.broadcast("pipeline_mode", {
-            "mode": self.mode,
-            "description": "Dual LLM (Judge + Responder)" if self.mode == "dual" else "Single LLM"
+            "mode": "dual",
+            "description": "Dual LLM (Judge + Responder)"
         })
 
-        logger.info(f"[BotManager] Worker started - Mode: {self.mode} (awaiting interview config)")
+        logger.info("[BotManager] Worker started - Mode: dual (awaiting interview config)")
 
     def _session_processors(self):
         """All pipeline processors that need the per-interview session."""
@@ -582,9 +534,9 @@ class BotManager:
     def get_pipeline_info(self):
         """Get current pipeline configuration"""
         return {
-            "mode": self.mode,
-            "has_judge": self.mode == "dual",
-            "judge_model": "llama-3.1-8b-instant" if self.mode == "dual" else None,
+            "mode": "dual",
+            "has_judge": True,
+            "judge_model": "llama-3.1-8b-instant",
             "responder_model": os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
             "session_id": self.session.session_id if self.session else None,
             "goal_tracking_enabled": self.goal_service is not None

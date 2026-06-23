@@ -99,8 +99,6 @@ logging.getLogger("websockets").setLevel(logging.CRITICAL)
 # --- Global State ---
 bot_manager = None
 bot_ready = asyncio.Event()
-pipeline_mode = os.getenv("PIPELINE_MODE", "dual")  # Default to dual (judge + responder); set "single" to disable
-
 # aiohttp session for the HTTP TTS service (one request per utterance — far more
 # robust than a persistent websocket on a flaky / resource-starved host). An
 # aiohttp.ClientSession is bound to the loop it was created on, and each interview bot
@@ -700,28 +698,7 @@ async def get_pipeline():
     """Get current pipeline configuration"""
     if bot_manager:
         return bot_manager.get_pipeline_info()
-    return {"mode": pipeline_mode, "status": "not_started"}
-
-@app.post("/pipeline")
-async def set_pipeline(request: Request):
-    """Set pipeline mode (single or dual)"""
-    global pipeline_mode
-    data = await request.json()
-    mode = data.get("mode", "single")
-
-    if mode not in ["single", "dual"]:
-        return {"error": "Invalid mode. Use 'single' or 'dual'"}
-
-    pipeline_mode = mode
-    logger.info(f"[API] Pipeline mode set to: {mode}")
-
-    # Broadcast mode change
-    await broadcaster.broadcast("pipeline_mode", {
-        "mode": mode,
-        "description": "Dual LLM (Judge + Responder)" if mode == "dual" else "Single LLM"
-    })
-
-    return {"mode": mode, "status": "updated", "restart_required": bot_manager is not None}
+    return {"mode": "dual", "status": "not_started"}
 
 # --- Goal Tracking Endpoints ---
 @app.get("/goals/{session_id}")
@@ -1098,7 +1075,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         user_params=LLMUserAggregatorParams(
             user_turn_strategies=build_user_turn_strategies()),
     )
-    manager = BotManager(transport, stt, llm, tts, context, user_aggregator, assistant_aggregator, mode=pipeline_mode)
+    manager = BotManager(transport, stt, llm, tts, context, user_aggregator, assistant_aggregator)
 
     # Patch DeepgramSTTService._connection_handler to add retry backoff.
     # Without backoff the tight WebSocket retry loop (on e.g. an invalid API key) can
