@@ -243,6 +243,8 @@ Conversation Context:
 - Time Elapsed: {context.get('time_elapsed', 'N/A')}
 """
 
+        goal_titles = [g["title"] for g in active_goals[:5]]
+
         return f"""You are analyzing a candidate's interview response for goal progress.
 NOTE: The candidate may respond in English, Roman Urdu (Urdu written in Latin script), or a mix.
 Evaluate meaning and intent regardless of language — Roman Urdu responses are equally valid.
@@ -254,25 +256,26 @@ ACTIVE GOALS TO ASSESS:
 
 {context_info}
 
-SCORING RULES — two tiers of goals:
+SCORING RULES — two tiers of goals, classified by each goal's description above:
 
-OBSERVABLE GOALS (assess from HOW the candidate speaks, in EVERY response):
-  • Communication Skills, Confidence & Presentation, Behavioral Assessment,
-    Emotional Intelligence, Resume & Interview Consistency
-  → Award 0.1-0.2 delta based on tone, clarity, structure, and professionalism.
-    No targeted question required — these are visible in any response.
+OBSERVABLE GOALS — goals whose descriptions focus on HOW the candidate communicates
+  (tone, clarity, confidence, professionalism, interpersonal style):
+  → Award 0.1-0.2 delta on ANY response where the signal is clear.
+    No targeted question required.
 
-CONTENT GOALS (assess only when the response contains explicit, role-relevant evidence):
-  • Technical Competency, Problem-Solving & Critical Thinking, Relevant Experience,
-    Skills Match Assessment, Cultural & Organizational Fit, Leadership & Ownership,
-    Learning Agility, Motivation & Career Alignment, Overall Performance Evaluation
-  → Award 0.2-0.3 delta only for clear, specific, substantial evidence.
+CONTENT GOALS — goals whose descriptions focus on WHAT the candidate knows or has done
+  (technical skills, domain experience, problem-solving, role-specific competencies):
+  → Award 0.2-0.3 delta only when the response contains explicit, specific evidence.
+
+CRITICAL: You MUST only update goals from the ACTIVE GOALS list above.
+Valid goal_title values: {goal_titles}
+Do NOT invent goal titles not in that list.
 
 Return JSON:
 {{
     "goal_updates": [
         {{
-            "goal_title": "exact goal title from the list above",
+            "goal_title": "exact title from the ACTIVE GOALS list",
             "evidence_type": "specific_example|technical_detail|problem_solving|quantifiable_impact|best_practices|communication_quality|behavioral_signal|emotional_signal",
             "evidence_text": "exact quote or observation",
             "progress_delta": 0.0-0.3,
@@ -286,7 +289,8 @@ Return JSON:
     "suggested_probe": "natural follow-up question if needed"
 }}
 
-Always include updates for observable goals (Communication, Confidence, Behavioral, Emotional Intelligence) when there is clear signal — even if small. Only skip them if the response is too short to assess."""
+For every observable goal in the list where the response shows clear signal, include an update.
+Only skip a goal if the response is too short to assess it."""
 
     async def _apply_goal_update(self, session_id: str, goal_update: Dict[str, Any],
                                response_text: str) -> bool:
