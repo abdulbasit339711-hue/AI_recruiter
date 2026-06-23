@@ -37,8 +37,8 @@ def _delete_job(job_id: int) -> None:
 
 def test_upload_returns_queued_and_resume_text_endpoint(monkeypatch):
     queued_ids: list[int] = []
-    monkeypatch.setattr("app.main.validate_and_extract", lambda *_args: RESUME_TEXT)
-    monkeypatch.setattr("app.main.enqueue_candidate", lambda candidate_id: queued_ids.append(candidate_id))
+    monkeypatch.setattr("app.routers.candidates.validate_and_extract", lambda *_args: RESUME_TEXT)
+    monkeypatch.setattr("app.routers.candidates.enqueue_candidate", lambda candidate_id: queued_ids.append(candidate_id))
 
     # Admin endpoints now require a bearer token (see app/core/auth.py). The guard
     # reads ADMIN_API_TOKEN at request time, so set a known value and authenticate.

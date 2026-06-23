@@ -255,8 +255,8 @@ def _cleanup(job_id, candidate_id, session_ids) -> None:
 # --------------------------------------------------------------------------- #
 def test_full_recruitment_pipeline(monkeypatch, capsys):
     _mock_scoring(monkeypatch)
-    monkeypatch.setattr("app.main.validate_and_extract", lambda *_a: RESUME_TEXT)
-    monkeypatch.setattr("app.main.enqueue_candidate", lambda _cid: None)  # score synchronously below
+    monkeypatch.setattr("app.routers.candidates.validate_and_extract", lambda *_a: RESUME_TEXT)
+    monkeypatch.setattr("app.routers.candidates.enqueue_candidate", lambda _cid: None)  # score synchronously below
     monkeypatch.setenv("ADMIN_API_TOKEN", "test-token")
     auth = {"Authorization": "Bearer test-token"}
 

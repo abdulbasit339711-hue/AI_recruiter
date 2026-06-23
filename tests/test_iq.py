@@ -108,8 +108,8 @@ def test_wrong_token_type_rejected():
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.delenv("ADMIN_API_TOKEN", raising=False)  # keep the apply flow public
-    monkeypatch.setattr("app.main.validate_and_extract", lambda *_a: "resume text")
-    monkeypatch.setattr("app.main.enqueue_candidate", lambda _cid: None)
+    monkeypatch.setattr("app.routers.candidates.validate_and_extract", lambda *_a: "resume text")
+    monkeypatch.setattr("app.routers.candidates.enqueue_candidate", lambda _cid: None)
     return TestClient(app)
 
 
