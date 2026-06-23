@@ -4,6 +4,7 @@
 #
 
 import asyncio
+import datetime
 import logging
 import os
 import re
@@ -395,6 +396,43 @@ async def get_token():
     )
     return {"token": token, "url": os.getenv("LIVEKIT_URL")}
 
+_PKT = datetime.timezone(datetime.timedelta(hours=5))
+_SLOT_MONTHS = {
+    "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
+    "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+}
+
+
+def _parse_slot_pkt(slot: str) -> datetime.datetime | None:
+    """Parse 'Monday, Jun 23 at 9:00 AM PKT' → PKT-aware datetime, inferring year."""
+    m = re.match(r"\w+,\s+(\w+)\s+(\d+)\s+at\s+(\d{1,2}):(\d{2})\s+(AM|PM)\s+PKT", slot.strip())
+    if not m:
+        return None
+    mon_str, day, hour, minute, ampm = m.groups()
+    month = _SLOT_MONTHS.get(mon_str)
+    if not month:
+        return None
+    hour, day, minute = int(hour), int(day), int(minute)
+    if ampm == "PM" and hour != 12:
+        hour += 12
+    elif ampm == "AM" and hour == 12:
+        hour = 0
+    now = datetime.datetime.now(_PKT)
+    for year in (now.year, now.year + 1):
+        try:
+            dt = datetime.datetime(year, month, day, hour, minute, tzinfo=_PKT)
+            if (now - dt).total_seconds() < 60 * 60 * 24 * 90:  # within 90 days ago
+                return dt
+        except ValueError:
+            pass
+    return None
+
+
+# How early/late a candidate can open the interview room relative to their slot.
+_GATE_EARLY_SECS = 15 * 60   # 15 min before
+_GATE_LATE_SECS  = 90 * 60   # 90 min after
+
+
 @app.get("/interview/validate")
 async def validate_interview(token: str):
     """Validate a candidate's emailed interview link and return join credentials.
@@ -477,6 +515,34 @@ async def validate_interview(token: str):
     except Exception as e:
         logger.error(f"[Interview] validate lookup failed: {e}")
         job, candidate = None, None
+
+    # Time-gate: the room only opens _GATE_EARLY_SECS before the confirmed slot
+    # and closes _GATE_LATE_SECS after it. Skip for active/interrupted resumes so
+    # a candidate who got disconnected mid-interview can always rejoin.
+    if prior_status not in ("active", "interrupted"):
+        confirmed_slot = (candidate or {}).get("interview_confirmed_slot")
+        if confirmed_slot:
+            slot_dt = _parse_slot_pkt(confirmed_slot)
+            if slot_dt:
+                now_pkt = datetime.datetime.now(_PKT)
+                delta = (now_pkt - slot_dt).total_seconds()
+                if delta < -_GATE_EARLY_SECS:
+                    opens_at = (slot_dt - datetime.timedelta(seconds=_GATE_EARLY_SECS)).strftime("%-I:%M %p PKT")
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"Your interview is scheduled for {confirmed_slot}. "
+                            f"The room opens at {opens_at} — please return then."
+                        ),
+                    }
+                if delta > _GATE_LATE_SECS:
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"Your interview slot ({confirmed_slot}) has passed. "
+                            "Please contact the recruitment team to reschedule."
+                        ),
+                    }
 
     # On a resume, hand back the conversation so far so the candidate's page can
     # redisplay it immediately (the live SSE stream only carries NEW turns, never a

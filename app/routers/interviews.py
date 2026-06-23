@@ -740,6 +740,8 @@ def send_availability_invite_api(candidate_id: int, db: Session = Depends(get_db
         candidate_name=cand.name,
         job_title=job.title,
         link=avail_url,
+        org_name=job.org.name if job.org else None,
+        org_color=job.org.primary_color if job.org else "#1C99BF",
     )
 
     cand.availability_invited_at = _utcnow().isoformat()

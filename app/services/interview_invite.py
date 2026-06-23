@@ -23,12 +23,15 @@ def invite_candidate(db, candidate, job, *, force: bool = False) -> str | None:
         return None
 
     token, url = mint_link(candidate.id, job.id)
+    org = getattr(job, "org", None)
     try:
         send_interview_invite(
             to=candidate.email,
             candidate_name=candidate.name,
             job_title=job.title,
             link=url,
+            org_name=org.name if org else None,
+            org_color=org.primary_color if org else "#1C99BF",
         )
     except Exception as e:  # noqa: BLE001 - never fail the caller on email issues
         logger.error("Failed to send interview invite to %s: %s", candidate.email, e)

@@ -267,7 +267,7 @@ class DatabaseManager:
         return await self.fetch_one(
             "SELECT id, name, email, job_id, current_role, years_experience, "
             "interview_questions, summary, tier3, total_score, "
-            "skills_matched, skills_missing FROM candidates WHERE id = $1",
+            "skills_matched, skills_missing, interview_confirmed_slot FROM candidates WHERE id = $1",
             candidate_id,
         )
 

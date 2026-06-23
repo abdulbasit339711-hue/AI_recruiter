@@ -127,6 +127,8 @@ def confirm_interview_slot(
                 job_title=job.title,
                 slot=slot,
                 room_url=room_url,
+                org_name=job.org.name if job.org else None,
+                org_color=job.org.primary_color if job.org else "#1C99BF",
             )
         except Exception as e_mail:
             logger.error("Failed to send slot confirmation to %s: %s", cand.email, e_mail)
