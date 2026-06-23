@@ -127,6 +127,9 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN interview_phase2_score FLOAT",
         "ALTER TABLE candidates ADD COLUMN interview_overall_score FLOAT",
         "ALTER TABLE candidates ADD COLUMN interview_passed BOOLEAN",
+        # IQ test token jti blacklist — persisted so replay is blocked across restarts
+        "CREATE TABLE IF NOT EXISTS used_iq_test_tokens "
+        "(jti VARCHAR PRIMARY KEY, used_at VARCHAR NOT NULL)",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
