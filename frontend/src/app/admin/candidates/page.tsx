@@ -25,6 +25,8 @@ import {
   ExternalLink,
   SlidersHorizontal,
   Plus,
+  CalendarCheck,
+  CalendarClock,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ScoreChip } from "@/components/ui/ScoreChip";
@@ -667,15 +669,33 @@ export default function AdminCandidatesPage() {
                         </div>
                       </div>
 
-                      {/* ── Stage + interview indicator col ── */}
-                      <div className="col-span-2 flex items-center gap-2">
-                        <StatusBadge status={candidate.hr_status ?? candidate.status} />
-                        {/* Interview dot: green = invited, gray = not yet */}
-                        <span
-                          className={`h-2 w-2 shrink-0 rounded-full ring-1 ${hasToken ? "ring-green-500/30" : "ring-white/10"}`}
-                          title={hasToken ? "Interview invite sent" : "No interview invite"}
-                          style={{ background: hasToken ? "#34C28A" : "rgba(255,255,255,0.12)" }}
-                        />
+                      {/* ── Stage + interview slot col ── */}
+                      <div className="col-span-2 flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={candidate.hr_status ?? candidate.status} />
+                          {!candidate.interview_confirmed_slot && !candidate.availability_response && (
+                            <span
+                              className={`h-2 w-2 shrink-0 rounded-full ring-1 ${hasToken ? "ring-green-500/30" : "ring-white/10"}`}
+                              title={hasToken ? "Interview invite sent" : "No interview invite"}
+                              style={{ background: hasToken ? "#34C28A" : "rgba(255,255,255,0.12)" }}
+                            />
+                          )}
+                        </div>
+                        {candidate.interview_confirmed_slot ? (
+                          <div className="flex items-center gap-1" title={`Confirmed: ${candidate.interview_confirmed_slot}`}>
+                            <CalendarCheck className="h-3 w-3 shrink-0 text-green-400" />
+                            <span className="truncate text-[10px] text-green-400 font-medium">
+                              {candidate.interview_confirmed_slot}
+                            </span>
+                          </div>
+                        ) : candidate.availability_response ? (
+                          <div className="flex items-center gap-1" title={`Requested: ${candidate.availability_response}`}>
+                            <CalendarClock className="h-3 w-3 shrink-0 text-yellow-400" />
+                            <span className="truncate text-[10px] text-yellow-400">
+                              {candidate.availability_response}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
 
                       {/* ── Actions col ── */}
