@@ -577,6 +577,11 @@ export const api = {
     const response = await client.patch(`/settings/${key}`, null, { params: { value } });
     return response.data;
   },
+
+  async createTestInterview(): Promise<{ interview_url: string; candidate_name: string; job_title: string; note: string }> {
+    const response = await client.post("/test-interview");
+    return response.data;
+  },
 };
 
 export default client;

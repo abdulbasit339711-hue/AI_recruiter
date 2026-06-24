@@ -349,6 +349,36 @@ def list_settings(db: Session = Depends(get_db)):
     ]
 
 
+@router.post("/test-interview")
+def create_test_interview(db: Session = Depends(get_db)):
+    """Admin: mint a one-time interview link for manual testing (no email sent)."""
+    import os
+    from ..interview_links import mint_link
+
+    # Use any existing candidate+job pair, preferring processed/shortlisted ones.
+    cand = (
+        db.query(Candidate)
+        .filter(Candidate.job_id.isnot(None))
+        .order_by(Candidate.total_score.desc().nullslast())
+        .first()
+    )
+    if not cand:
+        raise HTTPException(status_code=404, detail="No candidates in the database yet. Upload a resume first.")
+    job = db.query(Job).filter(Job.id == cand.job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Candidate has no linked job.")
+
+    token, _ = mint_link(cand.id, job.id, ttl_minutes=60)
+    base = os.getenv("WEB_BASE_URL", "http://localhost:3000").rstrip("/")
+    url = f"{base}/interview-room/{token}"
+    return {
+        "interview_url": url,
+        "candidate_name": cand.name,
+        "job_title": job.title,
+        "note": "This link expires in 60 minutes and is for testing only.",
+    }
+
+
 @router.patch("/settings/{key}")
 def update_setting(key: str, value: str = Query(...), db: Session = Depends(get_db)):
     if key not in _SETTING_DEFS:

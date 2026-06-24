@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-hot-toast";
-import { Settings, Save, Info } from "lucide-react";
+import { Settings, Save, Info, FlaskConical } from "lucide-react";
 
 type Setting = {
   key: string;
@@ -20,6 +20,7 @@ export default function AdminSettingsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const [testingInterview, setTestingInterview] = useState(false);
 
   useEffect(() => {
     api.getSettings()
@@ -32,6 +33,20 @@ export default function AdminSettingsPage() {
       .catch(() => toast.error("Failed to load settings."))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleTestInterview() {
+    setTestingInterview(true);
+    try {
+      const data = await api.createTestInterview();
+      window.open(data.interview_url, "_blank");
+      toast.success(`Test interview opened for ${data.candidate_name} — ${data.job_title}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to create test interview";
+      toast.error(msg);
+    } finally {
+      setTestingInterview(false);
+    }
+  }
 
   async function handleSave(key: string) {
     setSaving((p) => ({ ...p, [key]: true }));
@@ -58,6 +73,29 @@ export default function AdminSettingsPage() {
           <h1 className="text-2xl font-bold text-heading">Settings</h1>
           <p className="text-sm text-muted-foreground">Configure system-wide recruitment behaviour.</p>
         </div>
+      </div>
+
+      {/* Test Interview card — always visible */}
+      <div
+        className="mb-6 rounded-2xl p-5"
+        style={{ background: "var(--surface-card)", border: "1px solid var(--surface-border)" }}
+      >
+        <div className="mb-1 flex items-start gap-2">
+          <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#A78BFA" }} />
+          <p className="font-semibold text-heading">Test Voice Interview</p>
+        </div>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Opens a live interview room using an existing candidate. Use this to verify that Emily greets correctly and that audio is working end-to-end.
+        </p>
+        <button
+          onClick={handleTestInterview}
+          disabled={testingInterview}
+          className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all disabled:opacity-40"
+          style={{ background: "#A78BFA" }}
+        >
+          <FlaskConical className="h-4 w-4" />
+          {testingInterview ? "Generating link…" : "Open Test Interview"}
+        </button>
       </div>
 
       {loading ? (
