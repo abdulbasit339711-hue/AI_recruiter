@@ -183,6 +183,7 @@ def compose_system_prompt(
     interview_type: str = "technical",
     job_llm_prompt: str | None = None,
     bilingual: bool = False,
+    voice_prompt: str | None = None,
 ) -> str:
     """Build the interviewer system prompt for a specific job/role."""
     import os as _os
@@ -198,6 +199,8 @@ def compose_system_prompt(
         prompt += BILINGUAL_ADDENDUM
     if job_llm_prompt:
         prompt += "\n\nRole-specific evaluation guidance:\n" + job_llm_prompt.strip()
+    if voice_prompt:
+        prompt += "\n\nAdditional interview instructions:\n" + voice_prompt.strip()
     return prompt
 
 

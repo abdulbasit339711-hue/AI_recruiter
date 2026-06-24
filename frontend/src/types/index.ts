@@ -17,6 +17,7 @@ export interface Job {
   department: string;
   job_description: string;
   llm_prompt: string | null;
+  voice_prompt: string | null;
   status: "Active" | "Archived";
   created_at: string;
   org_id: number | null;

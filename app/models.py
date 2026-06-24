@@ -36,6 +36,7 @@ class Job(Base):
     department = Column(String, nullable=False)
     job_description = Column(Text, nullable=False)
     llm_prompt = Column(Text, nullable=True)
+    voice_prompt = Column(Text, nullable=True)   # extra instructions appended to Emily's system prompt
     # Optional explicit interview role slug (e.g. "backend_engineer"); defaults to a
     # normalized form of the title when blank. Drives goal_templates lookup.
     role_type = Column(String, nullable=True)

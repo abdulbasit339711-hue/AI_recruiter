@@ -112,7 +112,7 @@ export default function AdminJobsPage() {
   const openEdit   = (job: Job) => { setEditingJob(job); setModalOpen(true); };
 
   const handleSubmit = async (
-    data: { title: string; department: string; job_description: string; llm_prompt?: string; resume_deadline?: string; interview_deadline?: string },
+    data: { title: string; department: string; job_description: string; llm_prompt?: string; voice_prompt?: string; resume_deadline?: string; interview_deadline?: string },
     id?: number
   ) => {
     if (id) await updateJobMutation.mutateAsync({ id, ...data });

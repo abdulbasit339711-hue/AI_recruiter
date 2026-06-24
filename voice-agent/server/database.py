@@ -214,7 +214,7 @@ class DatabaseManager:
     async def get_job(self, job_id: int) -> Optional[Dict[str, Any]]:
         """Read a job (owned by the main API) from the shared database."""
         return await self.fetch_one(
-            "SELECT id, title, department, job_description, llm_prompt, status, "
+            "SELECT id, title, department, job_description, llm_prompt, voice_prompt, status, "
             "COALESCE(role_type, '') AS role_type "
             "FROM jobs WHERE id = $1",
             job_id,

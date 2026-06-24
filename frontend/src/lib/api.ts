@@ -226,6 +226,7 @@ export const api = {
     department: string;
     job_description: string;
     llm_prompt?: string;
+    voice_prompt?: string;
     role_type?: string;
   }): Promise<Job> {
     const response = await client.post<Job>("/jobs", null, { params });
@@ -239,6 +240,7 @@ export const api = {
       department?: string;
       job_description?: string;
       llm_prompt?: string | null;
+      voice_prompt?: string | null;
       role_type?: string | null;
       status?: "Active" | "Archived";
       resume_deadline?: string | null;

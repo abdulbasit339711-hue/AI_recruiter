@@ -60,6 +60,7 @@ def _serialize_job(job: Job, include_private: bool) -> dict:
     }
     if include_private:
         data["llm_prompt"] = job.llm_prompt
+        data["voice_prompt"] = job.voice_prompt
         data["tier1_weight"] = job.tier1_weight if job.tier1_weight is not None else 1.0
         data["tier2_weight"] = job.tier2_weight if job.tier2_weight is not None else 1.0
         data["tier3_weight"] = job.tier3_weight if job.tier3_weight is not None else 1.0
@@ -72,6 +73,7 @@ def create_job(
     department: str = Query(..., min_length=1, max_length=200),
     job_description: str = Query(..., min_length=1, max_length=20000),
     llm_prompt: Optional[str] = Query(None, max_length=10000),
+    voice_prompt: Optional[str] = Query(None, max_length=10000),
     org_id: Optional[int] = Query(None),
     resume_deadline: Optional[str] = Query(None, max_length=20),
     interview_deadline: Optional[str] = Query(None, max_length=20),
@@ -83,6 +85,7 @@ def create_job(
             department=department,
             job_description=job_description,
             llm_prompt=llm_prompt,
+            voice_prompt=voice_prompt,
             org_id=org_id,
             resume_deadline=resume_deadline,
             interview_deadline=interview_deadline,
@@ -212,6 +215,7 @@ def update_job(
     department: Optional[str] = Query(None, min_length=1, max_length=200),
     job_description: Optional[str] = Query(None, min_length=1, max_length=20000),
     llm_prompt: Optional[str] = Query(None, max_length=10000),
+    voice_prompt: Optional[str] = Query(None, max_length=10000),
     status: Optional[str] = Query(None, pattern="^(Active|Archived)$"),
     resume_deadline: Optional[str] = Query(None, max_length=20),
     interview_deadline: Optional[str] = Query(None, max_length=20),
@@ -231,6 +235,8 @@ def update_job(
             job.job_description = job_description
         if llm_prompt is not None:
             job.llm_prompt = llm_prompt
+        if voice_prompt is not None:
+            job.voice_prompt = voice_prompt
         if status is not None:
             job.status = status
         if resume_deadline is not None:
@@ -252,6 +258,7 @@ def patch_job(
     department: Optional[str] = Query(None, min_length=1, max_length=200),
     job_description: Optional[str] = Query(None, min_length=1, max_length=20000),
     llm_prompt: Optional[str] = Query(None, max_length=10000),
+    voice_prompt: Optional[str] = Query(None, max_length=10000),
     status: Optional[str] = Query(None, pattern="^(Active|Archived)$"),
     db: Session = Depends(get_db),
 ):
@@ -267,6 +274,8 @@ def patch_job(
             job.job_description = job_description
         if llm_prompt is not None:
             job.llm_prompt = llm_prompt
+        if voice_prompt is not None:
+            job.voice_prompt = voice_prompt
         if status is not None:
             job.status = status
         db.commit()

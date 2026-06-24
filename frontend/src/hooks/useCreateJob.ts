@@ -10,6 +10,7 @@ type NewJob = {
   department: string;
   job_description: string;
   llm_prompt?: string;
+  voice_prompt?: string;
   org_id?: number | null;
 };
 
