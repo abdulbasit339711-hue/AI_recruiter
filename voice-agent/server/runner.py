@@ -1273,11 +1273,9 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
             return
 
         greeting = (
-            f"Hello, and welcome to your interview for {role}. " if role
-            else "Hello, and welcome to your interview. "
-        ) + (
-            "I'm your AI interviewer. To get started, could you tell me a little "
-            "about yourself and your background?"
+            f"Hi! I'm your AI interviewer for the {role} role. Please introduce yourself."
+            if role
+            else "Hi! I'm your AI interviewer. Please introduce yourself."
         )
         await broadcaster.broadcast("transcript", {"session_id": sid, "speaker": "agent", "text": greeting})
         try:
