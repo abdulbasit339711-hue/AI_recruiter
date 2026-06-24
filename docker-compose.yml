@@ -43,6 +43,7 @@ services:
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       RECORDINGS_DIR: /data/recordings
+      IQ_TEST_SECRET: ${IQ_TEST_SECRET}
       SMTP_EMAIL: ${SMTP_EMAIL:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_HOST: ${SMTP_HOST:-}
