@@ -30,6 +30,8 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     TranscriptionFrame,
     TTSSpeakFrame,
+    TTSStartedFrame,
+    TTSStoppedFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
@@ -56,6 +58,7 @@ class SilenceNudgeProcessor(FrameProcessor):
         self._interval = interval_secs or SILENCE_NUDGE_SECS
         self._last_activity = None
         self._bot_speaking = False
+        self._bot_has_spoken = False  # don't nudge until after the first bot turn ends
         self._level = 0          # how many nudges fired since the last candidate reply
         self._task = None
         self._stopped = False
@@ -72,19 +75,19 @@ class SilenceNudgeProcessor(FrameProcessor):
                 # Candidate spoke/typed — reset silence and the escalation level.
                 self._last_activity = time.monotonic()
                 self._level = 0
-        elif isinstance(frame, LLMFullResponseStartFrame):
+        elif isinstance(frame, (LLMFullResponseStartFrame, TTSStartedFrame)):
             self._bot_speaking = True
             self._last_activity = time.monotonic()
-        elif isinstance(frame, LLMFullResponseEndFrame):
+        elif isinstance(frame, (LLMFullResponseEndFrame, TTSStoppedFrame)):
             self._bot_speaking = False
+            self._bot_has_spoken = True
             # Start counting silence from when the bot finishes its reply.
             self._last_activity = time.monotonic()
+            # Start the watcher now that the bot has actually spoken at least once.
+            if self._task is None and not self._stopped:
+                self._task = asyncio.create_task(self._loop())
         elif isinstance(frame, (EndFrame, CancelFrame)):
             await self.stop()
-
-        if self._task is None and not self._stopped:
-            self._last_activity = time.monotonic()
-            self._task = asyncio.create_task(self._loop())
 
         await self.push_frame(frame, direction)
 

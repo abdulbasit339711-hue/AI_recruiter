@@ -297,8 +297,10 @@ from fastapi.responses import JSONResponse
 # /interview/validate and /events are candidate-open (they do their own token checks).
 _PROTECTED_VOICE_ROUTES = {
     ("POST", "/interview/configure"),
-    ("POST", "/chat"),
     ("POST", "/settings"),
+    # /chat is intentionally excluded: candidates use it as a mic fallback and
+    # don't have an admin token. The session_id they provide is enough — the
+    # handler rejects any session that isn't found in _interviews.
 }
 
 
