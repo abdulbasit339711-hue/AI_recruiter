@@ -1,0 +1,75 @@
+AI-Recruiter — .env Setup Questions
+=====================================
+
+Fill in the values below, then paste them into your .env file.
+
+--- SECRETS (auto-generate with: openssl rand -hex 32) ---
+
+ADMIN_API_TOKEN=
+INTERVIEW_LINK_SECRET=
+IQ_TEST_SECRET=
+
+
+--- DATABASE ---
+
+DB_USER=ai_user
+DB_PASSWORD=
+DB_NAME=ai_recruiter
+DATABASE_URL=postgresql+psycopg2://<DB_USER>:<DB_PASSWORD>@postgres:5432/<DB_NAME>
+
+
+--- HR DASHBOARD LOGIN ---
+
+ADMIN_EMAIL=
+ADMIN_PASSWORD=
+HR_EMAIL=                        (optional — leave blank to disable)
+HR_PASSWORD=                     (optional)
+
+
+--- URLS ---
+
+Your public IP or domain: ______________________
+
+WEB_BASE_URL=                    (e.g. https://careers.example.com or http://44.231.40.162)
+NEXT_PUBLIC_VOICE_URL=           (e.g. https://careers.example.com/voice or http://44.231.40.162/voice)
+CORS_ALLOW_ORIGINS=              (e.g. https://careers.example.com,http://44.231.40.162)
+
+
+--- API KEYS ---
+
+GROQ_API_KEY=                    (starts with gsk_  — from console.groq.com)
+GROQ_MODEL=llama-3.3-70b-versatile
+
+DEEPGRAM_API_KEY=                (from deepgram.com)
+CARTESIA_API_KEY=                (from cartesia.ai, starts with sk_car_)
+CARTESIA_VOICE_ID=71a7ad14-091c-4e8e-a314-022ece01c121
+
+OPENAI_API_KEY=                  (optional)
+
+
+--- LIVEKIT (voice interviews) ---
+
+LIVEKIT_URL=                     (e.g. wss://your-project.livekit.cloud)
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+
+
+--- SMTP EMAIL (optional — for interview invite emails) ---
+
+SMTP_EMAIL=                      (Gmail address)
+SMTP_PASSWORD=                   (Gmail App Password — 16 chars, not your account password)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+
+
+--- VOICE FEATURES ---
+
+BILINGUAL_MODE=true              (English + Roman Urdu)
+NOISE_CANCELLATION=true
+
+
+--- OTHER (do not change) ---
+
+START_DEFAULT_BOT=false
+RECORDINGS_DIR=/data/recordings
+COOKIE_SECURE=false              (set to true once HTTPS is enabled)
