@@ -1,20 +1,23 @@
 "use client";
 
-import React, { Suspense } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useRef, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Check, Mail } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { Stagger, StaggerItem } from "@/components/ui/motion";
 import { api } from "@/lib/api";
 import type { Org } from "@/types";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+const POLL_MS = 2500;
+const TIMEOUT_MS = 90_000;
 
 function SuccessContent() {
   const { orgSlug, jobId } = useParams<{ orgSlug: string; jobId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const cid = searchParams.get("cid");
 
   const { data: org } = useQuery<Org>({
     queryKey: ["orgs", orgSlug],
@@ -26,10 +29,68 @@ function SuccessContent() {
   const orgName = org?.name || orgSlug;
   const color = org?.primary_color || "#1C99BF";
 
+  const [done, setDone] = useState(!cid);
+  const startedAt = useRef(Date.now());
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!cid) return;
+    let cancelled = false;
+
+    async function poll() {
+      if (cancelled) return;
+      try {
+        const res = await api.pollCandidateStatus(Number(cid));
+        if (cancelled) return;
+        if (res.terminal) {
+          if (res.qualified && res.availability_token) {
+            router.push(`/availability/${res.availability_token}`);
+            return;
+          }
+          setDone(true);
+          return;
+        }
+      } catch {
+        // keep polling on transient network errors
+      }
+      if (Date.now() - startedAt.current > TIMEOUT_MS) {
+        setDone(true);
+        return;
+      }
+      if (!cancelled) timer.current = setTimeout(poll, POLL_MS);
+    }
+
+    poll();
+    return () => {
+      cancelled = true;
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [cid, router]);
+
+  if (!done) {
+    return (
+      <section className="flex min-h-[80vh] items-center justify-center p-4">
+        <div
+          className="w-full max-w-lg rounded-2xl p-10 text-center"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          <div
+            className="mx-auto flex h-12 w-12 animate-spin items-center justify-center rounded-full border-2"
+            style={{ borderColor: `${color}40`, borderTopColor: color }}
+          />
+          <Loader2 className="mx-auto mt-4 h-0 w-0" />
+          <h1 className="mt-5 text-xl font-semibold text-white">Evaluating your résumé…</h1>
+          <p className="mt-2 text-sm text-gray-400">This takes about 30 seconds. Please stay on this page.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="flex min-h-[80vh] items-center justify-center p-4">
       <motion.div
-        className="glass w-full max-w-lg rounded-2xl p-8 text-center"
+        className="w-full max-w-lg rounded-2xl p-8 text-center"
+        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
         initial={{ opacity: 0, y: 24, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.5, ease: EASE }}
@@ -62,21 +123,12 @@ function SuccessContent() {
 
         <Stagger delay={0.45} gap={0.09}>
           <StaggerItem>
-            <h1 className="mt-5 font-display text-2xl font-bold text-heading">Application received</h1>
+            <h1 className="mt-5 text-2xl font-semibold text-white">Application received</h1>
           </StaggerItem>
           <StaggerItem>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Your résumé is in. The {orgName} team is reviewing applications for this role now.
+            <p className="mt-3 text-sm leading-6 text-gray-400">
+              Thank you for applying to {orgName}. Our team will review your application and be in touch soon.
             </p>
-          </StaggerItem>
-          <StaggerItem>
-            <div className="mt-6 flex items-start gap-3 rounded-xl border border-border bg-foreground/[0.03] p-4 text-left">
-              <Mail className="mt-0.5 h-5 w-5 shrink-0" style={{ color }} />
-              <p className="text-sm text-muted-foreground">
-                If your profile matches, we&apos;ll email you an invitation to take the AI interview.
-                No further action is needed right now.
-              </p>
-            </div>
           </StaggerItem>
           <StaggerItem>
             <button

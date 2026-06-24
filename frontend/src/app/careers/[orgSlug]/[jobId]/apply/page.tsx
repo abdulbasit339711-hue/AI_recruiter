@@ -43,8 +43,8 @@ export default function CareersApplyPage() {
     e.preventDefault();
     if (!file) return;
     try {
-      await upload.mutateAsync({ file, iqToken: iq?.result_token });
-      router.push(`/careers/${orgSlug}/${jobId}/apply/success`);
+      const data = await upload.mutateAsync({ file, iqToken: iq?.result_token });
+      router.push(`/careers/${orgSlug}/${jobId}/apply/success?cid=${data.id}`);
     } catch {
       /* error shown below */
     }

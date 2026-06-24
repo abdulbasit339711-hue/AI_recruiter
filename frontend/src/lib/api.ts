@@ -497,6 +497,16 @@ export const api = {
     return response.data;
   },
 
+  async pollCandidateStatus(candidateId: number): Promise<{
+    status: string;
+    terminal: boolean;
+    qualified: boolean;
+    availability_token: string | null;
+  }> {
+    const response = await client.get(`/candidates/${candidateId}/poll-status`);
+    return response.data;
+  },
+
   // Availability scheduling
   async getAvailabilityForm(token: string): Promise<{
     candidate_name: string | null;

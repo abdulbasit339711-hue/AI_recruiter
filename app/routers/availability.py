@@ -14,6 +14,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/candidates/{candidate_id}/poll-status")
+def poll_candidate_status(candidate_id: int, db: Session = Depends(get_db)):
+    """Public — applicant polls their evaluation status right after submission."""
+    from ..availability_tokens import mint_availability_token
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="Not found.")
+    terminal = cand.status in ("Processed", "Rejected", "Error")
+    threshold = float(os.getenv("AVAILABILITY_THRESHOLD", "60"))
+    qualified = cand.status == "Processed" and (cand.total_score or 0) >= threshold
+    token = None
+    if qualified and not cand.availability_submitted_at:
+        token, _ = mint_availability_token(cand.id)
+    return {"status": cand.status, "terminal": terminal, "qualified": qualified, "availability_token": token}
+
+
 @router.get("/availability/{token}")
 def get_availability_form(token: str, db: Session = Depends(get_db)):
     """Public — candidate fetches their availability form via a signed token."""
