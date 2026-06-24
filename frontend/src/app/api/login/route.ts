@@ -74,7 +74,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Invalid email or password." }, { status: 401 });
   }
 
-  const isSecure = process.env.NODE_ENV === "production";
+  const isSecure = process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false";
   const res = NextResponse.json({ ok: true, role });
   res.cookies.set(SESSION_COOKIE, mintSession(role), {
     httpOnly: true,

@@ -123,6 +123,7 @@ services:
       HR_PASSWORD: ${HR_PASSWORD:-}
       # Server-only: where the same-origin /voice proxy forwards (the voice container).
       VOICE_PROXY_TARGET: http://voice:7860
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     # Not exposed directly — nginx is the only public entry point.
 
   nginx:
