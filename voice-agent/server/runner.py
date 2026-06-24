@@ -1272,11 +1272,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
             await manager.transport.input().push_frame(LLMRunFrame())
             return
 
-        greeting = (
-            f"Hi! I'm your AI interviewer for the {role} role. Please introduce yourself."
-            if role
-            else "Hi! I'm your AI interviewer. Please introduce yourself."
-        )
+        greeting = f"Hi, I'm Emily. Please introduce yourself."
         await broadcaster.broadcast("transcript", {"session_id": sid, "speaker": "agent", "text": greeting})
         try:
             context.add_message({"role": "assistant", "content": greeting})
