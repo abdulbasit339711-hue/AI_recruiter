@@ -26,12 +26,26 @@ def get_availability_form(token: str, db: Session = Depends(get_db)):
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found.")
     job = cand.job
+
+    # Exclude slots already taken by any other candidate (global uniqueness).
+    taken = {
+        row[0] for row in
+        db.query(Candidate.availability_response)
+        .filter(
+            Candidate.availability_response.isnot(None),
+            Candidate.id != candidate_id,
+        )
+        .all()
+    }
+    all_slots = generate_availability_slots()
+    available = [s for s in all_slots if s not in taken]
+
     return {
         "candidate_name": cand.name,
         "job_title": job.title if job else "Position",
         "org_name": job.org.name if job and job.org else None,
         "org_color": job.org.primary_color if job and job.org else "#1C99BF",
-        "slots": generate_availability_slots(),
+        "slots": available,
         "already_submitted": cand.availability_submitted_at is not None,
         "submitted_slot": cand.availability_response,
         "confirmed_slot": cand.interview_confirmed_slot,
@@ -54,6 +68,16 @@ def submit_availability(token: str, body: AvailabilitySubmit, db: Session = Depe
     chosen = (body.selected_slot or body.custom_time or "").strip()
     if not chosen:
         raise HTTPException(status_code=422, detail="No time slot provided.")
+
+    # Reject if another candidate already claimed this slot (race-condition guard).
+    conflict = (
+        db.query(Candidate.id)
+        .filter(Candidate.availability_response == chosen, Candidate.id != candidate_id)
+        .first()
+    )
+    if conflict:
+        raise HTTPException(status_code=409, detail="This slot was just taken by another candidate. Please go back and choose a different time.")
+
     cand.availability_response = chosen
     cand.availability_submitted_at = _utcnow().isoformat()
 
