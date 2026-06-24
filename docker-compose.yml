@@ -136,8 +136,7 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # Mount certs here when SSL is ready:
-      # - ./nginx/certs:/etc/nginx/certs:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
 
 volumes:
   pgdata:
