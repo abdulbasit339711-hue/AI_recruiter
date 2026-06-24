@@ -37,30 +37,33 @@ def _database_url() -> str:
 target_metadata = None
 
 
-def _stamp_existing_if_needed(connection) -> None:
-    """If the DB has application tables but no alembic_version, stamp to head.
+_BACKEND_VERSION_TABLE = "alembic_version_backend"
 
-    This marks all migrations as already applied without running them, which is
-    correct for databases created before Alembic was introduced.
+
+def _stamp_existing_if_needed(connection) -> None:
+    """If the DB has application tables but no backend version table, stamp to head.
+
+    Uses alembic_version_backend (not alembic_version) so the backend's
+    migration state never conflicts with the voice agent's Alembic chain.
     """
     inspector = inspect(connection)
     tables = inspector.get_table_names()
-    if "jobs" in tables and "alembic_version" not in tables:
+    if "jobs" in tables and _BACKEND_VERSION_TABLE not in tables:
         logger.info(
-            "Existing database detected (no alembic_version). "
-            "Stamping to head without running migrations."
+            "Existing database detected (no %s). "
+            "Stamping to head without running migrations.", _BACKEND_VERSION_TABLE
         )
         connection.execute(
             text(
-                "CREATE TABLE alembic_version "
+                f"CREATE TABLE {_BACKEND_VERSION_TABLE} "
                 "(version_num VARCHAR(32) NOT NULL, "
-                "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+                f"CONSTRAINT {_BACKEND_VERSION_TABLE}_pkc PRIMARY KEY (version_num))"
             )
         )
         # Insert the latest revision id so `alembic upgrade head` is a no-op.
         # This value must match the `revision` field in the latest version file.
         connection.execute(
-            text("INSERT INTO alembic_version (version_num) VALUES ('0001_initial')")
+            text(f"INSERT INTO {_BACKEND_VERSION_TABLE} (version_num) VALUES ('0003')")
         )
         connection.commit()
 
@@ -72,6 +75,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,
+        version_table="alembic_version_backend",
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -89,6 +93,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
+            version_table="alembic_version_backend",
         )
         with context.begin_transaction():
             context.run_migrations()

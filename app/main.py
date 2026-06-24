@@ -20,13 +20,10 @@ setup_logging(config.get("logging", {}).get("level", "INFO"))
 
 
 def _run_alembic_upgrade() -> None:
-    """Run `alembic upgrade head` programmatically.
+    """Run `alembic upgrade head` against the backend-private version table.
 
-    env.py auto-stamps existing databases (no alembic_version table, but application
-    tables already present) so this is a no-op for pre-Alembic installations.
-
-    If the DB carries a revision from a different migration branch (e.g. an older
-    deployment), we re-stamp to head before upgrading so Alembic can proceed.
+    env.py uses alembic_version_backend (not alembic_version) so this never
+    conflicts with the voice agent's own Alembic chain on the shared DB.
     Falls back to legacy run_migrations() if alembic is unavailable.
     """
     try:
@@ -36,18 +33,7 @@ def _run_alembic_upgrade() -> None:
 
         ini = pathlib.Path(__file__).parent.parent / "alembic.ini"
         cfg = AlembicConfig(str(ini))
-        try:
-            alembic_command.upgrade(cfg, "head")
-        except Exception as inner:
-            if "Can't locate revision" in str(inner):
-                import logging as _log
-                _log.getLogger(__name__).warning(
-                    "Unknown Alembic revision in DB (%s); re-stamping to head.", inner
-                )
-                alembic_command.stamp(cfg, "head")
-                alembic_command.upgrade(cfg, "head")
-            else:
-                raise
+        alembic_command.upgrade(cfg, "head")
     except Exception as exc:
         import logging as _log
         _log.getLogger(__name__).warning(
