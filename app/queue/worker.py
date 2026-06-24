@@ -94,15 +94,24 @@ def _worker_loop() -> None:
                     and cand_after.email
                     and not cand_after.interview_invited_at
                 ):
-                    from ..services.interview_invite import invite_candidate
+                    from ..availability_tokens import mint_availability_token
+                    from ..services.email import send_availability_invite
                     job_obj = cand_after.job
                     if job_obj:
-                        url = invite_candidate(db, cand_after, job_obj)
-                        if url:
-                            logger.info(
-                                "Interview invite auto-sent to candidate %d (score=%.1f, email=%s)",
-                                candidate_id, cand_after.total_score, cand_after.email,
-                            )
+                        _, avail_url = mint_availability_token(cand_after.id)
+                        send_availability_invite(
+                            to=cand_after.email,
+                            candidate_name=cand_after.name,
+                            job_title=job_obj.title,
+                            link=avail_url,
+                        )
+                        import datetime as _dt
+                        cand_after.interview_invited_at = _dt.datetime.now(_dt.timezone.utc).isoformat()
+                        db.commit()
+                        logger.info(
+                            "Availability invite auto-sent to candidate %d (score=%.1f, email=%s)",
+                            candidate_id, cand_after.total_score, cand_after.email,
+                        )
                     else:
                         logger.warning(
                             "Candidate %d has no linked job; skipping auto-invite", candidate_id
