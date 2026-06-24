@@ -19,6 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # requirements.txt omits it because the default is SQLite. spaCy needs its
 # Tier-1 parser model downloaded at build time.
 COPY requirements.txt ./
+# Install CPU-only PyTorch before requirements.txt so sentence-transformers
+# doesn't pull in the full CUDA build (~1.5 GB) on a CPU-only instance.
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install -r requirements.txt \
     && pip install "psycopg2-binary>=2.9.9" \
     && python -m spacy download en_core_web_sm
