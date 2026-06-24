@@ -56,7 +56,37 @@ def submit_availability(token: str, body: AvailabilitySubmit, db: Session = Depe
         raise HTTPException(status_code=422, detail="No time slot provided.")
     cand.availability_response = chosen
     cand.availability_submitted_at = _utcnow().isoformat()
-    db.commit()
+
+    # Auto-confirm: no HR action needed.  Mint interview link now (7-day TTL)
+    # and send a confirmation email.  The actual room link goes out 30 min
+    # before the slot via the reminder scheduler.
+    job = cand.job
+    if job:
+        from ..interview_links import mint_link
+        token, _room_url = mint_link(cand.id, job.id, ttl_minutes=7 * 24 * 60)
+        cand.interview_confirmed_slot = chosen
+        cand.interview_confirmed_at = _utcnow().isoformat()
+        cand.interview_token = token
+        cand.interview_invited_at = _utcnow().isoformat()
+        db.commit()
+        if cand.email:
+            try:
+                from ..services.email import send_slot_confirmation
+                org = job.org if hasattr(job, "org") else None
+                send_slot_confirmation(
+                    to=cand.email,
+                    candidate_name=cand.name,
+                    job_title=job.title,
+                    slot=chosen,
+                    room_url=None,
+                    org_name=org.name if org else None,
+                    org_color=org.primary_color if org else "#1C99BF",
+                )
+            except Exception as e:
+                logger.error("Auto slot-confirmation email failed for candidate %d: %s", cand.id, e)
+    else:
+        db.commit()
+
     return {"ok": True, "slot": chosen}
 
 

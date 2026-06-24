@@ -11,6 +11,7 @@ from .core.auth import admin_token_guard
 from .database import engine, Base, config, run_migrations, DATABASE_URL
 from .llm.groq_client import get_groq_client
 from .queue.worker import start_worker, stop_worker, requeue_pending
+from .services.reminder_scheduler import start_reminder_scheduler, stop_reminder_scheduler
 from .events.broadcaster import event_hub
 from .routers import admin, jobs, iq, candidates, interviews, availability
 
@@ -63,6 +64,7 @@ async def lifespan(app: FastAPI):
     _run_alembic_upgrade()
     start_worker()
     requeue_pending()  # recover candidates a prior crash left in Queued/Processing
+    start_reminder_scheduler()
     get_groq_client()
     # Load heavy sentence‑transformer embedding model once at startup to avoid first‑request latency
     from .core.model_registry import get_embedding_model
@@ -70,6 +72,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     stop_worker()
+    stop_reminder_scheduler()
 
 
 app = FastAPI(title="AI Recruiter API", version="2.0.0", lifespan=lifespan)
