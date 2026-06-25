@@ -116,6 +116,7 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN interview_confirmed_slot VARCHAR",
         "ALTER TABLE candidates ADD COLUMN interview_confirmed_at VARCHAR",
         "ALTER TABLE candidates ADD COLUMN interview_token VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN interview_link_sent_at VARCHAR",
         # Resume profile enrichment — extracted during Tier 1 scoring
         "ALTER TABLE candidates ADD COLUMN github_url VARCHAR",
         "ALTER TABLE candidates ADD COLUMN linkedin_url VARCHAR",
