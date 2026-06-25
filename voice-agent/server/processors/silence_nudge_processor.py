@@ -6,15 +6,16 @@ not just sit in dead air until the hard idle timeout. This processor watches for
 activity and, after escalating silences, proactively speaks: first a gentle
 "are you still there?", then a wrap-up line so the interview closes gracefully.
 
-Activity signals (chosen so they're all visible UPSTREAM of the TTS, where this
-processor must sit to push speech into it):
-  * TranscriptionFrame        -> candidate spoke or typed  (resets, clears escalation)
-  * LLMFullResponseStartFrame -> bot is responding         (mute nudges while talking)
-  * LLMFullResponseEndFrame   -> bot finished responding   (start counting silence here)
+Activity signals visible to this processor (it sits between STT and the LLM):
+  * StartFrame      -> pipeline started; begin the watcher after a grace period
+  * TTSSpeakFrame   -> bot is about to speak (greeting / nudge injected upstream)
+  * TranscriptionFrame -> candidate spoke or typed (resets, clears escalation)
 
-It speaks by pushing a TTSSpeakFrame downstream (same mechanism as the greeting),
-so it must sit upstream of the TTS service in the pipeline. Best-effort: any error
-is logged and the interview continues.
+LLMFullResponseEndFrame / TTSStoppedFrame flow DOWNSTREAM (away from this
+processor), so we cannot rely on them to start the loop. Instead we start on
+StartFrame with a configurable grace period so the greeting finishes before any
+nudge can fire. We also keep handlers for those frames in case Pipecat ever
+propagates them upstream — they are harmless no-ops if they never arrive.
 """
 
 import asyncio
@@ -28,6 +29,7 @@ from pipecat.frames.frames import (
     Frame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
+    StartFrame,
     TranscriptionFrame,
     TTSSpeakFrame,
     TTSStartedFrame,
@@ -38,8 +40,10 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 # Seconds of continuous silence before the next nudge fires.
 SILENCE_NUDGE_SECS: float = float(os.getenv("SILENCE_NUDGE_SECS", "30"))
 
-# Escalating lines: gentle check-in(s) first, wrap-up last. After the last one the
-# processor goes quiet (the hard idle timeout / disconnect handler ends the call).
+# Grace period after pipeline start before any nudge can fire.
+# Must be longer than the greeting TTS duration (~3 s) plus any connection delay.
+SILENCE_NUDGE_GRACE_SECS: float = float(os.getenv("SILENCE_NUDGE_GRACE_SECS", "15"))
+
 _DEFAULT_NUDGES = [
     "Are you there?",
     "Take your time, I'm here whenever you're ready.",
@@ -58,8 +62,8 @@ class SilenceNudgeProcessor(FrameProcessor):
         self._interval = interval_secs or SILENCE_NUDGE_SECS
         self._last_activity = None
         self._bot_speaking = False
-        self._bot_has_spoken = False  # don't nudge until after the first bot turn ends
-        self._level = 0          # how many nudges fired since the last candidate reply
+        self._bot_has_spoken = False
+        self._level = 0
         self._task = None
         self._stopped = False
 
@@ -69,37 +73,52 @@ class SilenceNudgeProcessor(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
-        if isinstance(frame, TranscriptionFrame):
+        if isinstance(frame, StartFrame):
+            # Start the watcher immediately; grace period inside _loop prevents
+            # premature nudges while the greeting is playing.
+            if self._task is None and not self._stopped:
+                self._task = asyncio.create_task(self._loop())
+
+        elif isinstance(frame, TTSSpeakFrame):
+            # A TTSSpeakFrame injected at transport.input (greeting, or our own
+            # nudge re-entering the pipeline) flows downstream through this processor.
+            # Use it to mark that the bot has spoken and reset the activity clock.
+            self._last_activity = time.monotonic()
+            self._bot_has_spoken = True
+
+        elif isinstance(frame, TranscriptionFrame):
             text = (getattr(frame, "text", "") or "").strip()
             if text:
-                # Candidate spoke/typed — reset silence and the escalation level.
                 self._last_activity = time.monotonic()
                 self._level = 0
+
+        # Keep these in case Pipecat propagates them upstream in future versions.
         elif isinstance(frame, (LLMFullResponseStartFrame, TTSStartedFrame)):
             self._bot_speaking = True
             self._last_activity = time.monotonic()
         elif isinstance(frame, (LLMFullResponseEndFrame, TTSStoppedFrame)):
             self._bot_speaking = False
             self._bot_has_spoken = True
-            # Start counting silence from when the bot finishes its reply.
             self._last_activity = time.monotonic()
-            # Start the watcher now that the bot has actually spoken at least once.
-            if self._task is None and not self._stopped:
-                self._task = asyncio.create_task(self._loop())
+
         elif isinstance(frame, (EndFrame, CancelFrame)):
             await self.stop()
 
         await self.push_frame(frame, direction)
 
     async def _loop(self):
-        logger.info(f"[SilenceNudge] watching (every {self._interval}s of silence)")
+        # Grace period — wait for the greeting to finish before watching for silence.
+        await asyncio.sleep(SILENCE_NUDGE_GRACE_SECS)
+        if self._last_activity is None:
+            self._last_activity = time.monotonic()
+        logger.info(f"[SilenceNudge] watching (interval={self._interval}s, grace={SILENCE_NUDGE_GRACE_SECS}s)")
         while not self._stopped:
             try:
                 await asyncio.sleep(min(5.0, self._interval))
                 if self._stopped or self._bot_speaking or self._last_activity is None:
                     continue
                 if self._level >= len(self._nudges):
-                    continue  # already wrapped up; stay quiet
+                    continue
                 idle = time.monotonic() - self._last_activity
                 if idle >= self._interval:
                     await self._nudge(self._nudges[self._level])
@@ -120,7 +139,6 @@ class SilenceNudgeProcessor(FrameProcessor):
                 })
             except Exception:
                 pass
-        # Persist so the nudge shows in the transcript / replay.
         if self._session is not None:
             try:
                 from database import db_manager
@@ -130,7 +148,6 @@ class SilenceNudgeProcessor(FrameProcessor):
                 })
             except Exception as e:
                 logger.debug(f"[SilenceNudge] persist skipped: {e}")
-        # Speak it. Pushed DOWNSTREAM toward the TTS (this processor sits upstream of it).
         await self.push_frame(TTSSpeakFrame(text), FrameDirection.DOWNSTREAM)
 
     async def stop(self):

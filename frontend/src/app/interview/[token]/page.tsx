@@ -172,7 +172,7 @@ export default function InterviewPage() {
         }
       };
     }
-  }, [cameraEnabled, phase, activeSpeaker]);
+  }, [cameraEnabled, phase]);
 
   async function start() {
     if (!info?.livekit_url || !info.livekit_token) return;
