@@ -1130,7 +1130,9 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         _sample_rate = 16000 if _nc_on else 48000
         # filler_words=true makes Deepgram transcribe hesitation fillers ("um", "uh",
         # "hmm", etc.) instead of dropping them — useful signal for delivery/assessment.
-        stt_settings = {"sample_rate": _sample_rate, "extra": {"filler_words": True}}
+        # sample_rate passed via extra (WebSocket query param): RNNoise resamples to
+        # 16 kHz when enabled; without it LiveKit delivers 48 kHz natively.
+        stt_settings = {"extra": {"filler_words": True, "sample_rate": _sample_rate}}
         if DEEPGRAM_ENDPOINTING_MS is not None:
             stt_settings["endpointing"] = DEEPGRAM_ENDPOINTING_MS
         stt_kwargs["settings"] = DeepgramSTTService.Settings(**stt_settings)
