@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   PhoneOff,
-  Captions,
   MessageSquareText,
   Bot,
   User,
@@ -51,7 +50,6 @@ export default function InterviewPage() {
   // candidate can frame themselves — and so the bot can later receive the stream.
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState<Speaker>(null);
-  const [showCaptions, setShowCaptions] = useState(true);
   // Open by default: candidates with no working mic answer via this chat panel,
   // so it must be visible without hunting for the toggle (esp. on mobile).
   const [showPanel, setShowPanel] = useState(true);
@@ -442,7 +440,6 @@ export default function InterviewPage() {
   }
 
   // ---- Live call (Meet/Zoom stage) ------------------------------------------
-  const latest = lastTurns(transcript, 2);
 
   return (
     <div className="flex h-screen flex-col bg-[#202124] text-zinc-100">
@@ -547,21 +544,6 @@ export default function InterviewPage() {
             />
           </div>
 
-          {/* Captions overlay */}
-          {showCaptions && latest.length > 0 && (
-            <div className="pointer-events-none absolute bottom-3 left-1/2 w-full max-w-3xl -translate-x-1/2 px-4">
-              <div className="space-y-1 rounded-xl bg-black/70 p-3 text-center backdrop-blur">
-                {latest.map((t, i) => (
-                  <p key={i} className="text-sm leading-snug text-zinc-100">
-                    <span className="font-semibold text-zinc-400">
-                      {t.speaker === "agent" ? "Interviewer" : "You"}:{" "}
-                    </span>
-                    {t.text}
-                  </p>
-                ))}
-              </div>
-            </div>
-          )}
         </main>
 
         {/* Side panel */}
@@ -625,14 +607,6 @@ export default function InterviewPage() {
           label={cameraEnabled ? "Turn camera off" : "Turn camera on"}
         >
           {cameraEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-        </ControlButton>
-
-        <ControlButton
-          onClick={() => setShowCaptions((v) => !v)}
-          active={!showCaptions}
-          label={showCaptions ? "Hide captions" : "Show captions"}
-        >
-          <Captions className="h-5 w-5" />
         </ControlButton>
 
         <ControlButton

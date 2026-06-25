@@ -335,7 +335,7 @@ class BotManager:
             from pipecat.audio.vad.vad_analyzer import VADParams
             pipeline_processors.append(VADProcessor(
                 vad_analyzer=SileroVADAnalyzer(
-                    params=VADParams(start_secs=0.2, stop_secs=30.0, confidence=0.7, min_volume=0.6)
+                    params=VADParams(start_secs=0.2, stop_secs=2.0, confidence=0.7, min_volume=0.6)
                 )
             ))
         pipeline_processors += [
