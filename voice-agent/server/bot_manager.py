@@ -329,9 +329,15 @@ class BotManager:
         pipeline_processors.append(_AudioDebugProcessor())
         # Batch STT (e.g. Groq Whisper) needs a VAD processor upstream to detect
         # speech boundaries and fire VADUserStartedSpeakingFrame / VADUserStoppedSpeakingFrame.
-        # Streaming STT (Deepgram) has server-side VAD and doesn't need this.
+        # stop_secs=1.0: wait 1 s of silence before ending the segment — the default
+        # 0.2 s was chopping every utterance into sub-second fragments, wrecking accuracy.
         if isinstance(self.stt, BaseWhisperSTTService):
-            pipeline_processors.append(VADProcessor(vad_analyzer=SileroVADAnalyzer()))
+            from pipecat.audio.vad.vad_analyzer import VADParams
+            pipeline_processors.append(VADProcessor(
+                vad_analyzer=SileroVADAnalyzer(
+                    params=VADParams(start_secs=0.2, stop_secs=1.0, confidence=0.7, min_volume=0.6)
+                )
+            ))
         pipeline_processors += [
             self.stt,
             self.transcript_processor,
