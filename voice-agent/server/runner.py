@@ -1112,16 +1112,45 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
 
         service.start = _gated_start
 
-    # STT is now handled by DualBatchSTTProcessor in the pipeline (Deepgram + Groq Whisper
-    # race in parallel). No persistent STT service needed here.
-    # We still pass a dummy stt=None to BotManager; it only uses the pipeline slot.
-    stt = None
+    _bilingual = os.getenv("BILINGUAL_MODE", "").lower() in ("1", "true", "yes")
+    if _bilingual:
+        # Bilingual English + Roman Urdu mode: use Groq Whisper (supports Urdu auto-detect).
+        stt = GroqSTTService(
+            api_key=os.environ["GROQ_API_KEY"],
+            settings=GroqSTTService.Settings(
+                model="whisper-large-v3-turbo",
+                language=Language.EN,
+            ),
+        )
+        logger.info("[STT] GroqSTTService (Whisper, Language.EN)")
+    else:
+        stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
+        # LiveKit delivers audio at 48 kHz; RNNoise resamples to 16 kHz when enabled.
+        # Tell Deepgram the actual sample rate so it decodes correctly regardless of
+        # whether noise cancellation is on or off.
+        _nc_on = os.getenv("NOISE_CANCELLATION", "true").lower() not in ("0", "false", "no")
+        _sample_rate = 16000 if _nc_on else 48000
+        # filler_words=true makes Deepgram transcribe hesitation fillers ("um", "uh",
+        # "hmm", etc.) instead of dropping them — useful signal for delivery/assessment.
+        # sample_rate passed via extra (WebSocket query param): RNNoise resamples to
+        # 16 kHz when enabled; without it LiveKit delivers 48 kHz natively.
+        stt_settings = {"extra": {"filler_words": True, "sample_rate": _sample_rate}}
+        if DEEPGRAM_ENDPOINTING_MS is not None:
+            stt_settings["endpointing"] = DEEPGRAM_ENDPOINTING_MS
+        stt_kwargs["settings"] = DeepgramSTTService.Settings(**stt_settings)
+        stt = DeepgramSTTService(**stt_kwargs)
+        logger.info(f"[STT] Deepgram streaming STT (sample_rate={_sample_rate}Hz, noise_cancel={_nc_on})")
+        logger.info("[STT] Deepgram streaming STT")
     llm = GroqLLMService(
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
     )
+    # LLM: gate on bot room connect (needs to be ready before candidate arrives).
+    # STT: gate on candidate joining — Deepgram's WS times out after ~10 s with no
+    # audio, so opening it at bot-connect (before the candidate) guarantees it's dead
+    # by the time audio flows. Opening it at candidate-connect keeps the WS fresh.
+    _gate_on_connect(stt, candidate_joined_evt)
     _gate_on_connect(llm)
-    logger.info("[STT] DualBatchSTTProcessor: Deepgram prerecorded + Groq Whisper (parallel race)")
     # TTS provider. Default to Deepgram Aura over HTTP: a persistent websocket (the old
     # default) dropped under load and looped on "reconnecting", so speech failed often.
     # The HTTP service does one request per utterance — no socket to drop — which is the
@@ -1181,7 +1210,9 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
                 self._connection = None
                 if keepalive_task:
                     await self.cancel_task(keepalive_task)
-    # STT is now DualBatchSTTProcessor (plain asyncio tasks, no WS) — no patching needed.
+    # Only patch DeepgramSTTService — GroqSTTService (bilingual mode) uses a different transport.
+    if isinstance(stt, DeepgramSTTService):
+        stt._connection_handler = _types.MethodType(_patched_connection_handler, stt)
 
     if is_default:
         bot_manager = manager

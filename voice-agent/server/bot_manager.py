@@ -16,7 +16,6 @@ from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.services.whisper.base_stt import BaseWhisperSTTService
 from pipecat.frames.frames import AudioRawFrame, VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
-from processors.dual_stt_processor import DualBatchSTTProcessor
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import (
     SpeechTimeoutUserTurnStopStrategy,
@@ -326,18 +325,21 @@ class BotManager:
             pipeline_processors.append(self.video_recorder)
         if self.vision_processor:
             pipeline_processors.append(self.vision_processor)
-        # Debug: log audio frame counts and VAD events
+        # Debug: log audio frame counts and VAD events (remove once STT is confirmed working)
         pipeline_processors.append(_AudioDebugProcessor())
-        # Dual STT: VADProcessor gates speech segments, DualBatchSTTProcessor races
-        # Deepgram prerecorded API vs Groq Whisper in parallel — first non-empty wins.
-        from pipecat.audio.vad.vad_analyzer import VADParams
-        pipeline_processors.append(VADProcessor(
-            vad_analyzer=SileroVADAnalyzer(
-                params=VADParams(start_secs=0.2, stop_secs=30.0, confidence=0.7, min_volume=0.6)
-            )
-        ))
-        pipeline_processors.append(DualBatchSTTProcessor(sample_rate=16000))
+        # Batch STT (e.g. Groq Whisper) needs a VAD processor upstream to detect
+        # speech boundaries and fire VADUserStartedSpeakingFrame / VADUserStoppedSpeakingFrame.
+        # stop_secs=1.0: wait 1 s of silence before ending the segment — the default
+        # 0.2 s was chopping every utterance into sub-second fragments, wrecking accuracy.
+        if isinstance(self.stt, BaseWhisperSTTService):
+            from pipecat.audio.vad.vad_analyzer import VADParams
+            pipeline_processors.append(VADProcessor(
+                vad_analyzer=SileroVADAnalyzer(
+                    params=VADParams(start_secs=0.2, stop_secs=30.0, confidence=0.7, min_volume=0.6)
+                )
+            ))
         pipeline_processors += [
+            self.stt,
             self.transcript_processor,
             # Judge evaluates in parallel (non-blocking)
             self.judge_processor,
