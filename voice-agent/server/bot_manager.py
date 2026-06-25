@@ -11,6 +11,9 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
+from pipecat.processors.audio.vad_processor import VADProcessor
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.services.whisper.base_stt import BaseWhisperSTTService
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import (
     SpeechTimeoutUserTurnStopStrategy,
@@ -294,6 +297,11 @@ class BotManager:
             pipeline_processors.append(self.video_recorder)
         if self.vision_processor:
             pipeline_processors.append(self.vision_processor)
+        # Batch STT (e.g. Groq Whisper) needs a VAD processor upstream to detect
+        # speech boundaries and fire VADUserStartedSpeakingFrame / VADUserStoppedSpeakingFrame.
+        # Streaming STT (Deepgram) has server-side VAD and doesn't need this.
+        if isinstance(self.stt, BaseWhisperSTTService):
+            pipeline_processors.append(VADProcessor(vad_analyzer=SileroVADAnalyzer()))
         pipeline_processors += [
             self.stt,
             self.transcript_processor,
