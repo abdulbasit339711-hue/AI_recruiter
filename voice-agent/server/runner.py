@@ -1071,6 +1071,13 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     # quiet loop first, then STT/LLM proceed. No audio flows until the candidate joins, so
     # deferring STT/LLM start by the ~couple seconds of connect time is harmless.
     connected_evt = asyncio.Event()
+    # Separate gate for Deepgram STT: wait until the CANDIDATE joins, not just the
+    # bot. Deepgram's streaming WebSocket times out after ~10 s with no audio, so
+    # opening it when the bot enters the room (connected_evt) is too early — the
+    # candidate may not join for another 10–30 s and the socket closes before any
+    # audio arrives. Opening it when the candidate connects guarantees audio flows
+    # within a second or two of the WebSocket being established.
+    candidate_joined_evt = asyncio.Event()
 
     # Global connect-serialization (see _CONNECT_SERIALIZE): held only during THIS bot's
     # connect window, released the instant it's in the room (or by a failsafe timer).
@@ -1084,19 +1091,25 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
             except Exception:
                 pass
 
-    def _gate_on_connect(service):
-        """Defer a pipecat service's start() until the LiveKit room is connected."""
+    def _gate_on_connect(service, evt=None):
+        """Defer a pipecat service's start() until the given event fires.
+
+        Default event is connected_evt (bot enters LiveKit room).
+        Pass candidate_joined_evt for STT so Deepgram's WebSocket only opens
+        once the candidate is present and audio is flowing.
+        """
+        _evt = evt if evt is not None else connected_evt
         _orig_start = service.start
         svc_name = service.__class__.__name__
 
         async def _gated_start(frame):
-            if not connected_evt.is_set():
+            if not _evt.is_set():
                 try:
-                    logger.debug(f"[Gate] {svc_name}.start() waiting for LiveKit connect")
-                    await asyncio.wait_for(connected_evt.wait(), timeout=30.0)
+                    logger.debug(f"[Gate] {svc_name}.start() waiting for gate event")
+                    await asyncio.wait_for(_evt.wait(), timeout=300.0)
                 except asyncio.TimeoutError:
-                    logger.warning(f"[Gate] {svc_name}.start() timed out waiting for connect")
-                    pass  # connect failed/slow — proceed so the pipeline never hangs
+                    logger.warning(f"[Gate] {svc_name}.start() timed out waiting for gate")
+                    pass  # proceed so the pipeline never hangs
             logger.debug(f"[Gate] {svc_name}.start() calling original start")
             await _orig_start(frame)
             logger.debug(f"[Gate] {svc_name}.start() done")
@@ -1143,9 +1156,11 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         api_key=os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
     )
-    # Hold STT (Deepgram WS) + LLM startup until the LiveKit room is connected, so their
-    # network handshakes don't starve the FFI room handshake (see _gate_on_connect above).
-    _gate_on_connect(stt)
+    # LLM: gate on bot room connect (needs to be ready before candidate arrives).
+    # STT: gate on candidate joining — Deepgram's WS times out after ~10 s with no
+    # audio, so opening it at bot-connect (before the candidate) guarantees it's dead
+    # by the time audio flows. Opening it at candidate-connect keeps the WS fresh.
+    _gate_on_connect(stt, candidate_joined_evt)
     _gate_on_connect(llm)
     # TTS provider. Default to Deepgram Aura over HTTP: a persistent websocket (the old
     # default) dropped under load and looped on "reconnecting", so speech failed often.
@@ -1325,6 +1340,8 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         if str(identity) != "recruiter-bot" and bot_ref:
             bot_ref.candidate_connected = True
             bot_ref.candidate_connected_at = time.monotonic()
+            # Release the STT gate — Deepgram WS opens now, just before audio flows.
+            candidate_joined_evt.set()
         # Do NOT greet here. participant_connected fires the instant the candidate's
         # SIGNALING connects — before their browser has subscribed to our audio track
         # and started playback. Greeting now races ahead of their audio and the first
