@@ -1115,37 +1115,14 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     _bilingual = os.getenv("BILINGUAL_MODE", "").lower() in ("1", "true", "yes")
     if _bilingual:
         # Bilingual English + Roman Urdu mode: use Groq Whisper (supports Urdu auto-detect).
-        # Thin subclass that removes pipecat's "language must not be None" assertion so
-        # Whisper auto-detects the language per utterance (handles English + Roman Urdu mix).
-        class _AutoGroqSTT(GroqSTTService):
-            async def _transcribe(self, audio):
-                import io
-                kwargs = {
-                    "file": ("audio.wav", audio, "audio/wav"),
-                    "model": self._settings.model,
-                    "response_format": "json",
-                }
-                if self._settings.language is not None:
-                    kwargs["language"] = self._settings.language
-                if self._settings.prompt is not None:
-                    kwargs["prompt"] = self._settings.prompt
-                if self._settings.temperature is not None:
-                    kwargs["temperature"] = self._settings.temperature
-                return await self._client.audio.transcriptions.create(**kwargs)
-
-        stt = _AutoGroqSTT(
+        stt = GroqSTTService(
             api_key=os.environ["GROQ_API_KEY"],
             settings=GroqSTTService.Settings(
                 model="whisper-large-v3-turbo",
-                language=None,  # auto-detect: Whisper handles English + Roman Urdu natively
-                prompt=(
-                    "The speaker uses English or Roman Urdu (Urdu written in Latin script). "
-                    "Transcribe Roman Urdu in Latin script, not Arabic script. "
-                    "Example: 'mera tajurba teen saal ka hai'."
-                ),
+                language=Language.EN,
             ),
         )
-        logger.info("[STT] Bilingual mode: Groq Whisper auto-detect (English + Roman Urdu)")
+        logger.info("[STT] GroqSTTService (Whisper, Language.EN)")
     else:
         stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
         # LiveKit delivers audio at 48 kHz; RNNoise resamples to 16 kHz when enabled.
