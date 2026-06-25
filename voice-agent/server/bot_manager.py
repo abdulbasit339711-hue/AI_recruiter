@@ -14,6 +14,8 @@ from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.processors.audio.vad_processor import VADProcessor
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.services.whisper.base_stt import BaseWhisperSTTService
+from pipecat.frames.frames import AudioRawFrame, VADUserStartedSpeakingFrame, VADUserStoppedSpeakingFrame, TranscriptionFrame
+from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import (
     SpeechTimeoutUserTurnStopStrategy,
@@ -24,6 +26,32 @@ from bot import create_interview_session
 from services.goal_tracking_service import GoalTrackingService
 from processors.goal_tracking_processor import GoalTrackingProcessor, GoalAwareTranscriptProcessor
 from database import initialize_database
+
+
+class _AudioDebugProcessor(FrameProcessor):
+    """Temporary: logs audio frame counts and VAD events to diagnose STT silence."""
+
+    def __init__(self):
+        super().__init__()
+        self._audio_count = 0
+        self._log_every = 50  # log every 50 audio frames (~1 s at 20 ms chunks)
+
+    async def process_frame(self, frame, direction):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, AudioRawFrame):
+            self._audio_count += 1
+            if self._audio_count % self._log_every == 0:
+                logger.debug(
+                    f"[AudioDebug] {self._audio_count} audio frames received "
+                    f"(sample_rate={frame.sample_rate}, len={len(frame.audio)})"
+                )
+        elif isinstance(frame, VADUserStartedSpeakingFrame):
+            logger.info(f"[AudioDebug] VADUserStartedSpeakingFrame -> STT will buffer audio")
+        elif isinstance(frame, VADUserStoppedSpeakingFrame):
+            logger.info(f"[AudioDebug] VADUserStoppedSpeakingFrame -> STT will transcribe")
+        elif isinstance(frame, TranscriptionFrame):
+            logger.info(f"[AudioDebug] TranscriptionFrame: '{getattr(frame, 'text', '?')}'")
+        await self.push_frame(frame, direction)
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +325,8 @@ class BotManager:
             pipeline_processors.append(self.video_recorder)
         if self.vision_processor:
             pipeline_processors.append(self.vision_processor)
+        # Debug: log audio frame counts and VAD events (remove once STT is confirmed working)
+        pipeline_processors.append(_AudioDebugProcessor())
         # Batch STT (e.g. Groq Whisper) needs a VAD processor upstream to detect
         # speech boundaries and fire VADUserStartedSpeakingFrame / VADUserStoppedSpeakingFrame.
         # Streaming STT (Deepgram) has server-side VAD and doesn't need this.
