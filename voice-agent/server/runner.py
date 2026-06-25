@@ -1123,13 +1123,19 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         logger.info("[STT] Bilingual mode: GroqSTTService (Whisper) with Roman Urdu auto-detect")
     else:
         stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
+        # LiveKit delivers audio at 48 kHz; RNNoise resamples to 16 kHz when enabled.
+        # Tell Deepgram the actual sample rate so it decodes correctly regardless of
+        # whether noise cancellation is on or off.
+        _nc_on = os.getenv("NOISE_CANCELLATION", "true").lower() not in ("0", "false", "no")
+        _sample_rate = 16000 if _nc_on else 48000
         # filler_words=true makes Deepgram transcribe hesitation fillers ("um", "uh",
         # "hmm", etc.) instead of dropping them — useful signal for delivery/assessment.
-        stt_settings = {"extra": {"filler_words": True}}
+        stt_settings = {"sample_rate": _sample_rate, "extra": {"filler_words": True}}
         if DEEPGRAM_ENDPOINTING_MS is not None:
             stt_settings["endpointing"] = DEEPGRAM_ENDPOINTING_MS
         stt_kwargs["settings"] = DeepgramSTTService.Settings(**stt_settings)
         stt = DeepgramSTTService(**stt_kwargs)
+        logger.info(f"[STT] Deepgram streaming STT (sample_rate={_sample_rate}Hz, noise_cancel={_nc_on})")
         logger.info("[STT] Deepgram streaming STT")
     llm = GroqLLMService(
         api_key=os.environ["GROQ_API_KEY"],
