@@ -1117,11 +1117,14 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         # Bilingual English + Roman Urdu mode: use Groq Whisper (supports Urdu auto-detect).
         # language=None → auto-detect per utterance (handles English / Roman Urdu mix).
         # prompt guides Whisper to keep Roman Urdu in Latin script rather than transliterating.
+        # pipecat's GroqSTTService asserts language is not None before sending to Groq API.
+        # Use Language.EN — Whisper transcribes Roman Urdu (Urdu in Latin script) correctly
+        # with English set, since Roman Urdu uses Latin characters.
         stt = GroqSTTService(
             api_key=os.environ["GROQ_API_KEY"],
             settings=GroqSTTService.Settings(
                 model="whisper-large-v3-turbo",
-                language=None,  # auto-detect English / Urdu per utterance
+                language=Language.EN,
                 prompt=(
                     "The speaker may use Roman Urdu (Urdu in Latin script) mixed with English. "
                     "Transcribe Urdu words phonetically in Roman Urdu (Latin script), "
@@ -1129,7 +1132,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
                 ),
             ),
         )
-        logger.info("[STT] Bilingual mode: GroqSTTService (Whisper) with Roman Urdu auto-detect")
+        logger.info("[STT] Bilingual mode: GroqSTTService (Whisper) with Language.EN")
     else:
         stt_kwargs = {"api_key": os.environ["DEEPGRAM_API_KEY"]}
         # LiveKit delivers audio at 48 kHz; RNNoise resamples to 16 kHz when enabled.
