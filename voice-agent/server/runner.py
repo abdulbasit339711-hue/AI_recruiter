@@ -40,6 +40,7 @@ from pipecat.services.groq.llm import GroqLLMService
 from pipecat.services.groq.stt import GroqSTTService
 from pipecat.transcriptions.language import Language
 from pipecat.audio.filters.rnnoise_filter import RNNoiseFilter
+from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
 from pipecat.workers.runner import WorkerRunner
 
@@ -1049,15 +1050,21 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         .to_jwt()
     )
     _noise_cancel = os.getenv("NOISE_CANCELLATION", "true").lower() not in ("0", "false", "no")
+    _bilingual = os.getenv("BILINGUAL_MODE", "").lower() in ("1", "true", "yes")
+    # Groq Whisper is a batch STT — it needs a local VAD to detect speech boundaries
+    # and chunk audio into segments before transcription. Deepgram streaming STT has
+    # server-side VAD and doesn't need this.
+    _vad = SileroVADAnalyzer() if _bilingual else None
     transport = LiveKitTransport(
         url=url, token=token, room_name=room_name,
         params=LiveKitParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
-            # Server-side RNNoise filter on the inbound audio stream.  Runs fully
-            # in-process (no API key) and reduces background noise before STT sees it,
-            # lowering false transcriptions and spurious interruptions.
+            # Server-side RNNoise filter on the inbound audio stream.
             audio_in_filter=RNNoiseFilter() if _noise_cancel else None,
+            # Silero VAD: only needed for batch STT (Groq Whisper) to gate audio chunks.
+            vad_enabled=_vad is not None,
+            vad_analyzer=_vad,
             # Ingest the candidate's camera so BotManager can record video.
             video_in_enabled=RECORD_VIDEO,
         ),
