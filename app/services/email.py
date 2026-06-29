@@ -134,10 +134,18 @@ def _html_template(
 class SmtpEmailSender(EmailSender):
     def __init__(self, host: str, port: int, user: str, password: str):
         self.host, self.port, self.user, self.password = host, port, user, password
+        # port 465 = implicit SSL; anything else = STARTTLS
+        self._use_ssl = port == 465
+
+    def _connect(self):
+        if self._use_ssl:
+            return smtplib.SMTP_SSL(self.host, self.port, timeout=20)
+        server = smtplib.SMTP(self.host, self.port, timeout=20)
+        server.starttls()
+        return server
 
     def send(self, to: str, subject: str, body: str, html: str | None = None) -> None:
-        with smtplib.SMTP(self.host, self.port, timeout=20) as server:
-            server.starttls()
+        with self._connect() as server:
             server.login(self.user, self.password)
             server.send_message(_build_message(self.user, to, subject, body, html))
         logger.info("[email:smtp] sent to %s (%s)", to, subject)
@@ -148,8 +156,7 @@ class SmtpEmailSender(EmailSender):
             return {}
         errors: dict[str, str] = {}
         try:
-            with smtplib.SMTP(self.host, self.port, timeout=20) as server:
-                server.starttls()
+            with self._connect() as server:
                 server.login(self.user, self.password)
                 for m in messages:
                     try:

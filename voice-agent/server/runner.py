@@ -213,7 +213,7 @@ def validate_required_keys() -> None:
     """
     required = {
         "DEEPGRAM_API_KEY": "speech-to-text (and default TTS)",
-        "GROQ_API_KEY": "responder + judge LLM",
+        "GROQ_API_KEY": "LLM fallback (per-purpose keys override: GROQ_API_KEY_RESPONDER/STT/JUDGE/GOAL)",
     }
     if os.getenv("TTS_PROVIDER", "deepgram").lower() == "cartesia":
         required["CARTESIA_API_KEY"] = "text-to-speech (TTS_PROVIDER=cartesia)"
@@ -1116,7 +1116,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
     if _bilingual:
         # Bilingual English + Roman Urdu mode: use Groq Whisper (supports Urdu auto-detect).
         stt = GroqSTTService(
-            api_key=os.environ["GROQ_API_KEY"],
+            api_key=os.getenv("GROQ_API_KEY_STT") or os.environ["GROQ_API_KEY"],
             settings=GroqSTTService.Settings(
                 model="whisper-large-v3-turbo",
                 language=Language.EN,
@@ -1142,7 +1142,7 @@ async def _make_and_run_bot(room_name, candidate_id, job_id, *, is_default, bot_
         logger.info(f"[STT] Deepgram streaming STT (sample_rate={_sample_rate}Hz, noise_cancel={_nc_on})")
         logger.info("[STT] Deepgram streaming STT")
     llm = GroqLLMService(
-        api_key=os.environ["GROQ_API_KEY"],
+        api_key=os.getenv("GROQ_API_KEY_RESPONDER") or os.environ["GROQ_API_KEY"],
         settings=GroqLLMService.Settings(model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")),
     )
     # LLM: gate on bot room connect (needs to be ready before candidate arrives).

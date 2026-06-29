@@ -168,7 +168,7 @@ class BotManager:
         self.goal_service = None
         self.goal_processor = None
         if os.getenv("GOAL_TRACKING_ENABLED", "true").lower() == "true":
-            groq_api_key = os.getenv("GROQ_API_KEY")
+            groq_api_key = os.getenv("GROQ_API_KEY_GOAL") or os.getenv("GROQ_API_KEY")
             if groq_api_key:
                 self.goal_service = GoalTrackingService(groq_api_key)
                 self.goal_processor = GoalTrackingProcessor(
@@ -314,7 +314,7 @@ class BotManager:
         """Create dual LLM pipeline with judge and context-aware responder"""
 
         # Create judge processor
-        api_key = os.getenv("GROQ_API_KEY")
+        api_key = os.getenv("GROQ_API_KEY_JUDGE") or os.getenv("GROQ_API_KEY")
         self.judge_processor = JudgeProcessor(self.session, self.broadcaster, api_key)
 
         # Create context enrichment processor
