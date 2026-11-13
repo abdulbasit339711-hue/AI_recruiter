@@ -13,7 +13,7 @@ from .llm.groq_client import get_groq_client
 from .queue.worker import start_worker, stop_worker, requeue_pending
 from .services.reminder_scheduler import start_reminder_scheduler, stop_reminder_scheduler
 from .events.broadcaster import event_hub
-from .routers import admin, jobs, iq, candidates, interviews, availability
+from .routers import admin, jobs, iq, candidates, interviews, availability, hr_documents
 
 load_dotenv()
 setup_logging(config.get("logging", {}).get("level", "INFO"))
@@ -88,3 +88,4 @@ app.include_router(iq.router)
 app.include_router(candidates.router)
 app.include_router(interviews.router)
 app.include_router(availability.router)
+app.include_router(hr_documents.router)

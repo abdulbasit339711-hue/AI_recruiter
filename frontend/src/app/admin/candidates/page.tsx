@@ -61,6 +61,7 @@ import { avatarGradient, initials, scoreMeta, recommendationCopy } from "@/lib/s
 import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
 import { CountUp } from "@/components/ui/charts";
 import { ScoreRing } from "@/components/ui/ScoreRing";
+import HrDocumentUpload from "@/components/admin/HrDocumentUpload";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -139,7 +140,7 @@ export default function AdminCandidatesPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [selected, setSelected] = useState<Candidate | null>(null);
-  const [modalTab, setModalTab] = useState<"details" | "interview">("details");
+  const [modalTab, setModalTab] = useState<"details" | "interview" | "documents">("details");
   const currentJob = jobs.find((j) => j.id === selected?.job_id);
   const [resumeOpen, setResumeOpen] = useState(false);
   const [topN, setTopN] = useState<number>(10);
@@ -833,7 +834,7 @@ export default function AdminCandidatesPage() {
 
           <div className="mt-3 flex items-center justify-between gap-1 border-b border-white/[0.06]">
             <div className="flex items-center gap-1">
-              {(["details", "interview"] as const).map((t) => (
+              {(["details", "interview", "documents"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setModalTab(t)}
@@ -843,7 +844,7 @@ export default function AdminCandidatesPage() {
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {t === "interview" ? "Interview" : "Details"}
+                  {t === "interview" ? "Interview" : t === "documents" ? "📎 Documents" : "Details"}
                 </button>
               ))}
             </div>
@@ -861,6 +862,15 @@ export default function AdminCandidatesPage() {
             <div className="mt-4 max-h-[75vh] overflow-y-auto pr-2">
               {selected && <InterviewPanel candidateId={selected.id} />}
             </div>
+          ) : modalTab === "documents" ? (
+            <div className="mt-4 max-h-[75vh] overflow-y-auto pr-2">
+              {selected && (
+                <HrDocumentUpload
+                  candidateId={selected.id}
+                  apiBase="/api/admin" /* same-origin proxy: injects the admin token server-side, never in the browser */
+                />
+              )}
+            </div>
           ) : (
             <div className="mt-4 grid max-h-[75vh] gap-6 overflow-y-auto pr-2 lg:grid-cols-[1fr_300px]">
               <div className="space-y-4">
@@ -873,6 +883,8 @@ export default function AdminCandidatesPage() {
                   </p>
                 </div>
 
+                {selected && <ScoreExplanation candidateId={selected.id} version={selected.total_score} />}
+
                 {currentJob && (
                   <div className="glass-tile max-h-[250px] overflow-y-auto rounded-xl p-4">
                     <h4 className="mb-1 text-sm font-semibold text-[#1C99BF]">
@@ -883,8 +895,6 @@ export default function AdminCandidatesPage() {
                     </p>
                   </div>
                 )}
-
-                {selected && <ScoreExplanation candidateId={selected.id} version={selected.total_score} />}
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="glass-tile rounded-xl p-4">

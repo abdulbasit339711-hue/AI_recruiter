@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, Float, Text, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, Float, Text, ForeignKey, LargeBinary
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -150,3 +150,56 @@ class Candidate(Base):
     interview_passed = Column(Boolean, nullable=True, default=None)        # cleared both phases
 
     job = relationship("Job", back_populates="candidates")
+
+    # ── HR-enriched profile fields (auto-filled from uploaded documents) ───────
+    # These are populated by the document processor / LLM when HR uploads a
+    # resume or supporting document via the profiling pipeline.
+    address              = Column(Text, nullable=True, default=None)
+    date_of_birth        = Column(String, nullable=True, default=None)   # YYYY-MM-DD or free text
+    national_id          = Column(String, nullable=True, default=None)   # CNIC / NIC / Passport
+    employee_id          = Column(String, nullable=True, default=None)   # Internal staff ID
+    department           = Column(String, nullable=True, default=None)
+    emergency_contact    = Column(Text, nullable=True, default=None)     # name + phone
+    profile_summary      = Column(Text, nullable=True, default=None)     # AI-generated overview
+    profile_skills       = Column(Text, nullable=True, default=None)     # JSON list (from docs)
+    profile_certifications = Column(Text, nullable=True, default=None)   # JSON list (from docs)
+
+    # Relationship to HR-uploaded supporting documents
+    documents = relationship(
+        "EmployeeDocument", back_populates="candidate", cascade="all, delete-orphan"
+    )
+
+
+class EmployeeDocument(Base):
+    """
+    Stores HR-uploaded supporting documents linked to a Candidate.
+    Each document is processed through the OCR / LLM pipeline and the
+    extracted fields are used to auto-populate the candidate's profile.
+    """
+    __tablename__ = "employee_documents"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    candidate_id  = Column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # File metadata
+    filename      = Column(String, nullable=False)
+    file_type     = Column(String, nullable=True)    # pdf / png / jpg / …
+    file_size_kb  = Column(Integer, nullable=True)
+    ocr_used      = Column(Boolean, default=False)   # True if OCR was applied
+
+    # Categorisation
+    document_type = Column(String, nullable=True)    # CV | Offer Letter | Contract | …
+
+    # Extracted content
+    raw_text         = Column(Text, nullable=True)
+    extracted_fields = Column(Text, nullable=True)   # JSON blob of LLM-extracted fields
+
+    # Optional raw bytes (for small deployments without an object-store)
+    file_data     = Column(LargeBinary, nullable=True)
+
+    # Audit
+    uploaded_by   = Column(String, nullable=True)    # HR username / email
+    uploaded_at   = Column(String, nullable=True)    # ISO timestamp
+
+    candidate = relationship("Candidate", back_populates="documents")
+

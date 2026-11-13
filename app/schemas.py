@@ -150,6 +150,17 @@ class CandidateResponse(BaseModel):
     interview_overall_score: Optional[float] = None
     interview_passed: Optional[bool] = None
 
+    # HR-enriched profile fields (auto-filled from uploaded documents)
+    address: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    national_id: Optional[str] = None
+    employee_id: Optional[str] = None
+    department: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    profile_summary: Optional[str] = None
+    profile_skills: Optional[str] = None          # JSON list
+    profile_certifications: Optional[str] = None  # JSON list
+
     model_config = {"from_attributes": True}
 
 
