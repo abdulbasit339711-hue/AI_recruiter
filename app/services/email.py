@@ -268,17 +268,18 @@ def send_availability_invite(
     get_email_sender().send(to, subject, text, html)
 
 
-_INTERVIEW_MINUTES = 30  # ponytail: fixed length; make it a job/org setting if interviews vary
+DEFAULT_INTERVIEW_MINUTES = 30  # used when a job has no interview_minutes set
 
 
-def calendar_links(slot: str, title: str, details: str, location: str = "") -> dict[str, str] | None:
+def calendar_links(slot: str, title: str, details: str, location: str = "",
+                   minutes: int | None = None) -> dict[str, str] | None:
     """Google + Outlook "add to calendar" links for a slot string, or None if it can't be parsed."""
     from .reminder_scheduler import _parse_slot_utc  # same parser the reminder scheduler trusts
 
     start = _parse_slot_utc(slot)
     if start is None:
         return None
-    end = start + datetime.timedelta(minutes=_INTERVIEW_MINUTES)
+    end = start + datetime.timedelta(minutes=minutes or DEFAULT_INTERVIEW_MINUTES)
     g = "%Y%m%dT%H%M%SZ"
     google = "https://calendar.google.com/calendar/render?" + urlencode({
         "action": "TEMPLATE", "text": title, "dates": f"{start.strftime(g)}/{end.strftime(g)}",
@@ -294,7 +295,7 @@ def calendar_links(slot: str, title: str, details: str, location: str = "") -> d
 
 def send_slot_confirmation(
     *, to: str, candidate_name: str | None, job_title: str, slot: str,
-    room_url: str | None = None,
+    room_url: str | None = None, interview_minutes: int | None = None,
     org_name: str | None = None, org_color: str = "#1C99BF",
 ) -> None:
     name = candidate_name or "there"
@@ -309,7 +310,7 @@ def send_slot_confirmation(
     cal = calendar_links(
         slot, f"Interview — {job_title} ({org})",
         "AI-powered interview." + (f" Room link: {room_url}" if room_url else " The room link will be emailed shortly before the slot."),
-        room_url or "",
+        room_url or "", interview_minutes,
     )
     cal_text = (
         f"Add to your calendar:\n  Google:  {cal['google']}\n  Outlook: {cal['outlook']}\n\n" if cal else ""

@@ -103,6 +103,7 @@ def submit_availability(token: str, body: AvailabilitySubmit, db: Session = Depe
                     job_title=job.title,
                     slot=chosen,
                     room_url=None,
+                    interview_minutes=job.interview_minutes,
                     org_name=org.name if org else None,
                     org_color=org.primary_color if org else "#1C99BF",
                 )
@@ -181,6 +182,7 @@ def confirm_interview_slot(
                 job_title=job.title,
                 slot=slot,
                 room_url=room_url,
+                interview_minutes=job.interview_minutes,
                 org_name=job.org.name if job.org else None,
                 org_color=job.org.primary_color if job.org else "#1C99BF",
             )

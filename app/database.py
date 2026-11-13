@@ -108,6 +108,7 @@ def run_migrations() -> None:
         # Deadline fields on jobs (soft, informational only)
         "ALTER TABLE jobs ADD COLUMN resume_deadline VARCHAR",
         "ALTER TABLE jobs ADD COLUMN interview_deadline VARCHAR",
+        "ALTER TABLE jobs ADD COLUMN interview_minutes INTEGER",
         # Settings table (key/value store for admin-configurable values)
         "CREATE TABLE IF NOT EXISTS settings (key VARCHAR PRIMARY KEY, value TEXT NOT NULL, description TEXT)",
         # Availability scheduling on candidates

@@ -214,9 +214,9 @@ class DatabaseManager:
     async def get_job(self, job_id: int) -> Optional[Dict[str, Any]]:
         """Read a job (owned by the main API) from the shared database."""
         return await self.fetch_one(
-            "SELECT id, title, department, job_description, llm_prompt, voice_prompt, status, "
-            "COALESCE(role_type, '') AS role_type "
-            "FROM jobs WHERE id = $1",
+            # SELECT * (not a column list) so a voice service started before the API has
+            # migrated in a new jobs column (e.g. interview_minutes) still works.
+            "SELECT *, COALESCE(role_type, '') AS role_type FROM jobs WHERE id = $1",
             job_id,
         )
 

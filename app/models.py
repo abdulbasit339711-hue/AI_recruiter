@@ -55,6 +55,8 @@ class Job(Base):
     # Soft deadline dates (ISO date string, e.g. "2025-03-31"); informational only.
     resume_deadline = Column(String, nullable=True)
     interview_deadline = Column(String, nullable=True)
+    # Planned interview length in minutes (calendar invite + candidate countdown); null = default 30.
+    interview_minutes = Column(Integer, nullable=True)
 
     candidates = relationship("Candidate", back_populates="job", cascade="all, delete-orphan")
 

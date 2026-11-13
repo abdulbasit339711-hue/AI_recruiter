@@ -578,7 +578,9 @@ async def validate_interview(token: str):
         "prior_transcript": prior_transcript,  # conversation so far, for resume redisplay
         # Soft guideline duration for the candidate's on-screen countdown (the interview
         # actually ends on completion/idle, not a hard time cap).
-        "time_limit_seconds": int(os.getenv("INTERVIEW_TIME_LIMIT_SECS", "1800")),
+        # Per-job length (jobs.interview_minutes) wins over the env default.
+        "time_limit_seconds": int((job or {}).get("interview_minutes") or 0) * 60
+        or int(os.getenv("INTERVIEW_TIME_LIMIT_SECS", "1800")),
     }
 
 @app.get("/interview/debug/{session_id}")

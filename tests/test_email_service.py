@@ -221,3 +221,22 @@ def test_port_465_uses_implicit_ssl_without_starttls():
     plain_cls.assert_not_called()
     server.starttls.assert_not_called()
     server.send_message.assert_called_once()
+
+
+def test_calendar_event_length_follows_job_setting():
+    import datetime, re
+    from urllib.parse import unquote
+    from app.services import email as em
+    from app.services.reminder_scheduler import PKT
+
+    d = datetime.datetime.now(PKT) + datetime.timedelta(days=3)
+    slot = d.strftime("%A, %b %-d at ") + d.strftime("%-I:%M %p") + " PKT"
+
+    def length(minutes):
+        url = em.calendar_links(slot, "t", "d", minutes=minutes)["google"]
+        s, e = re.search(r"dates=([^&]+)", url).group(1).replace("%2F", "/").split("/")
+        f = "%Y%m%dT%H%M%SZ"
+        return (datetime.datetime.strptime(e, f) - datetime.datetime.strptime(s, f)).seconds // 60
+
+    assert length(None) == em.DEFAULT_INTERVIEW_MINUTES
+    assert length(45) == 45

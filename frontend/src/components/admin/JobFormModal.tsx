@@ -22,6 +22,7 @@ const jobSchema = z.object({
   org_id: z.string().optional(),
   resume_deadline: z.string().optional(),
   interview_deadline: z.string().optional(),
+  interview_minutes: z.string().optional(), // blank = default (30)
 });
 
 type FormValues = z.infer<typeof jobSchema>;
@@ -30,7 +31,7 @@ interface JobFormModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (
-    data: Omit<FormValues, "org_id"> & { org_id?: number | null },
+    data: Omit<FormValues, "org_id" | "interview_minutes"> & { org_id?: number | null; interview_minutes?: number | null },
     id?: number
   ) => void;
   initialData?: Job;
@@ -58,6 +59,7 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
           org_id: initialData.org_id?.toString() ?? "",
           resume_deadline: initialData.resume_deadline ?? "",
           interview_deadline: initialData.interview_deadline ?? "",
+          interview_minutes: initialData.interview_minutes?.toString() ?? "",
         }
       : undefined,
   });
@@ -73,15 +75,18 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
         org_id: initialData.org_id?.toString() ?? "",
         resume_deadline: initialData.resume_deadline ?? "",
         interview_deadline: initialData.interview_deadline ?? "",
+        interview_minutes: initialData.interview_minutes?.toString() ?? "",
       });
     } else {
-      reset({ org_id: "", resume_deadline: "", interview_deadline: "" });
+      reset({ org_id: "", resume_deadline: "", interview_deadline: "", interview_minutes: "" });
     }
   }, [initialData, reset]);
 
   const submitHandler = async (data: FormValues) => {
-    const { org_id, ...rest } = data;
-    await onSubmit({ ...rest, org_id: org_id ? Number(org_id) : null }, initialData?.id);
+    const { org_id, interview_minutes, ...rest } = data;
+    // Blank on an existing job sends 0, which the API treats as "reset to default".
+    const minutes = interview_minutes ? Number(interview_minutes) : initialData ? 0 : undefined;
+    await onSubmit({ ...rest, org_id: org_id ? Number(org_id) : null, interview_minutes: minutes }, initialData?.id);
     onClose();
   };
 
@@ -209,6 +214,20 @@ export const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSub
                 {...register("interview_deadline")}
               />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="job-interview-minutes" className="text-sm font-medium">
+              Interview length (minutes) <span className="text-muted-foreground font-normal">(optional, default 30)</span>
+            </label>
+            <Input
+              id="job-interview-minutes"
+              type="number"
+              min={5}
+              max={180}
+              placeholder="30"
+              {...register("interview_minutes")}
+            />
+            <p className="text-xs text-muted-foreground">Sets the calendar-invite length and the candidate&apos;s on-screen countdown.</p>
           </div>
           <DialogFooter className="flex justify-end space-x-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>

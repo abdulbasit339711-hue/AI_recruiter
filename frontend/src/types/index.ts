@@ -38,6 +38,7 @@ export interface Job {
   top_score?: number | null;
   resume_deadline: string | null;
   interview_deadline: string | null;
+  interview_minutes?: number | null;
 }
 
 export type InterviewPassedCandidate = {

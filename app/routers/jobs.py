@@ -57,6 +57,7 @@ def _serialize_job(job: Job, include_private: bool) -> dict:
         "org_name": job.org.name if job.org else None,
         "resume_deadline": job.resume_deadline,
         "interview_deadline": job.interview_deadline,
+        "interview_minutes": job.interview_minutes,
     }
     if include_private:
         data["llm_prompt"] = job.llm_prompt
@@ -78,6 +79,7 @@ def create_job(
     org_id: Optional[int] = Query(None),
     resume_deadline: Optional[str] = Query(None, max_length=20),
     interview_deadline: Optional[str] = Query(None, max_length=20),
+    interview_minutes: Optional[int] = Query(None, ge=5, le=180),
     db: Session = Depends(get_db),
 ):
     # A per-customer integration token can only create jobs in its own org.
@@ -92,6 +94,7 @@ def create_job(
             org_id=org_id,
             resume_deadline=resume_deadline,
             interview_deadline=interview_deadline,
+            interview_minutes=interview_minutes,
             status="Active",
             created_at=_utcnow().isoformat(),
         )
@@ -222,8 +225,11 @@ def update_job(
     status: Optional[str] = Query(None, pattern="^(Active|Archived)$"),
     resume_deadline: Optional[str] = Query(None, max_length=20),
     interview_deadline: Optional[str] = Query(None, max_length=20),
+    interview_minutes: Optional[int] = Query(None, ge=0, le=180, description="5-180; 0 resets to the default"),
     db: Session = Depends(get_db),
 ):
+    if interview_minutes is not None and 0 < interview_minutes < 5:
+        raise HTTPException(status_code=422, detail="interview_minutes must be 5-180 (or 0 to reset).")
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
@@ -246,6 +252,8 @@ def update_job(
             job.resume_deadline = resume_deadline or None
         if interview_deadline is not None:
             job.interview_deadline = interview_deadline or None
+        if interview_minutes is not None:
+            job.interview_minutes = interview_minutes or None
         db.commit()
         db.refresh(job)
         return job

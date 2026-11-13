@@ -12,6 +12,7 @@ type NewJob = {
   llm_prompt?: string;
   voice_prompt?: string;
   org_id?: number | null;
+  interview_minutes?: number | null;
 };
 
 export const useCreateJob = () => {

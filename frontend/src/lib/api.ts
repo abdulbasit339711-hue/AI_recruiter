@@ -230,6 +230,7 @@ export const api = {
     llm_prompt?: string;
     voice_prompt?: string;
     role_type?: string;
+    interview_minutes?: number | null;
   }): Promise<Job> {
     const response = await client.post<Job>("/jobs", null, { params });
     return response.data;
@@ -247,6 +248,7 @@ export const api = {
       status?: "Active" | "Archived";
       resume_deadline?: string | null;
       interview_deadline?: string | null;
+      interview_minutes?: number | null;
     }
   ): Promise<Job> {
     const response = await client.put<Job>(`/jobs/${jobId}`, null, { params });
