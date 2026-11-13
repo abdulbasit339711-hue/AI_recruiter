@@ -405,7 +405,7 @@ def main():
         # 4. Analytics & Overview row (for selected job)
         candidates = db.query(Candidate).filter(Candidate.job_id == active_job.id).all()
         total_count = len(candidates)
-        terminal = {CandStatus.SHORTLISTED, CandStatus.REVIEWED, CandStatus.REJECTED, CandStatus.UNGRADED, "Processed"}
+        terminal = {CandStatus.SHORTLISTED, CandStatus.REVIEWED, CandStatus.NOT_RECOMMENDED, CandStatus.UNGRADED, "Processed"}
         processed_count = sum(1 for c in candidates if c.status in terminal)
         scored = [c for c in candidates if c.status in (CandStatus.SHORTLISTED, CandStatus.REVIEWED, "Processed")]
         avg_score = sum(c.total_score for c in scored) / max(1, len(scored))
@@ -517,7 +517,7 @@ def main():
             status_filter = st.multiselect(
                 "Filter by Status:",
                 options=[
-                    CandStatus.SHORTLISTED, CandStatus.REVIEWED, CandStatus.REJECTED,
+                    CandStatus.SHORTLISTED, CandStatus.REVIEWED, CandStatus.NOT_RECOMMENDED,
                     CandStatus.UNGRADED, CandStatus.QUEUED, CandStatus.PROCESSING,
                     CandStatus.ERROR, "Processed", "Pending", "Failed",
                 ],

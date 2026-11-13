@@ -79,7 +79,7 @@ export type CandidateStatus =
   | "Processing"
   | "Shortlisted"
   | "Reviewed"
-  | "Rejected"
+  | "Not recommended"
   | "Ungraded"
   | "Error"
   | "Pending"
@@ -242,7 +242,7 @@ export interface CandidateSSEPayload {
 export const TERMINAL_STATUSES: CandidateStatus[] = [
   "Shortlisted",
   "Reviewed",
-  "Rejected",
+  "Not recommended",
   "Ungraded",
   "Error",
   "Processed",

@@ -89,7 +89,7 @@ def get_metrics(
     queued = _q(Candidate).filter(Candidate.status.in_([S.QUEUED, S.PROCESSING, "Pending"])).count()
     processed = (
         _q(Candidate)
-        .filter(Candidate.status.in_([S.SHORTLISTED, S.REVIEWED, S.REJECTED, S.UNGRADED, "Processed"]))
+        .filter(Candidate.status.in_([S.SHORTLISTED, S.REVIEWED, S.NOT_RECOMMENDED, S.UNGRADED, "Processed"]))
         .count()
     )
     failed = _q(Candidate).filter(Candidate.status.in_([S.ERROR, "Failed"])).count()

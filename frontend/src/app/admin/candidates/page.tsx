@@ -108,7 +108,7 @@ const STATUS_OPTIONS: Array<CandidateStatus | ""> = [
   "Processing",
   "Shortlisted",
   "Reviewed",
-  "Rejected",
+  "Not recommended",
   "Ungraded",
   "Error",
 ];

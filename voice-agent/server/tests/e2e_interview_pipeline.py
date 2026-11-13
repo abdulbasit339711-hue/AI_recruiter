@@ -126,7 +126,7 @@ async def main():
         await asyncio.sleep(3)
         c = _req(f"{BACKEND}/candidates/{cand_id}", headers=admin_headers())
         status = c.get("status")
-        if status in ("Shortlisted", "Reviewed", "Rejected", "Ungraded", "Error"):
+        if status in ("Shortlisted", "Reviewed", "Not recommended", "Ungraded", "Error"):
             print(f"  scored: status={status} "
                   f"tier1={c.get('tier1')} tier2={c.get('tier2')} tier3={c.get('tier3')} total={c.get('total_score')}")
             break

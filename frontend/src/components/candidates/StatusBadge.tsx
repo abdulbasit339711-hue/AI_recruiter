@@ -7,7 +7,7 @@ function statusColor(status: string): string {
   if (s === "hired" || s === "strong") return "#34C28A";
   if (s === "processed" || s === "shortlisted" || s === "in interview") return "#1C99BF";
   if (s === "pending" || s === "pending review" || s === "promising") return "#F5B544";
-  if (s === "failed" || s === "rejected" || s === "weak") return "#F25C7C";
+  if (s === "failed" || s === "rejected" || s === "not recommended" || s === "weak") return "#F25C7C";
   if (s === "archived") return "#556070";
   return "#9CA3B0";
 }

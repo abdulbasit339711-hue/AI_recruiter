@@ -15,8 +15,9 @@ def test_resolve_final_status_reviewed():
     assert _resolve_final_status(65.0, "Rejected") == S.REVIEWED
 
 
-def test_resolve_final_status_rejected():
-    assert _resolve_final_status(40.0, "Rejected") == S.REJECTED
+def test_resolve_final_status_not_recommended():
+    assert _resolve_final_status(40.0, "Not recommended") == S.NOT_RECOMMENDED
+    assert _resolve_final_status(40.0, "Rejected") == S.NOT_RECOMMENDED  # legacy LLM wording
 
 
 def test_parse_llm_json_strips_fences():

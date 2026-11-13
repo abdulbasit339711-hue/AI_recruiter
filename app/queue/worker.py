@@ -130,7 +130,7 @@ def _worker_loop() -> None:
             logger.exception("Worker failed for candidate %d: %s", candidate_id, e)
             try:
                 failed = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-                if failed and failed.status not in (S.ERROR, S.REJECTED):
+                if failed and failed.status not in (S.ERROR, S.NOT_RECOMMENDED):
                     failed.status = S.ERROR
                     failed.summary = f"Worker error: {e}"
                     db.commit()

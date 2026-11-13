@@ -45,7 +45,7 @@ function pipelineStatusStyle(status: string): string {
     return "bg-strong/15 text-strong";
   if (status === "Queued" || status === "Processing" || status === "Pending")
     return "bg-promising/15 text-promising";
-  if (status === "Failed" || status === "Error" || status === "Rejected")
+  if (status === "Failed" || status === "Error" || status === "Not recommended")
     return "bg-weak/15 text-weak";
   return "bg-foreground/[0.07] text-muted-foreground";
 }

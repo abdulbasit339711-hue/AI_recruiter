@@ -41,9 +41,9 @@ def _resolve_final_status(total_score: float, llm_status: str | None) -> str:
         return S.SHORTLISTED
     if total_score >= reviewed_min:
         return S.REVIEWED
-    if llm_status in (S.SHORTLISTED, S.REVIEWED, S.REJECTED):
+    if llm_status in (S.SHORTLISTED, S.REVIEWED):
         return llm_status
-    return S.REJECTED
+    return S.NOT_RECOMMENDED  # incl. an LLM answering "Not recommended" or the legacy "Rejected"
 
 
 def _apply_tier1_contact(candidate: Candidate, t1: dict) -> None:
@@ -214,7 +214,7 @@ def evaluate_candidate_pipeline(
     except (Tier1IrrelevantError, Tier2IrrelevantError) as doc_err:
         db.rollback()
         candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-        candidate.status = S.REJECTED
+        candidate.status = S.NOT_RECOMMENDED
         candidate.summary = f"Document rejected: {doc_err}"
         candidate.tier3 = 0.0
         candidate.total_score = round(

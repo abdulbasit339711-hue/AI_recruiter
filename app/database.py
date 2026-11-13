@@ -103,6 +103,8 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN iq_details TEXT",
         "ALTER TABLE candidates ADD COLUMN iq_result_jti VARCHAR",
         "ALTER TABLE candidates ADD COLUMN consent_at VARCHAR",
+        # pipeline status renamed Rejected -> Not recommended (hr_status is separate and unchanged)
+        "UPDATE candidates SET status = 'Not recommended' WHERE status = 'Rejected'",
         # Orgs: multi-company whitelabel support
         "ALTER TABLE jobs ADD COLUMN org_id INTEGER",
         # Deadline fields on jobs (soft, informational only)

@@ -15,7 +15,9 @@ class Status(StrEnum):
     PROCESSING = "Processing"
     SHORTLISTED = "Shortlisted"
     REVIEWED = "Reviewed"
-    REJECTED = "Rejected"
+    # Advisory pipeline label ("below threshold / AI does not recommend"). It is NOT a decision:
+    # nothing is sent to the candidate. HR's own hr_status "Rejected" is the human decision.
+    NOT_RECOMMENDED = "Not recommended"
     UNGRADED = "Ungraded"
     ERROR = "Error"
 
@@ -25,14 +27,14 @@ QUEUED = Status.QUEUED
 PROCESSING = Status.PROCESSING
 SHORTLISTED = Status.SHORTLISTED
 REVIEWED = Status.REVIEWED
-REJECTED = Status.REJECTED
+NOT_RECOMMENDED = Status.NOT_RECOMMENDED
 UNGRADED = Status.UNGRADED
 ERROR = Status.ERROR
 
 TERMINAL_STATUSES = frozenset({
     SHORTLISTED,
     REVIEWED,
-    REJECTED,
+    NOT_RECOMMENDED,
     UNGRADED,
     ERROR,
 })
@@ -41,6 +43,7 @@ TERMINAL_STATUSES = frozenset({
 LEGACY_PROCESSED = "Processed"
 LEGACY_PENDING = "Pending"
 LEGACY_FAILED = "Failed"
+LEGACY_REJECTED = "Rejected"  # pipeline label before the rename to NOT_RECOMMENDED (also what LLMs may return)
 
 
 def is_shortlisted_for_email(status: str) -> bool:
@@ -52,6 +55,7 @@ def normalize_display_status(status: str) -> str:
     mapping = {
         LEGACY_PROCESSED: SHORTLISTED,
         LEGACY_PENDING: QUEUED,
-        LEGACY_FAILED: REJECTED,
+        LEGACY_FAILED: NOT_RECOMMENDED,
+        LEGACY_REJECTED: NOT_RECOMMENDED,
     }
     return mapping.get(status, status)

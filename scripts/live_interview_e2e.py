@@ -118,7 +118,7 @@ async def main(a):
     for _ in range(40):
         await asyncio.sleep(3)
         c = req(f"{a.backend}/candidates/{cid}", headers=admin)
-        if c.get("status") in ("Shortlisted", "Reviewed", "Rejected", "Ungraded", "Error"):
+        if c.get("status") in ("Shortlisted", "Reviewed", "Not recommended", "Ungraded", "Error"):
             print(f"  scored: {c['status']}  T1={c['tier1']} T2={c['tier2']} T3={c['tier3']} "
                   f"total={c['total_score']}  |  IQ={c.get('iq_score')}% ({c.get('iq_correct')}/{c.get('iq_total')})")
             break

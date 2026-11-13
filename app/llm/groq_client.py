@@ -122,7 +122,7 @@ def _build_system_prompt(custom_prompt: Optional[str], llm_wt: int) -> str:
         '  "skills_matched": ["<skill>", "..."],\n'
         '  "skills_missing": ["<skill>", "..."],\n'
         f'  "tier3_score": <integer 0-{llm_wt}>,\n'
-        '  "status": "<Shortlisted|Reviewed|Rejected>",\n'
+        '  "status": "<Shortlisted|Reviewed|Not recommended>",\n'
         '  "summary": "<100-150 word recruiter-style summary>",\n'
         '  "evidence": ["<concrete evidence>", "..."],\n'
         '  "interview_questions": ["<résumé-specific interview question>", "..."]\n'
@@ -152,7 +152,7 @@ def _build_system_prompt(custom_prompt: Optional[str], llm_wt: int) -> str:
     return (
         "You are a senior technical recruiter conducting structured resume evaluation.\n"
         "Evaluate resume vs Job Description on technical fit, experience depth, and impact.\n"
-        f"Assign tier3_score 0-{llm_wt}. Set status to Shortlisted, Reviewed, or Rejected.\n"
+        f"Assign tier3_score 0-{llm_wt}. Set status to Shortlisted, Reviewed, or Not recommended (advisory — a person decides).\n"
         f"{output_rules}"
     )
 
@@ -295,7 +295,7 @@ def simulate_tier3_evaluation(
         "before making a hiring decision."
     )
 
-    status = "Reviewed" if simulated_score >= max_score * 0.6 else "Rejected"
+    status = "Reviewed" if simulated_score >= max_score * 0.6 else "Not recommended"
 
     return {
         "name": "",
