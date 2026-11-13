@@ -14,6 +14,19 @@ class IngestionError(Exception):
         self.message = message
         self.status_code = status_code
 
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    """Extracts paragraph + table text from DOCX bytes."""
+    try:
+        from docx import Document
+        doc = Document(io.BytesIO(file_bytes))
+        parts = [p.text for p in doc.paragraphs]
+        parts += [c.text for t in doc.tables for r in t.rows for c in r.cells]
+        return "\n".join(x for x in parts if x.strip())
+    except Exception as e:
+        logger.warning("DOCX parse failed: %s", e)
+        raise IngestionError("Failed to parse the DOCX. The file may be corrupt or unsupported.")
+
+
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extracts text from PDF bytes using pdfplumber."""
     text_content = []
@@ -55,15 +68,16 @@ def validate_and_extract(file_bytes: bytes, filename: str) -> str:
     Returns the extracted raw text on success.
     """
     # 1. Validate file extension
-    if not filename.lower().endswith('.pdf'):
-        raise IngestionError("Invalid file type. Only PDF files are allowed.", 400)
+    is_docx = filename.lower().endswith('.docx')
+    if not (is_docx or filename.lower().endswith('.pdf')):
+        raise IngestionError("Invalid file type. Only PDF or DOCX files are allowed.", 400)
 
     # 2. Validate file size
     if len(file_bytes) > MAX_FILE_SIZE_BYTES:
         raise IngestionError("File size exceeds the 5MB limit.", 400)
 
     # 3. Extract text
-    raw_text = extract_text_from_pdf(file_bytes)
+    raw_text = extract_text_from_docx(file_bytes) if is_docx else extract_text_from_pdf(file_bytes)
 
     # 4. Reject image-only PDFs (empty or too short extracted text)
     if not raw_text or len(raw_text) < MIN_TEXT_LENGTH:

@@ -101,7 +101,7 @@ export default function ApplyPage() {
               {!file && <p className="text-xs text-muted-foreground">We only accept PDF, up to 5MB.</p>}
               <input
                 type="file"
-                accept=".pdf,application/pdf"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 className="absolute inset-0 cursor-pointer opacity-0"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />

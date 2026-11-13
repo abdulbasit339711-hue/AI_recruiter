@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { MessageSquare, Send, User, Clock, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { getHrActor } from "@/lib/actor";
 import { toast } from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,7 +28,7 @@ export const CandidateNotesPanel: React.FC<CandidateNotesPanelProps> = ({
   onClose,
 }) => {
   const [newNote, setNewNote] = useState("");
-  const [author, setAuthor] = useState("hr@company.com"); // default author
+  const [author, setAuthor] = useState(getHrActor()); // logged-in operator identity
   const [submitting, setSubmitting] = useState(false);
 
   const parseNotes = (notesStr: string | null): ParsedNote[] => {
@@ -142,7 +143,7 @@ export const CandidateNotesPanel: React.FC<CandidateNotesPanelProps> = ({
             className="h-8 rounded border border-border bg-foreground/[0.04] px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
-            placeholder="hr@company.com"
+            placeholder="your identifier"
             required
           />
         </div>

@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -371,9 +371,15 @@ def reprocess_all_for_job(
     return {"message": msg, "count": queued, "total": total, "remaining": remaining}
 
 
+def _send_batch_logged(messages: list[OutgoingEmail]) -> None:
+    for to, err in get_email_sender().send_batch(messages).items():
+        logging.getLogger(__name__).error("shortlist email to %s failed: %s", to, err)
+
+
 @router.post("/jobs/{job_id}/email")
 async def send_shortlist_emails_api(
     job_id: int,
+    background: BackgroundTasks,
     top_n: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
@@ -411,14 +417,11 @@ async def send_shortlist_emails_api(
             ),
         ))
 
-    # SMTP is blocking I/O over one reused connection — run it off the event loop
-    # so a slow mail server can't stall the API.
-    send_errors = await run_in_threadpool(get_email_sender().send_batch, messages)
-    errors.extend(f"{to}: {err}" for to, err in send_errors.items())
-
-    sent_count = len(messages) - len(send_errors)
+    # SMTP is slow blocking I/O — send after the response so big shortlists don't hold the request.
+    # ponytail: failures are logged, not returned; add a job-status table if HR needs per-send results.
+    background.add_task(_send_batch_logged, messages)
     return {
-        "message": f"Sent {sent_count} emails.",
+        "message": f"Queued {len(messages)} emails for sending.",
         "failed_count": len(errors),
         "errors": errors,
     }

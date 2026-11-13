@@ -68,7 +68,7 @@ Respond ONLY with JSON in this format:
         # Capture user transcriptions for evaluation
         if isinstance(frame, TranscriptionFrame):
             text = frame.text.strip()
-            if text and len(text) > 20:  # Only evaluate substantial responses
+            if len(text.split()) >= 2:  # skip only filler/one-word noise; short real answers still count
                 # Start evaluation in background, but keep a handle so it can be
                 # cancelled on cleanup() (self-removing when it finishes).
                 task = asyncio.create_task(self._evaluate_response(text))
