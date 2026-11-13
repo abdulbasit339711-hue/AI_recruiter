@@ -13,20 +13,31 @@ branch_labels = None
 depends_on = None
 
 
+_COLUMNS = [
+    ("address", sa.Text()), ("date_of_birth", sa.String()), ("national_id", sa.String()),
+    ("employee_id", sa.String()), ("department", sa.String()), ("emergency_contact", sa.Text()),
+    ("profile_summary", sa.Text()), ("profile_skills", sa.Text()), ("profile_certifications", sa.Text()),
+]
+
+
+def _columns(table: str) -> set[str]:
+    return {c["name"] for c in sa.inspect(op.get_bind()).get_columns(table)}
+
+
 def upgrade() -> None:
+    # Idempotent: the app runs Base.metadata.create_all() BEFORE `alembic upgrade head`, so a
+    # fresh database already has these columns/table from the models — only add what's missing.
     # ── New columns on candidates ──────────────────────────────────────────
-    with op.batch_alter_table("candidates") as batch_op:
-        batch_op.add_column(sa.Column("address",               sa.Text(),   nullable=True))
-        batch_op.add_column(sa.Column("date_of_birth",         sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("national_id",           sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("employee_id",           sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("department",            sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("emergency_contact",     sa.Text(),   nullable=True))
-        batch_op.add_column(sa.Column("profile_summary",       sa.Text(),   nullable=True))
-        batch_op.add_column(sa.Column("profile_skills",        sa.Text(),   nullable=True))
-        batch_op.add_column(sa.Column("profile_certifications",sa.Text(),   nullable=True))
+    existing = _columns("candidates")
+    missing = [(n, t) for n, t in _COLUMNS if n not in existing]
+    if missing:
+        with op.batch_alter_table("candidates") as batch_op:
+            for name, type_ in missing:
+                batch_op.add_column(sa.Column(name, type_, nullable=True))
 
     # ── New employee_documents table ──────────────────────────────────────
+    if "employee_documents" in sa.inspect(op.get_bind()).get_table_names():
+        return
     op.create_table(
         "employee_documents",
         sa.Column("id",               sa.Integer(), primary_key=True),
@@ -45,11 +56,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("employee_documents")
-    with op.batch_alter_table("candidates") as batch_op:
-        for col in [
-            "address", "date_of_birth", "national_id", "employee_id",
-            "department", "emergency_contact", "profile_summary",
-            "profile_skills", "profile_certifications",
-        ]:
-            batch_op.drop_column(col)
+    if "employee_documents" in sa.inspect(op.get_bind()).get_table_names():
+        op.drop_table("employee_documents")
+    present = [n for n, _ in _COLUMNS if n in _columns("candidates")]
+    if present:
+        with op.batch_alter_table("candidates") as batch_op:
+            for col in present:
+                batch_op.drop_column(col)

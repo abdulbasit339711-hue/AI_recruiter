@@ -97,6 +97,9 @@ def run_migrations_online() -> None:
         )
         with context.begin_transaction():
             context.run_migrations()
+        # SQLite runs DDL non-transactionally, so begin_transaction() doesn't commit for it and
+        # SQLAlchemy 2.0 would roll the work (and the version row) back on close. Harmless on Postgres.
+        connection.commit()
 
 
 if context.is_offline_mode():
