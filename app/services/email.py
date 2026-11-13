@@ -10,6 +10,8 @@ All network calls here are blocking; callers in async contexts must offload them
 import logging
 import os
 import smtplib
+import datetime
+from urllib.parse import quote, urlencode
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from email.message import EmailMessage
@@ -266,6 +268,30 @@ def send_availability_invite(
     get_email_sender().send(to, subject, text, html)
 
 
+_INTERVIEW_MINUTES = 30  # ponytail: fixed length; make it a job/org setting if interviews vary
+
+
+def calendar_links(slot: str, title: str, details: str, location: str = "") -> dict[str, str] | None:
+    """Google + Outlook "add to calendar" links for a slot string, or None if it can't be parsed."""
+    from .reminder_scheduler import _parse_slot_utc  # same parser the reminder scheduler trusts
+
+    start = _parse_slot_utc(slot)
+    if start is None:
+        return None
+    end = start + datetime.timedelta(minutes=_INTERVIEW_MINUTES)
+    g = "%Y%m%dT%H%M%SZ"
+    google = "https://calendar.google.com/calendar/render?" + urlencode({
+        "action": "TEMPLATE", "text": title, "dates": f"{start.strftime(g)}/{end.strftime(g)}",
+        "details": details, "location": location,
+    }, quote_via=quote)
+    outlook = "https://outlook.live.com/calendar/0/deeplink/compose?" + urlencode({
+        "path": "/calendar/action/compose", "rru": "addevent", "subject": title,
+        "startdt": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "enddt": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "body": details, "location": location,
+    }, quote_via=quote)
+    return {"google": google, "outlook": outlook}
+
+
 def send_slot_confirmation(
     *, to: str, candidate_name: str | None, job_title: str, slot: str,
     room_url: str | None = None,
@@ -280,11 +306,25 @@ def send_slot_confirmation(
         if room_url
         else "Your interview room link will be sent to you shortly before your scheduled time."
     )
+    cal = calendar_links(
+        slot, f"Interview — {job_title} ({org})",
+        "AI-powered interview." + (f" Room link: {room_url}" if room_url else " The room link will be emailed shortly before the slot."),
+        room_url or "",
+    )
+    cal_text = (
+        f"Add to your calendar:\n  Google:  {cal['google']}\n  Outlook: {cal['outlook']}\n\n" if cal else ""
+    )
+    cal_para = (
+        f'<strong>Add to calendar:</strong> <a href="{cal["google"].replace("&", "&amp;")}" style="color:{org_color};">Google</a>'
+        f' · <a href="{cal["outlook"].replace("&", "&amp;")}" style="color:{org_color};">Outlook</a>'
+        if cal else None
+    )
     text = (
         f"Hi {name},\n\n"
         f"Your interview for the {job_title} role at {org} has been confirmed for:\n\n"
         f"  {slot}\n\n"
         f"{room_line}\n\n"
+        f"{cal_text}"
         f"Before joining: find a quiet room and make sure your microphone is working.\n\n"
         f"Best of luck!\n{org}\n"
     )
@@ -302,6 +342,7 @@ def send_slot_confirmation(
             f"Your interview for the <strong>{job_title}</strong> role is confirmed for:",
             f'<span style="display:inline-block;padding:10px 18px;background:#f0fdf4;border-left:3px solid {org_color};border-radius:6px;font-weight:600;color:#111827;font-size:15px;">{slot}</span>',
             room_para,
+            *([cal_para] if cal_para else []),
             "Please be in a quiet space with your microphone ready a few minutes before your slot.",
         ],
         note="The interview room link activates 15 minutes before your scheduled time and remains open for 90 minutes.",

@@ -196,3 +196,16 @@ def test_send_interview_invite_handles_missing_name(monkeypatch):
 
     body = _text_body(server.send_message.call_args.args[0])
     assert "there" in body  # graceful "Hi there," fallback when name is unknown
+
+
+def test_slot_confirmation_includes_calendar_links():
+    import datetime
+    from app.services import email as em
+    from app.services.reminder_scheduler import PKT
+
+    d = datetime.datetime.now(PKT) + datetime.timedelta(days=3)
+    slot = d.strftime("%A, %b %-d at ") + d.strftime("%-I:%M %p") + " PKT"
+    links = em.calendar_links(slot, "Interview", "details")
+    assert "calendar.google.com" in links["google"] and "outlook.live.com" in links["outlook"]
+    assert "dates=" in links["google"] and "startdt=" in links["outlook"]
+    assert em.calendar_links("not a slot", "t", "d") is None  # unparseable -> email just omits links
