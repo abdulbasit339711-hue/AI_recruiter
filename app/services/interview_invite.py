@@ -3,6 +3,7 @@
 import datetime
 import logging
 
+from ..core.local_only import is_local_only
 from ..interview_links import mint_link
 from .email import send_interview_invite
 
@@ -15,6 +16,9 @@ def invite_candidate(db, candidate, job, *, force: bool = False) -> str | None:
     Returns the link URL, or None if skipped (no email, or already invited and
     not forced). Best-effort: email failures are logged, not raised.
     """
+    if is_local_only():
+        logger.info("LOCAL_ONLY: skipping interview invite for candidate %s", candidate.id)
+        return None
     if not candidate.email:
         logger.warning("Candidate %s has no email; skipping interview invite", candidate.id)
         return None

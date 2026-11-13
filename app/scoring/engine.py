@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..core import status as S
 from ..database import config
+from ..core.local_only import is_local_only
 from ..llm.groq_client import evaluate_with_llm
 from ..models import Candidate, Job
 from ..core.jd_embedding_cache import invalidate_job
@@ -159,11 +160,14 @@ def evaluate_candidate_pipeline(
         combined = candidate.tier1 + candidate.tier2
         tier3_threshold = float(_pipeline_cfg().get("tier3_combined_threshold", 25.0))
 
-        if combined < tier3_threshold:
+        local_only = is_local_only()
+        if local_only or combined < tier3_threshold:
             candidate.tier3 = 0.0
             candidate.total_score = _weighted_total(candidate, job)
             candidate.status = S.UNGRADED
             candidate.summary = (
+                "Local-only mode: scored on-device (Tier 1+2); no data sent to external AI."
+                if local_only else
                 f"Automated screening completed without LLM evaluation "
                 f"(combined Tier 1+2 score {combined:.1f} below threshold {tier3_threshold:.1f})."
             )

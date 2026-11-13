@@ -714,6 +714,9 @@ def send_interview_invite_api(candidate_id: int, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == cand.job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Candidate is not linked to a job.")
+    from ..core.local_only import is_local_only
+    if is_local_only():
+        raise HTTPException(status_code=403, detail="Voice interviews are disabled (LOCAL_ONLY mode).")
     from ..services.interview_invite import invite_candidate
     url = invite_candidate(db, cand, job, force=True)
     return {"status": "sent", "candidate_id": candidate_id, "link": url}
@@ -722,6 +725,9 @@ def send_interview_invite_api(candidate_id: int, db: Session = Depends(get_db)):
 @router.post("/candidates/{candidate_id}/availability-invite")
 def send_availability_invite_api(candidate_id: int, db: Session = Depends(get_db)):
     """HR action: send (or resend) the slot-picker availability link to a candidate."""
+    from ..core.local_only import is_local_only
+    if is_local_only():
+        raise HTTPException(status_code=403, detail="Interview scheduling is disabled (LOCAL_ONLY mode).")
     cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found.")
