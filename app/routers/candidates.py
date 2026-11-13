@@ -67,6 +67,7 @@ async def upload_resume(
     job_id: int = Query(..., description="Target Job ID"),
     file: UploadFile = File(...),
     iq_token: Optional[str] = Form(None, description="Signed IQ result token (optional)"),
+    consent: bool = Form(False, description="Applicant ticked the AI-processing consent box"),
     db: Session = Depends(get_db),
 ):
     """
@@ -90,6 +91,7 @@ async def upload_resume(
             job_id=job_id,
             status=S.QUEUED,
             created_at=_utcnow().isoformat(),
+            consent_at=_utcnow().isoformat() if consent else None,
         )
         # Attach the IQ screen result if a valid token was supplied. This NEVER
         # blocks the application: an absent/invalid/mismatched token simply leaves

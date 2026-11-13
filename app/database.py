@@ -102,6 +102,7 @@ def run_migrations() -> None:
         "ALTER TABLE candidates ADD COLUMN iq_attempted_at VARCHAR",
         "ALTER TABLE candidates ADD COLUMN iq_details TEXT",
         "ALTER TABLE candidates ADD COLUMN iq_result_jti VARCHAR",
+        "ALTER TABLE candidates ADD COLUMN consent_at VARCHAR",
         # Orgs: multi-company whitelabel support
         "ALTER TABLE jobs ADD COLUMN org_id INTEGER",
         # Deadline fields on jobs (soft, informational only)

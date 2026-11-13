@@ -44,7 +44,7 @@ export default function CareersApplyPage() {
     e.preventDefault();
     if (!file || !consent) return;
     try {
-      await upload.mutateAsync({ file, iqToken: iq?.result_token });
+      await upload.mutateAsync({ file, iqToken: iq?.result_token, consent });
       router.push(`/careers/${orgSlug}/${jobId}/apply/success`);
     } catch {
       /* error shown below */

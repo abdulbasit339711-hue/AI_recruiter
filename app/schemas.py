@@ -126,6 +126,7 @@ class CandidateResponse(BaseModel):
     iq_total: Optional[int] = None
     iq_time_seconds: Optional[int] = None
     iq_attempted_at: Optional[str] = None
+    consent_at: Optional[str] = None
     iq_details: Optional[str] = None  # JSON: per-question breakdown
 
     # Availability scheduling fields

@@ -33,7 +33,7 @@ export default function ApplyPage() {
     e.preventDefault();
     if (!file || !consent) return;
     try {
-      await upload.mutateAsync({ file, iqToken: iq?.result_token });
+      await upload.mutateAsync({ file, iqToken: iq?.result_token, consent });
       router.push(`/applicant/${jobId}/apply/success`);
     } catch {
       /* error shown below */

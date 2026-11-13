@@ -125,6 +125,8 @@ class Candidate(Base):
     iq_total = Column(Integer, nullable=True, default=None)
     iq_time_seconds = Column(Integer, nullable=True, default=None)
     iq_attempted_at = Column(String, nullable=True, default=None)
+    # When the applicant ticked the AI-processing consent box (ISO UTC); null = not recorded.
+    consent_at = Column(String, nullable=True, default=None)
     # Per-question breakdown (JSON list): prompt, options, chosen, correct, is_correct,
     # time_seconds — shown in the HR "Aptitude screen" block.
     iq_details = Column(Text, nullable=True, default=None)

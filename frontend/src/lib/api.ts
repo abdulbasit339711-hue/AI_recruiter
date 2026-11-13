@@ -356,10 +356,11 @@ export const api = {
     return response.data;
   },
 
-  async uploadResume(jobId: number, file: File, iqToken?: string): Promise<UploadResponse> {
+  async uploadResume(jobId: number, file: File, iqToken?: string, consent?: boolean): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append("file", file);
     if (iqToken) formData.append("iq_token", iqToken); // attach IQ screen result (optional)
+    if (consent) formData.append("consent", "true"); // recorded server-side as consent_at
     const response = await client.post<UploadResponse>("/upload", formData, {
       params: { job_id: jobId },
       headers: { "Content-Type": "multipart/form-data" },

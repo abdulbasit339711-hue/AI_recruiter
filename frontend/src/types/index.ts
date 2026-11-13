@@ -94,6 +94,7 @@ export interface Candidate {
   iq_total?: number | null;
   iq_time_seconds?: number | null; // server-measured time taken
   iq_attempted_at?: string | null; // ISO timestamp when submitted
+  consent_at?: string | null; // ISO timestamp the applicant gave AI-processing consent
   iq_details?: string | null;      // JSON: IqQuestionDetail[]
 
   // Availability scheduling
