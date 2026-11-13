@@ -66,6 +66,7 @@ export default function InterviewPage() {
   // distinct voice — letting you watch a full two-voice interview without a mic.
   // (Off by default, so a real candidate's own captions are never read back to them.)
   const [demoMode, setDemoMode] = useState(false);
+  const [consent, setConsent] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
   const selfVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -398,10 +399,24 @@ export default function InterviewPage() {
               </div>
             )}
 
+            <label className="mt-6 flex items-start gap-2.5 text-left text-xs text-zinc-400">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+              />
+              <span>
+                I agree that my voice, transcript and (if enabled) video will be recorded and processed by
+                third-party AI service providers to assess my application. A person reviews the results —
+                no decision is made automatically.
+              </span>
+            </label>
+
             <button
               onClick={start}
-              disabled={phase === "connecting"}
-              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3.5 font-medium text-white transition hover:bg-blue-500 disabled:opacity-70"
+              disabled={phase === "connecting" || !consent}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3.5 font-medium text-white transition hover:bg-blue-500 disabled:opacity-70"
             >
               {phase === "connecting" ? (
                 <>
