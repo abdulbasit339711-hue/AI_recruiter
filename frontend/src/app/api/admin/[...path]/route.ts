@@ -60,6 +60,8 @@ function isAdminOnly(method: string, path: string): boolean {
   // Org management: only admin can create or delete orgs
   if (method === "POST" && path === "orgs") return true;
   if (method === "DELETE" && /^orgs\/\d+$/.test(path)) return true;
+  // Per-customer HR-platform tokens: admin only (even listing)
+  if (/^integration-tokens(\/\d+)?$/.test(path)) return true;
   // Settings: admin only
   if (method === "PATCH" && /^settings\/.+$/.test(path)) return true;
   return false;

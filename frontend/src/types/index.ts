@@ -1,3 +1,12 @@
+export interface IntegrationToken {
+  id: number;
+  org_id: number;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked: boolean;
+}
+
 export interface Org {
   id: number;
   slug: string;

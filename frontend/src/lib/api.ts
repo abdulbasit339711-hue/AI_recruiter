@@ -13,6 +13,7 @@ import {
   IqTestResponse,
   IqSubmitResponse,
   IqBankQuestion,
+  IntegrationToken,
 } from "@/types";
 
 // All backend traffic goes through the same-origin Next proxy
@@ -575,6 +576,21 @@ export const api = {
   async getSettings(): Promise<Array<{ key: string; value: string | null; label: string; description: string; type: string; min?: number; max?: number }>> {
     const response = await client.get("/settings");
     return response.data;
+  },
+
+  // ── HR-platform (HRMS) per-customer tokens (admin only) ──
+  async listIntegrationTokens(): Promise<IntegrationToken[]> {
+    const response = await client.get<IntegrationToken[]>("/integration-tokens");
+    return response.data;
+  },
+
+  async createIntegrationToken(orgId: number, name: string): Promise<{ id: number; token: string }> {
+    const response = await client.post("/integration-tokens", null, { params: { org_id: orgId, name } });
+    return response.data;
+  },
+
+  async revokeIntegrationToken(id: number): Promise<void> {
+    await client.delete(`/integration-tokens/${id}`);
   },
 
   // ── IQ test: HR-sent link + HR-managed question bank ──
