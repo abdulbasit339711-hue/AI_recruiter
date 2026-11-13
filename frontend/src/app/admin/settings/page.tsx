@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { Settings, Save, Info, FlaskConical } from "lucide-react";
+import { IqQuestionBankEditor } from "@/components/admin/IqQuestionBankEditor";
 
 type Setting = {
   key: string;
@@ -74,6 +75,8 @@ export default function AdminSettingsPage() {
           <p className="text-sm text-muted-foreground">Configure system-wide recruitment behaviour.</p>
         </div>
       </div>
+
+      <IqQuestionBankEditor />
 
       {/* Test Interview card — always visible */}
       <div

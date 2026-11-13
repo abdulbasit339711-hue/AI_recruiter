@@ -12,6 +12,7 @@ import {
   TimelineEntry,
   IqTestResponse,
   IqSubmitResponse,
+  IqBankQuestion,
 } from "@/types";
 
 // All backend traffic goes through the same-origin Next proxy
@@ -574,6 +575,39 @@ export const api = {
   async getSettings(): Promise<Array<{ key: string; value: string | null; label: string; description: string; type: string; min?: number; max?: number }>> {
     const response = await client.get("/settings");
     return response.data;
+  },
+
+  // ── IQ test: HR-sent link + HR-managed question bank ──
+  async sendIqInvite(candidateId: number): Promise<{ status: string; link: string }> {
+    const response = await client.post(`/candidates/${candidateId}/iq-invite`);
+    return response.data;
+  },
+
+  async getIqInvite(token: string): Promise<{ job_id: number; job_title: string; candidate_name: string | null; already_taken: boolean }> {
+    const response = await client.get(`/iq-invite/${encodeURIComponent(token)}`);
+    return response.data;
+  },
+
+  async attachIqInvite(token: string, resultToken: string): Promise<{ status: string }> {
+    const response = await client.post(`/iq-invite/${encodeURIComponent(token)}/attach`, { result_token: resultToken });
+    return response.data;
+  },
+
+  async listIqQuestions(): Promise<IqBankQuestion[]> {
+    const response = await client.get<IqBankQuestion[]>("/iq-questions");
+    return response.data;
+  },
+
+  async saveIqQuestion(q: Omit<IqBankQuestion, "id"> & { id?: number }): Promise<IqBankQuestion> {
+    const { id, ...body } = q;
+    const response = id
+      ? await client.put<IqBankQuestion>(`/iq-questions/${id}`, body)
+      : await client.post<IqBankQuestion>("/iq-questions", body);
+    return response.data;
+  },
+
+  async deleteIqQuestion(id: number): Promise<void> {
+    await client.delete(`/iq-questions/${id}`);
   },
 
   async updateSetting(key: string, value: string): Promise<{ key: string; value: string }> {

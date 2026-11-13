@@ -219,6 +219,20 @@ def send_interview_invite(
     get_email_sender().send(to, subject, text, html)
 
 
+def send_iq_invite(*, to: str, candidate_name: str | None, job_title: str, link: str,
+                   org_name: str | None = None) -> None:
+    name = candidate_name or "there"
+    org = org_name or "Recruitment Team"
+    text = (
+        f"Hi {name},\n\n"
+        f"As part of your application for the {job_title} role at {org}, please complete a short, "
+        f"timed aptitude test using the link below:\n\n{link}\n\n"
+        f"The link is valid for 7 days and the test can only be taken once.\n\n"
+        f"Best regards,\n{org}\n"
+    )
+    get_email_sender().send(to, f"Aptitude test — {job_title}", text, None)
+
+
 def send_availability_invite(
     *, to: str, candidate_name: str | None, job_title: str, link: str,
     org_name: str | None = None, org_color: str = "#1C99BF",

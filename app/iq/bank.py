@@ -10,8 +10,12 @@ the client. Use ``to_public()`` when shipping a question over the wire.
 
 from __future__ import annotations
 
+import json
+import logging
 import random
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -51,19 +55,41 @@ _BANK: list[IqQuestion] = [
     IqQuestion("pat-1", "Complete the pattern: AZ, BY, CX, ?", ["DV", "DW", "EW", "DX"], 1),
 ]
 
-_BANK_BY_ID = {q.id: q for q in _BANK}
+def _hr_questions() -> list[tuple[bool, IqQuestion]]:
+    """HR-authored questions as ``(active, question)``. Falls back to none if the DB is unavailable."""
+    try:
+        from ..database import SessionLocal
+        from .models import IqQuestionRow
+
+        db = SessionLocal()
+        try:
+            return [
+                (bool(r.active), IqQuestion(f"hr-{r.id}", r.prompt, json.loads(r.options), r.answer))
+                for r in db.query(IqQuestionRow).all()
+            ]
+        finally:
+            db.close()
+    except Exception as e:  # never let a DB hiccup break the apply flow
+        logger.warning("HR IQ questions unavailable, using built-in bank only: %s", e)
+        return []
 
 
 def get_bank() -> list[IqQuestion]:
-    """All questions (server-side; includes answers)."""
-    return list(_BANK)
+    """Questions that can be served (built-in + active HR-authored; includes answers)."""
+    return _BANK + [q for active, q in _hr_questions() if active]
+
+
+def _lookup() -> dict[str, IqQuestion]:
+    """Every known question incl. deactivated HR ones, so in-flight tests still score."""
+    return {q.id: q for q in _BANK + [q for _, q in _hr_questions()]}
 
 
 def sample_questions(n: int, *, rng: random.Random | None = None) -> list[IqQuestion]:
     """Pick ``n`` distinct questions in random order (clamped to bank size)."""
     r = rng or random
-    n = max(1, min(n, len(_BANK)))
-    return r.sample(_BANK, n)
+    bank = get_bank()
+    n = max(1, min(n, len(bank)))
+    return r.sample(bank, n)
 
 
 def score_answers(answers: dict[str, int], served_ids: list[str]) -> tuple[int, int]:
@@ -74,8 +100,9 @@ def score_answers(answers: dict[str, int], served_ids: list[str]) -> tuple[int, 
     """
     total = len(served_ids)
     correct = 0
+    by_id = _lookup()
     for qid in served_ids:
-        q = _BANK_BY_ID.get(qid)
+        q = by_id.get(qid)
         if q is None:
             continue
         if answers.get(qid) == q.answer:
@@ -94,8 +121,9 @@ def build_detail(
     """
     times = times or {}
     out = []
+    by_id = _lookup()
     for qid in served_ids:
-        q = _BANK_BY_ID.get(qid)
+        q = by_id.get(qid)
         if q is None:
             continue
         chosen = answers.get(qid)

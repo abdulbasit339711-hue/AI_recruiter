@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { MessageSquare, ShieldAlert, History, ChevronDown } from "lucide-react";
+import { MessageSquare, ShieldAlert, History, ChevronDown, Brain } from "lucide-react";
 import { api } from "@/lib/api";
 import { getHrActor } from "@/lib/actor";
 import { toast } from "react-hot-toast";
@@ -30,6 +30,15 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
   const [overrideReason, setOverrideReason] = useState<string>("");
   const [overrideLoading, setOverrideLoading] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
+
+  const sendIqTest = async () => {
+    try {
+      await api.sendIqInvite(candidate.id);
+      toast.success("IQ test link emailed to the candidate.");
+    } catch (e) {
+      toast.error((e as Error).message || "Could not send the IQ test link.");
+    }
+  };
 
   const handleStatusChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatus = e.target.value as typeof HR_STATUSES[number];
@@ -111,6 +120,13 @@ export const CandidateActions: React.FC<CandidateActionsProps> = ({
       >
         <MessageSquare className="h-3.5 w-3.5" /> Note
       </Button>
+
+      {/* Send IQ test link (hidden once taken) */}
+      {candidate.iq_score == null && candidate.email && (
+        <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={sendIqTest}>
+          <Brain className="h-3.5 w-3.5" /> IQ test
+        </Button>
+      )}
 
       {/* Override Score Button */}
       <Button

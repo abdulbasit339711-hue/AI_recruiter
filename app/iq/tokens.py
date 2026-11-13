@@ -150,6 +150,30 @@ def verify_result_token(token: str, secret: str | None = None) -> IqResultClaims
         raise IqTokenError(f"malformed claims: {e}") from e
 
 
+_INVITE_TYPE = "iq_invite"
+
+
+def mint_invite_token(candidate_id: int, job_id: int, *, ttl_seconds: int, secret: str | None = None) -> str:
+    """HR-issued link token: lets one existing candidate take the IQ test outside the apply flow."""
+    now = int(time.time())
+    payload = {
+        "typ": _INVITE_TYPE, "cid": int(candidate_id), "job_id": int(job_id),
+        "iat": now, "exp": now + int(ttl_seconds),
+    }
+    return jwt.encode(payload, secret or iq_secret(), algorithm=_ALGO)
+
+
+def verify_invite_token(token: str, secret: str | None = None) -> tuple[int, int]:
+    """Return ``(candidate_id, job_id)``."""
+    payload = _decode(token, secret)
+    if payload.get("typ") != _INVITE_TYPE:
+        raise IqTokenError("not an iq-invite token")
+    try:
+        return int(payload["cid"]), int(payload["job_id"])
+    except (KeyError, ValueError, TypeError) as e:
+        raise IqTokenError(f"malformed claims: {e}") from e
+
+
 def _decode(token: str, secret: str | None) -> dict:
     try:
         return jwt.decode(

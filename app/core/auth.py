@@ -37,6 +37,8 @@ _PUBLIC_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GET", re.compile(r"^/jobs/\d+/?$")),        # view one job to apply
     ("GET", re.compile(r"^/iq-test/?$")),         # fetch the pre-application IQ test
     ("POST", re.compile(r"^/iq-test/submit/?$")), # submit IQ answers (scored server-side)
+    ("GET",  re.compile(r"^/iq-invite/[^/]+/?$")),          # HR-sent IQ link: who/what is this for
+    ("POST", re.compile(r"^/iq-invite/[^/]+/attach/?$")),   # HR-sent IQ link: attach the signed result
     ("POST", re.compile(r"^/upload/?$")),         # submit a resume
     ("GET",  re.compile(r"^/orgs/[^/]+/?$")),          # applicant portal: org branding by slug
     ("GET",  re.compile(r"^/orgs/[^/]+/jobs/?$")),     # applicant portal: org job listing

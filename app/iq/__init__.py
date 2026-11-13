@@ -27,8 +27,11 @@ from .tokens import (
     verify_test_token,
     mint_result_token,
     verify_result_token,
+    mint_invite_token,
+    verify_invite_token,
     iq_secret,
 )
+from . import models as _models  # noqa: F401  (registers iq_questions with Base before create_all)
 
 __all__ = [
     "IqQuestion",
@@ -44,5 +47,7 @@ __all__ = [
     "verify_test_token",
     "mint_result_token",
     "verify_result_token",
+    "mint_invite_token",
+    "verify_invite_token",
     "iq_secret",
 ]

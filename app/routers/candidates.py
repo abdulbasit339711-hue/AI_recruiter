@@ -17,7 +17,8 @@ from ..database import get_db
 from ..events import publish_candidate_event
 from ..events.sse import stream_candidate_events
 from ..intake.upload import validate_and_extract, IngestionError
-from ..iq import verify_result_token, IqTokenError
+from ..iq import IqTokenError
+from ..iq.attach import attach_iq_result
 from ..models import Candidate, Job
 from ..queue.worker import enqueue_candidate
 from ..schemas import (
@@ -98,29 +99,9 @@ async def upload_resume(
         # the IQ score null.
         if iq_token:
             try:
-                res = verify_result_token(iq_token)
-                if res.job_id != job_id:
-                    logger.warning(
-                        "IQ token job mismatch (token job=%s, upload job=%s); ignoring.",
-                        res.job_id, job_id,
-                    )
-                elif res.jti and db.query(Candidate.id).filter(
-                    Candidate.iq_result_jti == res.jti
-                ).first():
-                    # Single-use: this signed result was already attached to a prior
-                    # upload. Don't let one score be replayed across many candidates.
-                    logger.warning("IQ token replay (jti=%s already used); ignoring.", res.jti)
-                else:
-                    candidate.iq_score = res.score
-                    candidate.iq_correct = res.correct
-                    candidate.iq_total = res.total
-                    candidate.iq_time_seconds = res.time_seconds
-                    candidate.iq_details = json.dumps(res.detail) if res.detail else None
-                    candidate.iq_result_jti = res.jti or None
-                    # When the screen was taken (result token issuance = submit time).
-                    candidate.iq_attempted_at = datetime.fromtimestamp(
-                        res.iat, tz=timezone.utc
-                    ).isoformat()
+                why = attach_iq_result(db, candidate, iq_token, job_id)
+                if why:
+                    logger.warning("IQ token ignored on upload: %s", why)
             except IqTokenError as e:
                 logger.warning("Ignoring invalid IQ token on upload: %s", e)
         db.add(candidate)

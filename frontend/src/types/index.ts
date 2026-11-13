@@ -173,6 +173,14 @@ export interface IqSubmitResponse {
   result_token: string;
 }
 
+export interface IqBankQuestion {
+  id: number;
+  prompt: string;
+  options: string[];
+  answer: number; // index into options
+  active: boolean;
+}
+
 export interface UploadResponse {
   id: number;
   filename: string;
