@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from ..core import status as S
 from ..core.ratelimit import upload_rate_limit
 from ..core.utils import _utcnow
-from ..database import get_db
+from ..core.local_only import is_local_only
+from ..database import config, get_db
 from ..events import publish_candidate_event
 from ..events.sse import stream_candidate_events
 from ..intake.upload import validate_and_extract, IngestionError
@@ -434,4 +435,86 @@ async def replace_candidate_resume(
         "filename": candidate.filename,
         "status": candidate.status,
         "message": "Résumé attached; re-scoring queued.",
+    }
+
+
+@router.get("/candidates/{candidate_id}/score-explanation")
+def score_explanation(candidate_id: int, db: Session = Depends(get_db)):
+    """Plain-language breakdown of why a candidate scored what they did (HR view).
+
+    Tier 1 is itemised by re-running the deterministic rules on the stored résumé text;
+    Tier 2/3 are explained from stored values (matched/missing skills and evidence are
+    already on the candidate record)."""
+    cand = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    job = db.query(Job).filter(Job.id == cand.job_id).first()
+    cfg, pipe = config.get("scoring", {}), config.get("pipeline", {})
+    weight = lambda n: (getattr(job, f"tier{n}_weight", None) or 1.0) if job else 1.0  # noqa: E731
+
+    items = None
+    if cand.raw_text:
+        try:
+            from ..scoring.tier1 import score_tier1
+            t1 = score_tier1(cand.raw_text)
+            items = [
+                {"label": label, "points": float(t1.get(key) or 0.0), "max": float(cfg.get(wkey, dflt))}
+                for label, key, wkey, dflt in (
+                    ("Email address found", "email_score", "email_weight", 5),
+                    ("Phone number found", "phone_score", "phone_weight", 5),
+                    ("Education section present", "education_score", "education_weight", 7),
+                    ("Experience section present", "experience_score", "experience_weight", 7),
+                    ("Skills section present", "skills_score", "skills_weight", 6),
+                )
+            ]
+        except Exception as e:  # noqa: BLE001 — explanation is best-effort; never fail the page
+            logger.warning("Tier-1 itemisation unavailable for candidate %s: %s", candidate_id, e)
+
+    try:
+        t3_data = json.loads(cand.evaluation_data) if cand.evaluation_data else {}
+    except ValueError:
+        t3_data = {}
+    ungraded = cand.status == S.UNGRADED
+    if ungraded and is_local_only():
+        t3_note = "AI evaluation was skipped: the system runs in local-only mode (no data sent to external AI)."
+    elif ungraded:
+        t3_note = (
+            f"AI evaluation was not run: it only runs when Tier 1 + Tier 2 reaches "
+            f"{pipe.get('tier3_combined_threshold', 25.0)} (this résumé: {(cand.tier1 or 0) + (cand.tier2 or 0):.1f})."
+        )
+    elif t3_data.get("is_fallback"):
+        t3_note = "The AI service was unavailable, so a keyword-overlap estimate was used instead. Treat this part as low confidence."
+    else:
+        t3_note = "An AI model compared the résumé with the job description (see summary, evidence and skills below)."
+
+    shortlist_min = float(pipe.get("shortlisted_min_score", 75.0))
+    review_min = float(pipe.get("reviewed_min_score", 60.0))
+    total = cand.total_score or 0.0
+    if total >= shortlist_min:
+        outcome = f"Total {total:.1f} is at or above the shortlist threshold ({shortlist_min:g})."
+    elif total >= review_min:
+        outcome = f"Total {total:.1f} is at or above the review threshold ({review_min:g}) but below shortlist ({shortlist_min:g})."
+    elif ungraded:
+        outcome = f"Total {total:.1f} — not graded by AI; below the review threshold ({review_min:g}) on Tier 1 + 2 alone."
+    else:
+        outcome = f"Total {total:.1f} is below the review threshold ({review_min:g}); the AI's own recommendation then decides the status."
+
+    try:
+        warnings = json.loads(cand.warnings) if cand.warnings else []
+    except ValueError:
+        warnings = []
+    return {
+        "total": total,
+        "override": cand.hr_score_override,
+        "status": cand.status,
+        "outcome": outcome,
+        "tiers": [
+            {"key": "tier1", "label": "Profile rules", "score": cand.tier1 or 0.0, "max": 30, "weight": weight(1),
+             "note": "Checks the résumé has contact details and the standard sections.", "items": items},
+            {"key": "tier2", "label": "Match to job description", "score": cand.tier2 or 0.0, "max": float(cfg.get("semantic_weight", 40)),
+             "weight": weight(2), "note": "How closely the résumé's wording and experience match the job description (semantic similarity). Not itemised."},
+            {"key": "tier3", "label": "AI evaluation", "score": cand.tier3 or 0.0, "max": float(cfg.get("llm_weight", 30)),
+             "weight": weight(3), "note": t3_note, "fallback": bool(t3_data.get("is_fallback")), "skipped": ungraded},
+        ],
+        "warnings": [str(w) for w in warnings],
     }

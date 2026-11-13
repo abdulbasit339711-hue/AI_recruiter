@@ -1,3 +1,22 @@
+export interface ScoreExplanation {
+  total: number;
+  override: number | null;
+  status: string;
+  outcome: string;
+  tiers: {
+    key: string;
+    label: string;
+    score: number;
+    max: number;
+    weight: number;
+    note: string;
+    items?: { label: string; points: number; max: number }[] | null;
+    fallback?: boolean;
+    skipped?: boolean;
+  }[];
+  warnings: string[];
+}
+
 export interface IntegrationToken {
   id: number;
   org_id: number;

@@ -48,6 +48,7 @@ import { Button } from "@/components/ui/button";
 import { ResumeViewer } from "@/components/admin/ResumeViewer";
 import { ScoringWeightsEditor } from "@/components/admin/ScoringWeightsEditor";
 import { QuestionBankEditor } from "@/components/admin/QuestionBankEditor";
+import { ScoreExplanation } from "@/components/candidates/ScoreExplanation";
 import { CandidateNotesPanel } from "@/components/candidates/CandidateNotesPanel";
 import { InterviewPanel } from "@/components/candidates/InterviewPanel";
 import { KanbanBoard } from "@/components/admin/KanbanBoard";
@@ -882,6 +883,8 @@ export default function AdminCandidatesPage() {
                     </p>
                   </div>
                 )}
+
+                {selected && <ScoreExplanation candidateId={selected.id} version={selected.total_score} />}
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="glass-tile rounded-xl p-4">

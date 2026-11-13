@@ -14,6 +14,7 @@ import {
   IqSubmitResponse,
   IqBankQuestion,
   IntegrationToken,
+  ScoreExplanation,
 } from "@/types";
 
 // All backend traffic goes through the same-origin Next proxy
@@ -577,6 +578,11 @@ export const api = {
   // Admin settings
   async getSettings(): Promise<Array<{ key: string; value: string | null; label: string; description: string; type: string; min?: number; max?: number }>> {
     const response = await client.get("/settings");
+    return response.data;
+  },
+
+  async getScoreExplanation(candidateId: number): Promise<ScoreExplanation> {
+    const response = await client.get<ScoreExplanation>(`/candidates/${candidateId}/score-explanation`);
     return response.data;
   },
 
