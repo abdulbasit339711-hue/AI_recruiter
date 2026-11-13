@@ -125,8 +125,8 @@ export default function ApplyPage() {
               />
               <span>
                 I agree that my résumé and any interview audio/transcript will be processed by third-party AI
-                service providers to assess my application. A person reviews the results — no application is
-                rejected automatically.
+                service providers to assess my application. Results are advisory: nothing is sent to you or
+                decided automatically, and a person makes the hiring decision.
               </span>
             </label>
           <Button type="submit" className="w-full" size="lg" disabled={!file || !consent}>

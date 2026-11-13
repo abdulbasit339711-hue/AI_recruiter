@@ -408,8 +408,8 @@ export default function InterviewPage() {
               />
               <span>
                 I agree that my voice, transcript and (if enabled) video will be recorded and processed by
-                third-party AI service providers to assess my application. A person reviews the results —
-                no decision is made automatically.
+                third-party AI service providers to assess my application. Results are advisory: nothing is sent to you
+                or decided automatically, and a person makes the hiring decision.
               </span>
             </label>
 

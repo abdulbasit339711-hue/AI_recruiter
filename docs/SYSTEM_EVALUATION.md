@@ -4,6 +4,39 @@
 
 ---
 
+## Status update — 2026-11-13 (re-checked against the code)
+
+This report is from 2026-06-12. Re-checked item by item; "fixed" means verified in the current source.
+
+| Item (section) | Status now |
+|---|---|
+| Blocking SMTP on `POST /jobs/{id}/email` (3.1) | **Fixed** — sent as a background task (the endpoint returns "queued"; failures are logged, not returned) |
+| Unbounded reprocess (3.1) | **Fixed** — `limit` (default 500, max 2000); call again while `remaining > 0` |
+| Corrupt `status_history` dropped (3.1) | **Fixed** — preserved as a `recovered` timeline entry |
+| Admin mutations unrate-limited (3.1) | **Fixed** — `admin_mutation_rate_ok` in the auth middleware |
+| Worker skips deleted candidates (3.1) | **Partly** — logs a warning; still no dead-letter |
+| "No Alembic on this side" (3.1) | **Stale** — backend uses Alembic (`alembic_version_backend`), idempotent migrations |
+| `strict: false` in tsconfig (3.2) | **Fixed** — `strict: true` |
+| EventSource has no reconnect (3.2) | **Fixed** — `lib/sse.ts` retries with backoff + jitter |
+| Hardcoded `hr@company.com` (3.2) | **Fixed** — uses `getHrActor()`; identity is typed by the operator, not verified (no per-user accounts) |
+| SSE payload validation (3.2) | Not re-checked |
+| Voice API keys not validated at startup (3.3) | **Fixed** — `runner.py` checks required keys |
+| Judge async-task leak; dropped rapid answers (3.3) | **Fixed** — tasks tracked, evaluations serialised by a lock, short answers no longer filtered out |
+| Finalization race on re-open (3.3) | **Fixed** — per-session cross-thread lock |
+| LLMContext setup errors swallowed (3.3) | Not re-checked |
+| `COPY ./.env` in the voice Dockerfile (3.4) | **Fixed** — removed; inject env at runtime |
+| No CI (3.4) | **Fixed** — `.github/workflows/ci.yml` |
+| Unpinned base image (3.4) | **Open** — `voice-agent/server/Dockerfile` still `FROM dailyco/pipecat-base:latest` |
+| Stale deps `groq==0.9.0`, `sentence-transformers==3.0.1` (3.4) | **Open** |
+| PostCSS advisory (3.2) | Not re-checked |
+| **Leaked API keys not rotated (P0)** | **Cannot be verified from the repo** — rotation happens at the providers. A scan of tracked files and git history found no real keys in common formats (Groq/OpenAI/Google patterns, key assignments), but that does not prove rotation. Rotate before showing this to anyone. |
+
+New since this report: DOCX résumés, consent capture, `LOCAL_ONLY` mode, bias test, per-customer HR-platform tokens,
+per-job interview length, score-explanation view, speaker timeline. See `docs/HR_EVALUATION_GUIDE.md` for what
+automation does and does not do.
+
+---
+
 ## 1. Executive Summary
 
 AI-Recruiter is a **mature, well-architected** three-component system (FastAPI scoring backend, Next.js 15 HR dashboard, Pipecat voice-interview agent) sharing one Postgres/SQLite database. The codebase is clean, documented (mirrored CLAUDE/GEMINI/ANTIGRAVITY guides), and shows real engineering discipline: fail-closed auth, per-job scoring weights, circuit breaker + LLM fallback, resilient TTS, session-resume on restart, and a maintained error runbook.

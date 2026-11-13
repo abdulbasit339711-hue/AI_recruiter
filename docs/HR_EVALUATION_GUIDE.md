@@ -38,7 +38,24 @@ audio/video. The design choices below follow the evidence in Part B.
   **prohibited in workplace contexts under the EU AI Act (Art. 5, from 2 Feb 2025)**.
   "Engagement"/"delivery" cues are shown as advisory prompts, never folded into a score.
 - **No auto-decisions on video/audio.** A human reviews; subjective cues stay advisory.
+- **No automatic rejection *action*.** The pipeline does label low scorers "Rejected" (below the
+  review threshold, a document that fails Tier 1/2 checks, or the AI's own recommendation), but that
+  is a recommendation shown to HR: nothing emails the candidate, locks them out, or removes them from
+  the list, and HR can change the status. Keep it that way — any future auto-notification or
+  auto-removal would make this an automated decision and needs legal review first. (Candidate-facing
+  text says results are advisory and a person makes the decision.)
 - **Data-quality gate** prevents a confident-sounding summary built on a few off-camera frames.
+
+### Fairness, consent and privacy controls (as built, verified Nov 2026)
+- **Bias test:** `tests/test_scoring_bias.py` swaps names (gender/ethnicity-coded), pronouns and a gendered
+  affiliation on one résumé and asserts the scores don't move. Tier 1/2/fallback run offline; the live-LLM
+  check (`RUN_LIVE_BIAS_TESTS=1`) is the one that matters for Tier 3 and must be run against the real model.
+  This is counterfactual testing, not a statistical audit of real outcomes.
+- **Consent:** the apply pages and the interview join page require a consent tick before submitting/joining;
+  the apply consent is stored as `candidates.consent_at`. Interview consent is not stored.
+- **Local-only mode:** `LOCAL_ONLY=1` skips the Tier-3 LLM and disables voice interviews and scheduling, so
+  no candidate data goes to third-party AI (scores then top out at 70/100).
+- **Per-customer integration tokens** for the HR platform (org-scoped, revocable) replace sharing the admin token.
 
 ### How HR should read each tier
 - **Objective / actionable:** proctoring flags, talk-time balance, filler counts. Use directly.
