@@ -50,9 +50,9 @@ def test_console_sender_does_not_open_a_connection():
 
 def _mock_smtp():
     """A MagicMock standing in for smtplib.SMTP used as a context manager."""
-    server = MagicMock(name="smtp_server")
     smtp_cls = MagicMock(name="SMTP")
-    smtp_cls.return_value.__enter__.return_value = server
+    server = smtp_cls.return_value
+    server.__enter__.return_value = server  # like real smtplib: __enter__ returns self
     return smtp_cls, server
 
 
@@ -209,3 +209,15 @@ def test_slot_confirmation_includes_calendar_links():
     assert "calendar.google.com" in links["google"] and "outlook.live.com" in links["outlook"]
     assert "dates=" in links["google"] and "startdt=" in links["outlook"]
     assert em.calendar_links("not a slot", "t", "d") is None  # unparseable -> email just omits links
+
+
+def test_port_465_uses_implicit_ssl_without_starttls():
+    server = MagicMock()
+    server.__enter__.return_value = server
+    with patch("app.services.email.smtplib.SMTP_SSL", return_value=server) as ssl_cls, \
+         patch("app.services.email.smtplib.SMTP") as plain_cls:
+        SmtpEmailSender("smtp.acme.com", 465, "u", "p").send("a@x.com", "S", "B")
+    ssl_cls.assert_called_once()
+    plain_cls.assert_not_called()
+    server.starttls.assert_not_called()
+    server.send_message.assert_called_once()

@@ -23,6 +23,13 @@ def _ensure_schema():
 
 
 @pytest.fixture(autouse=True)
+def _pin_smtp_port(monkeypatch):
+    """The dev .env may set SMTP_PORT=465 (implicit SSL); tests mock smtplib.SMTP, so pin the
+    STARTTLS path unless a test sets its own port."""
+    monkeypatch.setenv("SMTP_PORT", "587")
+
+
+@pytest.fixture(autouse=True)
 def _reset_rate_limits():
     """Clear per-IP rate-limit windows before each test.
 
