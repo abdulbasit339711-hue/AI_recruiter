@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import toast from "react-hot-toast";
 import { Loader2, Send, ClipboardCheck, FileText, Upload, Inbox } from "lucide-react";
 
+import { SpeakerTimeline } from "./SpeakerTimeline";
 import {
   api,
   getInterviewAudioUrl,
@@ -466,6 +467,8 @@ export function InterviewPanel({ candidateId }: { candidateId: number }) {
                   </div>
                 </section>
               )}
+
+              <SpeakerTimeline transcript={result.transcript ?? []} />
 
               <section className="rounded-xl glass-tile p-4">
                 <h4 className="mb-3 text-sm font-semibold text-heading">

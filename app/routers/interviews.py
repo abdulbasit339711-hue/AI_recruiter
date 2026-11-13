@@ -384,7 +384,7 @@ def get_candidate_interview(candidate_id: int, db: Session = Depends(get_db)):
 
     sid = sess["session_id"]
     transcript = db.execute(text(
-        "SELECT speaker, text, sequence_number, evaluation FROM session_transcripts "
+        "SELECT speaker, text, sequence_number, evaluation, timestamp FROM session_transcripts "
         "WHERE session_id = :sid ORDER BY sequence_number"
     ), {"sid": sid}).mappings().all()
     # Include each goal's planned questions (goal_templates.question_templates) and the

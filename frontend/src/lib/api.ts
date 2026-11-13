@@ -179,6 +179,7 @@ export interface InterviewResult {
     text: string;
     sequence_number: number;
     evaluation?: TurnEvaluation | null;
+    timestamp?: string | null; // ISO; when the turn was recorded
   }[];
   goals?: {
     title: string;
