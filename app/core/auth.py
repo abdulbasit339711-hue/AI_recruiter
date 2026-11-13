@@ -23,6 +23,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from .integration_tokens import integration_allowed, org_for_authorization
 from .ratelimit import admin_mutation_rate_ok
 
 _bearer = HTTPBearer(auto_error=False)
@@ -82,17 +83,28 @@ async def admin_token_guard(request: Request, call_next):
     """
     if is_public(request.method, request.url.path):
         return await call_next(request)
-    if not auth_configured():
-        return JSONResponse(
-            status_code=503,
-            content={"detail": "Server auth is not configured (ADMIN_API_TOKEN unset)."},
-        )
-    if not token_is_valid(request.headers.get("authorization")):
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Missing or invalid admin credentials."},
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    authz = request.headers.get("authorization")
+    if not (auth_configured() and token_is_valid(authz)):
+        # Not the shared admin token: maybe a per-customer integration token (HR platform).
+        org_id = org_for_authorization(authz)
+        if org_id is not None:
+            if not integration_allowed(org_id, request.method, request.url.path):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "This integration token cannot access that resource."},
+                )
+            request.state.integration_org_id = org_id
+        elif not auth_configured():
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Server auth is not configured (ADMIN_API_TOKEN unset)."},
+            )
+        else:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Missing or invalid admin credentials."},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     # Authenticated, but the shared token must not be a license to spam mutations.
     if not admin_mutation_rate_ok(request.method, request):
         return JSONResponse(

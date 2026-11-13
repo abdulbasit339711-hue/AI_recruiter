@@ -6,6 +6,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from ..core import status as S
+from ..core.integration_tokens import IntegrationToken, create_token
 from ..core.jd_embedding_cache import cache_stats
 from ..core.model_registry import models_loaded
 from ..core.utils import _utcnow
@@ -391,3 +392,34 @@ def update_setting(key: str, value: str = Query(...), db: Session = Depends(get_
         db.add(row)
     db.commit()
     return {"key": key, "value": value}
+
+
+# ── Per-customer HR-platform tokens (admin-token only; integration tokens can't reach these) ──
+
+@router.post("/integration-tokens", status_code=201)
+def create_integration_token(
+    org_id: int = Query(...), name: str = Query(..., min_length=1, max_length=100), db: Session = Depends(get_db)
+):
+    """Mint a token for one customer (org). The plaintext is returned ONCE — store it now."""
+    if not db.query(Org.id).filter(Org.id == org_id).first():
+        raise HTTPException(status_code=404, detail="Org not found.")
+    row, plain = create_token(db, org_id, name)
+    return {"id": row.id, "org_id": org_id, "name": name, "token": plain}
+
+
+@router.get("/integration-tokens")
+def list_integration_tokens(db: Session = Depends(get_db)):
+    return [
+        {"id": t.id, "org_id": t.org_id, "name": t.name, "created_at": t.created_at,
+         "last_used_at": t.last_used_at, "revoked": t.revoked_at is not None}
+        for t in db.query(IntegrationToken).order_by(IntegrationToken.id).all()
+    ]
+
+
+@router.delete("/integration-tokens/{token_id}", status_code=204)
+def revoke_integration_token(token_id: int, db: Session = Depends(get_db)):
+    t = db.query(IntegrationToken).filter(IntegrationToken.id == token_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Token not found.")
+    t.revoked_at = _utcnow().isoformat()
+    db.commit()

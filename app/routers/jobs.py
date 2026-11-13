@@ -69,6 +69,7 @@ def _serialize_job(job: Job, include_private: bool) -> dict:
 
 @router.post("/jobs")
 def create_job(
+    request: Request,
     title: str = Query(..., min_length=1, max_length=200),
     department: str = Query(..., min_length=1, max_length=200),
     job_description: str = Query(..., min_length=1, max_length=20000),
@@ -79,6 +80,8 @@ def create_job(
     interview_deadline: Optional[str] = Query(None, max_length=20),
     db: Session = Depends(get_db),
 ):
+    # A per-customer integration token can only create jobs in its own org.
+    org_id = getattr(request.state, "integration_org_id", None) or org_id
     try:
         job = Job(
             title=title,
