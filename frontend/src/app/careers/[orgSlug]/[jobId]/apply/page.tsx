@@ -31,6 +31,7 @@ export default function CareersApplyPage() {
   const color = org?.primary_color || "#1C99BF";
   const upload = useUploadResume(numericId);
   const [file, setFile] = useState<File | null>(null);
+  const [consent, setConsent] = useState(false);
   const [step, setStep] = useState<Step>("iq");
   const [iq, setIq] = useState<IqSubmitResponse | null>(null);
 
@@ -41,7 +42,7 @@ export default function CareersApplyPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file || !consent) return;
     try {
       await upload.mutateAsync({ file, iqToken: iq?.result_token });
       router.push(`/careers/${orgSlug}/${jobId}/apply/success`);
@@ -103,11 +104,11 @@ export default function CareersApplyPage() {
               </div>
             )}
             <label className="block">
-              <span className="text-sm font-medium text-heading">Résumé (PDF, max 5MB)</span>
+              <span className="text-sm font-medium text-heading">Résumé (PDF or DOCX, max 5MB)</span>
               <div className="relative mt-2 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-foreground/[0.03] px-4 py-8 text-center transition-colors hover:border-primary/50 focus-within:border-primary/60">
                 <UploadCloud className="h-7 w-7" style={{ color }} />
-                <p className="text-sm text-foreground">{file ? file.name : "Drag your PDF here, or click to browse"}</p>
-                {!file && <p className="text-xs text-muted-foreground">PDF only, up to 5MB.</p>}
+                <p className="text-sm text-foreground">{file ? file.name : "Drag your résumé here, or click to browse"}</p>
+                {!file && <p className="text-xs text-muted-foreground">PDF or DOCX, up to 5MB.</p>}
                 <input
                   type="file"
                   accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -121,11 +122,25 @@ export default function CareersApplyPage() {
                 {upload.error?.message || "Upload failed"}
               </p>
             )}
+
+            <label className="flex items-start gap-2.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+              />
+              <span>
+                I agree that my résumé and any interview audio/transcript will be processed by third-party AI
+                service providers to assess my application. A person reviews the results — no application is
+                rejected automatically.
+              </span>
+            </label>
             <button
               type="submit"
               className="w-full rounded-xl px-4 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
               style={{ background: color }}
-              disabled={!file}
+              disabled={!file || !consent}
             >
               Submit application
             </button>
